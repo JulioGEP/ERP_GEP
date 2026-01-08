@@ -349,7 +349,6 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
     onSuccess: () => {
       notify({ variant: 'success', message: 'Usuario creado correctamente' });
       void queryClient.invalidateQueries({ queryKey: ['users'] });
-      void queryClient.invalidateQueries({ queryKey: ['reporting', 'nominas-oficina'] });
       closeModal();
     },
     onError: (error: unknown) => {
@@ -364,7 +363,6 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
     onSuccess: (user) => {
       notify({ variant: 'success', message: 'Usuario actualizado correctamente' });
       void queryClient.invalidateQueries({ queryKey: ['users'] });
-      void queryClient.invalidateQueries({ queryKey: ['reporting', 'nominas-oficina'] });
       queryClient.setQueryData(['user-details', user.id], user);
       setEditingUser(user);
     },
