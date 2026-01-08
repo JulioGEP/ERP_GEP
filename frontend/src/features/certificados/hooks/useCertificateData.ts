@@ -12,6 +12,8 @@ import {
   type CertificateSession,
 } from '../lib/mappers';
 
+const CERTIFICATE_SESSIONS_PAGE_LIMIT = 30;
+
 function resolveErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -52,6 +54,58 @@ function flattenSessionGroups(
     }
   }
   return items;
+}
+
+async function fetchAllDealSessions(dealId: string): Promise<SessionGroupDTO[]> {
+  const initialGroups = await fetchDealSessions(dealId, {
+    page: 1,
+    limit: CERTIFICATE_SESSIONS_PAGE_LIMIT,
+  });
+
+  const expandedGroups = await Promise.all(
+    initialGroups.map(async (group) => {
+      const totalPages = group.pagination?.totalPages ?? 1;
+      const productId = group.product?.id;
+
+      if (!productId || totalPages <= 1) {
+        return group;
+      }
+
+      const pageRequests = [];
+      for (let page = 2; page <= totalPages; page += 1) {
+        pageRequests.push(
+          fetchDealSessions(dealId, {
+            productId,
+            page,
+            limit: CERTIFICATE_SESSIONS_PAGE_LIMIT,
+          }),
+        );
+      }
+
+      const pageGroups = await Promise.all(pageRequests);
+      const mergedSessions = [...group.sessions];
+
+      for (const groups of pageGroups) {
+        const nextGroup =
+          groups.find((item) => item.product?.id === productId) ?? groups[0];
+        if (nextGroup?.sessions?.length) {
+          mergedSessions.push(...nextGroup.sessions);
+        }
+      }
+
+      return {
+        ...group,
+        sessions: mergedSessions,
+        pagination: {
+          ...group.pagination,
+          page: 1,
+          totalPages,
+        },
+      };
+    }),
+  );
+
+  return expandedGroups;
 }
 
 export function useCertificateData() {
@@ -135,7 +189,7 @@ export function useCertificateData() {
       try {
         const [dealDetail, sessionGroups] = await Promise.all([
           fetchDealDetail(normalizedDealId),
-          fetchDealSessions(normalizedDealId),
+          fetchAllDealSessions(normalizedDealId),
         ]);
 
         setDeal(dealDetail);
