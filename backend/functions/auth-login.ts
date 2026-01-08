@@ -5,7 +5,7 @@ import { getPrisma } from './_shared/prisma';
 import { logAudit, type JsonValue } from './_shared/audit-log';
 import {
   buildSessionCookie,
-  getPermissionsForRole,
+  getPermissionsForUser,
   getRoleDisplayValue,
   getSessionExpirationDate,
   hashIp,
@@ -217,7 +217,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       },
     });
 
-    const permissions = getPermissionsForRole(user.role);
+    const permissions = getPermissionsForUser(user);
 
     try {
       await logAudit({

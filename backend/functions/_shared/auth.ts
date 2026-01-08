@@ -203,6 +203,14 @@ export function getPermissionsForRole(role: string | null | undefined): readonly
   return [];
 }
 
+export function getPermissionsForUser(user: UserRecord): readonly string[] {
+  const permissions = new Set(getPermissionsForRole(user.role));
+  if (user.email?.toLowerCase() === 'carles@gepgroup.es') {
+    permissions.add('/calendario/*');
+  }
+  return Array.from(permissions);
+}
+
 export function computeDefaultPath(permissions: readonly string[]): string {
   if (permissions.includes('ALL')) {
     return DEFAULT_ROUTE_ORDER[0];
@@ -321,7 +329,7 @@ export async function findActiveSession(
     });
   }
 
-  const permissions = getPermissionsForRole(session.user.role);
+  const permissions = getPermissionsForUser(session.user);
   return { session, user: session.user, permissions, refreshedCookie };
 }
 
