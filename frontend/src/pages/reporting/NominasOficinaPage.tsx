@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Accordion, Alert, Badge, Button, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import {
+  fetchTrainerExtraCosts,
   fetchOfficePayrolls,
   saveOfficePayroll,
   type OfficePayrollRecord,
@@ -167,42 +168,29 @@ function calculateTotals(entries: OfficePayrollRecord[]) {
 type ExtrasModalProps = {
   entry: OfficePayrollRecord | null;
   onHide: () => void;
-  onSaved: (entry: OfficePayrollRecord) => void;
 };
 
-const extrasInitialFields = {
-  dietas: '',
-  kilometrajes: '',
-  pernocta: '',
-  nocturnidad: '',
-  festivo: '',
-  horasExtras: '',
-  otrosGastos: '',
-};
+const EXTRAS_SUMMARY_FIELDS = [
+  { key: 'precioCosteFormacion', label: 'Coste formación', col: 6 },
+  { key: 'precioCostePreventivo', label: 'Coste preventivo', col: 6 },
+  { key: 'dietas', label: 'Dietas', col: 6 },
+  { key: 'kilometraje', label: 'Kilometraje', col: 6 },
+  { key: 'pernocta', label: 'Pernocta', col: 6 },
+  { key: 'nocturnidad', label: 'Nocturnidad', col: 6 },
+  { key: 'festivo', label: 'Festivo', col: 6 },
+  { key: 'horasExtras', label: 'Horas extras', col: 6 },
+  { key: 'gastosExtras', label: 'Otros gastos', col: 12 },
+] as const;
 
-type ExtrasFieldKey = keyof typeof extrasInitialFields;
+type ExtrasSummaryKey = (typeof EXTRAS_SUMMARY_FIELDS)[number]['key'];
 
-function calculateExtrasTotal(fields: Record<ExtrasFieldKey, string>): number | null {
-  const values = [
-    fields.dietas,
-    fields.kilometrajes,
-    fields.pernocta,
-    fields.nocturnidad,
-    fields.festivo,
-    fields.horasExtras,
-    fields.otrosGastos,
-  ]
-    .map((value) => parseLocaleNumber(value))
-    .filter((value): value is number => value !== null);
+function ExtrasModal({ entry, onHide }: ExtrasModalProps) {
+  const navigate = useNavigate();
 
-  if (!values.length) return null;
-
-  const total = values.reduce((sum, value) => sum + value, 0);
-  return Number(total.toFixed(2));
-}
-
-function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
-  const [fields, setFields] = useState<typeof extrasInitialFields>(extrasInitialFields);
+  const monthRange = useMemo(() => {
+    if (!entry) return null;
+    return buildMonthRange(entry.year, entry.month);
+  }, [entry]);
 
   const {
     data: documents = [],
@@ -214,51 +202,53 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
     enabled: Boolean(entry?.userId),
   });
 
-  useEffect(() => {
-    if (!entry) {
-      setFields(extrasInitialFields);
-      return;
+  const extraCostsQuery = useQuery({
+    queryKey: [
+      'reporting',
+      'costes-extra-summary',
+      entry?.userId ?? null,
+      monthRange?.startDate ?? null,
+      monthRange?.endDate ?? null,
+    ],
+    queryFn: () =>
+      fetchTrainerExtraCosts({
+        startDate: monthRange?.startDate,
+        endDate: monthRange?.endDate,
+      }),
+    enabled: Boolean(entry?.userId && monthRange),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const matchingExtraCosts = useMemo(() => {
+    if (!entry) return [];
+    return (extraCostsQuery.data ?? []).filter(
+      (item) => item.trainerId === entry.userId || item.trainerUserId === entry.userId,
+    );
+  }, [entry, extraCostsQuery.data]);
+
+  const extrasTotals = useMemo(() => {
+    const totals = EXTRAS_SUMMARY_FIELDS.reduce((acc, field) => {
+      acc[field.key] = 0;
+      return acc;
+    }, {} as Record<ExtrasSummaryKey, number>);
+
+    for (const item of matchingExtraCosts) {
+      for (const field of EXTRAS_SUMMARY_FIELDS) {
+        totals[field.key] += item.costs[field.key] ?? 0;
+      }
     }
 
-    const resolveValue = (value: number | null | undefined) => {
-      if (value === null || value === undefined) return '';
-      return value.toString();
-    };
+    for (const field of EXTRAS_SUMMARY_FIELDS) {
+      totals[field.key] = Number(totals[field.key].toFixed(2));
+    }
 
-    setFields({
-      dietas: resolveValue(entry.dietas),
-      kilometrajes: resolveValue(entry.kilometrajes),
-      pernocta: resolveValue(entry.pernocta),
-      nocturnidad: resolveValue(entry.nocturnidad),
-      festivo: resolveValue(entry.festivo),
-      horasExtras: resolveValue(entry.horasExtras),
-      otrosGastos: resolveValue(entry.otrosGastos),
-    });
-  }, [entry]);
+    return totals;
+  }, [matchingExtraCosts]);
 
-  const resolvedFields = useMemo(() => {
-    const formatNumber = (value: number | null | undefined) => {
-      if (value === null || value === undefined) return '';
-      return value.toString();
-    };
-
-    return {
-      dietas: fields.dietas !== '' ? fields.dietas : formatNumber(entry?.dietas),
-      kilometrajes:
-        fields.kilometrajes !== '' ? fields.kilometrajes : formatNumber(entry?.kilometrajes),
-      pernocta: fields.pernocta !== '' ? fields.pernocta : formatNumber(entry?.pernocta),
-      nocturnidad:
-        fields.nocturnidad !== '' ? fields.nocturnidad : formatNumber(entry?.nocturnidad),
-      festivo: fields.festivo !== '' ? fields.festivo : formatNumber(entry?.festivo),
-      horasExtras: fields.horasExtras !== '' ? fields.horasExtras : formatNumber(entry?.horasExtras),
-      otrosGastos: fields.otrosGastos !== '' ? fields.otrosGastos : formatNumber(entry?.otrosGastos),
-    } satisfies typeof extrasInitialFields;
-  }, [entry, fields]);
-
-  const totalExtras = useMemo(() => calculateExtrasTotal(resolvedFields), [resolvedFields]);
-  const totalExtrasDisplayValue = totalExtras ?? entry?.totalExtras ?? null;
-  const totalExtrasDisplay =
-    totalExtrasDisplayValue === null ? '' : totalExtrasDisplayValue.toFixed(2);
+  const totalExtrasDisplay = useMemo(() => {
+    const total = EXTRAS_SUMMARY_FIELDS.reduce((sum, field) => sum + extrasTotals[field.key], 0);
+    return total.toFixed(2);
+  }, [extrasTotals]);
 
   const matchingExpenseDocuments = useMemo(() => {
     if (!entry || !documents?.length) return [];
@@ -277,54 +267,10 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
     });
   }, [documents, entry]);
 
-  const handleFieldChange = (field: ExtrasFieldKey, value: string) => {
-    setFields((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const mutation = useMutation({
-    mutationFn: () => {
-      const normalizeExtrasNumber = (value: string) => parseLocaleNumber(value);
-      const totalExtrasToSave = totalExtras ?? entry?.totalExtras ?? null;
-
-      return saveOfficePayroll({
-        userId: entry?.userId as string,
-        year: entry?.year as number,
-        month: entry?.month as number,
-        dietas: normalizeExtrasNumber(resolvedFields.dietas),
-        kilometrajes: normalizeExtrasNumber(resolvedFields.kilometrajes),
-        pernocta: normalizeExtrasNumber(resolvedFields.pernocta),
-        nocturnidad: normalizeExtrasNumber(resolvedFields.nocturnidad),
-        festivo: normalizeExtrasNumber(resolvedFields.festivo),
-        horasExtras: normalizeExtrasNumber(resolvedFields.horasExtras),
-        otrosGastos: normalizeExtrasNumber(resolvedFields.otrosGastos),
-        totalExtras: totalExtrasToSave,
-        convenio: entry?.convenio ?? entry?.defaultConvenio ?? null,
-        categoria: entry?.categoria ?? entry?.defaultCategoria ?? null,
-        antiguedad: entry?.antiguedad ?? entry?.defaultAntiguedad ?? entry?.startDate ?? null,
-        horasSemana: entry?.horasSemana ?? entry?.defaultHorasSemana ?? null,
-        baseRetencion: entry?.baseRetencion ?? entry?.defaultBaseRetencion ?? entry?.salarioBruto ?? null,
-        baseRetencionDetalle: entry?.baseRetencionDetalle ?? entry?.defaultBaseRetencionDetalle ?? null,
-        salarioBruto: entry?.salarioBruto ?? entry?.defaultSalarioBruto ?? null,
-        salarioBrutoTotal: entry?.salarioBrutoTotal ?? entry?.defaultSalarioBrutoTotal ?? null,
-        retencion: entry?.retencion ?? entry?.defaultRetencion ?? null,
-        aportacionSsIrpf: entry?.aportacionSsIrpf ?? entry?.defaultAportacionSsIrpf ?? null,
-        aportacionSsIrpfDetalle:
-          entry?.aportacionSsIrpfDetalle ?? entry?.defaultAportacionSsIrpfDetalle ?? null,
-        salarioLimpio: entry?.salarioLimpio ?? entry?.defaultSalarioLimpio ?? null,
-        contingenciasComunes: entry?.contingenciasComunes ?? entry?.defaultContingenciasComunes ?? null,
-        contingenciasComunesDetalle:
-          entry?.contingenciasComunesDetalle ?? entry?.defaultContingenciasComunesDetalle ?? null,
-        totalEmpresa: entry?.totalEmpresa ?? entry?.defaultTotalEmpresa ?? null,
-      });
-    },
-    onSuccess: (saved) => {
-      onSaved(saved);
-      onHide();
-    },
-  });
-
   if (!entry) return null;
   const monthLabel = MONTH_LABELS[entry.month - 1] ?? `${entry.month}`;
+  const isLoadingExtraCosts = extraCostsQuery.isLoading;
+  const extraCostsError = extraCostsQuery.isError;
 
   return (
     <Modal show={Boolean(entry)} onHide={onHide} centered backdrop="static">
@@ -357,91 +303,28 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
         ) : (
           <div className="text-muted small">No hay documentos de gasto para este mes.</div>
         )}
+        {isLoadingExtraCosts ? (
+          <div className="text-muted">Cargando costes extra…</div>
+        ) : extraCostsError ? (
+          <Alert variant="warning" className="mb-0">
+            No se pudieron cargar los costes extra de este mes.
+          </Alert>
+        ) : null}
         <Row className="g-3">
-          <Col md={6}>
-              <Form.Group controlId="extras-dietas">
-                <Form.Label>Dietas</Form.Label>
+          {EXTRAS_SUMMARY_FIELDS.map((field) => (
+            <Col key={field.key} md={field.col}>
+              <Form.Group controlId={`extras-${field.key}`}>
+                <Form.Label>{field.label}</Form.Label>
                 <Form.Control
                   type="number"
                   step="0.01"
-                  value={resolvedFields.dietas}
-                  onChange={(event) => handleFieldChange('dietas', event.target.value)}
-                  inputMode="decimal"
+                  value={extrasTotals[field.key].toFixed(2)}
+                  readOnly
+                  disabled
                 />
               </Form.Group>
             </Col>
-          <Col md={6}>
-              <Form.Group controlId="extras-kilometrajes">
-                <Form.Label>Kilometrajes</Form.Label>
-                <Form.Control
-                  type="number"
-                  step="0.01"
-                  value={resolvedFields.kilometrajes}
-                  onChange={(event) => handleFieldChange('kilometrajes', event.target.value)}
-                  inputMode="decimal"
-                />
-              </Form.Group>
-            </Col>
-          <Col md={6}>
-              <Form.Group controlId="extras-pernocta">
-                <Form.Label>Pernocta</Form.Label>
-                <Form.Control
-                  type="number"
-                  step="0.01"
-                  value={resolvedFields.pernocta}
-                  onChange={(event) => handleFieldChange('pernocta', event.target.value)}
-                  inputMode="decimal"
-                />
-              </Form.Group>
-            </Col>
-          <Col md={6}>
-              <Form.Group controlId="extras-nocturnidad">
-                <Form.Label>Nocturnidad</Form.Label>
-                <Form.Control
-                  type="number"
-                  step="0.01"
-                  value={resolvedFields.nocturnidad}
-                  onChange={(event) => handleFieldChange('nocturnidad', event.target.value)}
-                  inputMode="decimal"
-                />
-              </Form.Group>
-            </Col>
-          <Col md={6}>
-              <Form.Group controlId="extras-festivo">
-                <Form.Label>Festivo</Form.Label>
-                <Form.Control
-                  type="number"
-                  step="0.01"
-                  value={resolvedFields.festivo}
-                  onChange={(event) => handleFieldChange('festivo', event.target.value)}
-                  inputMode="decimal"
-                />
-              </Form.Group>
-            </Col>
-          <Col md={6}>
-              <Form.Group controlId="extras-horas-extras">
-                <Form.Label>Horas extras</Form.Label>
-                <Form.Control
-                  type="number"
-                  step="0.01"
-                  value={resolvedFields.horasExtras}
-                  onChange={(event) => handleFieldChange('horasExtras', event.target.value)}
-                  inputMode="decimal"
-                />
-              </Form.Group>
-            </Col>
-          <Col md={12}>
-              <Form.Group controlId="extras-otros-gastos">
-                <Form.Label>Otros gastos</Form.Label>
-                <Form.Control
-                  type="number"
-                  step="0.01"
-                  value={resolvedFields.otrosGastos}
-                  onChange={(event) => handleFieldChange('otrosGastos', event.target.value)}
-                  inputMode="decimal"
-                />
-              </Form.Group>
-            </Col>
+          ))}
           <Col md={12}>
             <Form.Group controlId="extras-total">
               <Form.Label>Total Extras</Form.Label>
@@ -450,18 +333,26 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
           </Col>
         </Row>
         <div className="d-flex justify-content-end gap-2">
-          <Button variant="secondary" onClick={onHide} disabled={mutation.isPending}>
+          <Button
+            variant="outline-primary"
+            onClick={() => {
+              const range = buildMonthRange(entry.year, entry.month);
+              const params = new URLSearchParams({
+                trainerId: entry.userId,
+                trainerName: entry.fullName,
+                startDate: range.startDate,
+                endDate: range.endDate,
+              });
+              navigate(`/usuarios/costes_extra?${params.toString()}`);
+              onHide();
+            }}
+          >
+            Modificar
+          </Button>
+          <Button variant="secondary" onClick={onHide}>
             Cancelar
           </Button>
-          <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-            {mutation.isPending ? 'Guardando…' : 'Guardar cambios'}
-          </Button>
         </div>
-        {mutation.isError ? (
-          <Alert variant="danger" className="mb-0">
-            No se pudieron guardar los extras. Revisa los campos e inténtalo de nuevo.
-          </Alert>
-        ) : null}
       </Modal.Body>
     </Modal>
   );
@@ -1193,7 +1084,6 @@ export default function NominasOficinaPage({
       <ExtrasModal
         entry={selectedExtrasEntry}
         onHide={() => setSelectedExtrasEntry(null)}
-        onSaved={handleEntrySaved}
       />
       <UserFormModal
         show={Boolean(editingUser)}
