@@ -185,6 +185,15 @@ const EXTRAS_SUMMARY_FIELDS = [
 ] as const;
 
 type ExtrasSummaryKey = (typeof EXTRAS_SUMMARY_FIELDS)[number]['key'];
+const EXTRAS_TOTAL_FIELDS: ExtrasSummaryKey[] = [
+  'dietas',
+  'kilometraje',
+  'pernocta',
+  'nocturnidad',
+  'festivo',
+  'horasExtras',
+  'gastosExtras',
+];
 
 function ExtrasModal({ entry, onHide, allowEdit }: ExtrasModalProps) {
   const navigate = useNavigate();
@@ -250,7 +259,7 @@ function ExtrasModal({ entry, onHide, allowEdit }: ExtrasModalProps) {
   }, [matchingExtraCosts]);
 
   const totalExtrasDisplay = useMemo(() => {
-    const total = EXTRAS_SUMMARY_FIELDS.reduce((sum, field) => sum + extrasTotals[field.key], 0);
+    const total = EXTRAS_TOTAL_FIELDS.reduce((sum, fieldKey) => sum + extrasTotals[fieldKey], 0);
     return total.toFixed(2);
   }, [extrasTotals]);
 
