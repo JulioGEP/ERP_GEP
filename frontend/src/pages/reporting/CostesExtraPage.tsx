@@ -166,23 +166,44 @@ function normalizeTrainerName(value: string | null): string {
   return value.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+function normalizePipelineLabel(value: string | null): string {
+  if (!value) {
+    return '';
+  }
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim();
+}
+
 function formatAssignmentLabel(value: 'session' | 'variant'): string {
   return value === 'session' ? 'Sesión' : 'Formación abierta';
 }
 
 function resolveSessionCategory(item: TrainerExtraCostRecord): { label: string; variant: string } | null {
+  const pipelineLabel = normalizePipelineLabel(item.pipelineLabel ?? null);
+  if (pipelineLabel === 'formacion abierta') {
+    return { label: 'Formación Abierta', variant: 'warning' };
+  }
+  if (pipelineLabel === 'formacion empresa' || pipelineLabel === 'formacion empresas') {
+    return { label: 'Formación Empresa', variant: 'success' };
+  }
+  if (pipelineLabel === 'gep services') {
+    return { label: 'Preventivo', variant: 'danger' };
+  }
   if (item.assignmentType === 'variant') {
-    return { label: 'Formación', variant: 'warning' };
+    return { label: 'Formación Abierta', variant: 'warning' };
   }
 
   const hasFormacion = (item.costs.precioCosteFormacion ?? 0) > 0;
   const hasPreventivo = (item.costs.precioCostePreventivo ?? 0) > 0;
 
   if (hasPreventivo) {
-    return { label: 'Preventivos', variant: 'danger' };
+    return { label: 'Preventivo', variant: 'danger' };
   }
   if (hasFormacion) {
-    return { label: 'Formación', variant: 'warning' };
+    return { label: 'Formación Empresa', variant: 'success' };
   }
   return null;
 }

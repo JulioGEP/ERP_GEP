@@ -337,6 +337,7 @@ export type TrainerExtraCostRecord = {
   sessionName: string | null;
   variantName: string | null;
   dealTitle: string | null;
+  pipelineLabel: string | null;
   productName: string | null;
   site: string | null;
   scheduledStart: string | null;
@@ -465,6 +466,7 @@ function sanitizeExtraCostItem(entry: unknown): TrainerExtraCostRecord | null {
     sessionName: sanitizeText(raw.sessionName ?? raw.session_name),
     variantName: sanitizeText(raw.variantName ?? raw.variant_name),
     dealTitle: sanitizeText(raw.dealTitle ?? raw.deal_title),
+    pipelineLabel: sanitizeText(raw.pipelineLabel ?? raw.pipeline_label),
     productName: sanitizeText(raw.productName ?? raw.product_name),
     site: sanitizeText(raw.site),
     scheduledStart: sanitizeDate(raw.scheduledStart ?? raw.scheduled_start),

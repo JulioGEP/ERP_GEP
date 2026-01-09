@@ -46,7 +46,7 @@ type SessionInfo = {
   fecha_fin_utc: Date | null;
   direccion: string | null;
   deal_products: { name: string | null } | null;
-  deals: { title: string | null } | null;
+  deals: { title: string | null; pipeline_label: string | null; pipeline_id: string | null } | null;
 };
 
 type VariantInfo = {
@@ -110,6 +110,7 @@ type TrainerExtraCostResponseItem = {
   sessionName: string | null;
   variantName: string | null;
   dealTitle: string | null;
+  pipelineLabel: string | null;
   productName: string | null;
   site: string | null;
   scheduledStart: string | null;
@@ -440,6 +441,7 @@ function mapResponseItem(params: {
     sessionName: sessionInfo?.nombre_cache ?? null,
     variantName: variantInfo?.name ?? null,
     dealTitle: sessionInfo?.deals?.title ?? null,
+    pipelineLabel: sessionInfo?.deals?.pipeline_label ?? sessionInfo?.deals?.pipeline_id ?? null,
     productName: sessionInfo?.deal_products?.name ?? variantInfo?.products?.name ?? null,
     site: assignmentType === 'session' ? sessionInfo?.direccion ?? null : variantInfo?.sede ?? null,
     scheduledStart:
@@ -761,7 +763,7 @@ export const handler = createHttpHandler(async (request) => {
             fecha_fin_utc: true,
             direccion: true,
             deal_products: { select: { name: true } },
-            deals: { select: { title: true } },
+            deals: { select: { title: true, pipeline_label: true, pipeline_id: true } },
           },
         },
       },
@@ -989,7 +991,7 @@ export const handler = createHttpHandler(async (request) => {
             fecha_fin_utc: true,
             direccion: true,
             deal_products: { select: { name: true } },
-            deals: { select: { title: true } },
+            deals: { select: { title: true, pipeline_label: true, pipeline_id: true } },
           },
         },
       },
