@@ -210,45 +210,30 @@ const extrasInitialFields = EXTRAS_SUMMARY_FIELDS.reduce((acc, field) => {
 
 function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
   const [fields, setFields] = useState<Record<ExtrasSummaryKey, string>>(extrasInitialFields);
-  const payrollEntryQuery = useQuery<OfficePayrollRecord | null>({
-    queryKey: ['reporting', 'nominas-oficina-entry', entry?.userId, entry?.year, entry?.month],
-    queryFn: async () => {
-      if (!entry) return null;
-      const response = await fetchOfficePayrolls(entry.year);
-      return (
-        response.entries.find(
-          (item) => item.userId === entry.userId && item.year === entry.year && item.month === entry.month,
-        ) ?? null
-      );
-    },
-    enabled: Boolean(entry?.userId),
-    refetchOnMount: 'always',
-  });
-  const resolvedEntry = payrollEntryQuery.data ?? entry;
 
   useEffect(() => {
-    if (!resolvedEntry) return;
+    if (!entry) return;
     const nextFields = { ...extrasInitialFields };
     for (const field of EXTRAS_SUMMARY_FIELDS) {
-      const rawValue = resolvedEntry[field.entryKey];
+      const rawValue = entry[field.entryKey];
       nextFields[field.key] = typeof rawValue === 'number' ? rawValue.toFixed(2) : rawValue ?? '';
     }
     setFields(nextFields);
-  }, [resolvedEntry]);
+  }, [entry]);
 
   const monthRange = useMemo(() => {
-    if (!resolvedEntry) return null;
-    return buildMonthRange(resolvedEntry.year, resolvedEntry.month);
-  }, [resolvedEntry]);
+    if (!entry) return null;
+    return buildMonthRange(entry.year, entry.month);
+  }, [entry]);
 
   const {
     data: documents = [],
     isLoading: isLoadingDocuments,
     error: documentsError,
   } = useQuery<UserDocument[]>({
-    queryKey: ['user-documents', resolvedEntry?.userId],
-    queryFn: () => fetchUserDocuments(resolvedEntry?.userId as string),
-    enabled: Boolean(resolvedEntry?.userId),
+    queryKey: ['user-documents', entry?.userId],
+    queryFn: () => fetchUserDocuments(entry?.userId as string),
+    enabled: Boolean(entry?.userId),
     refetchOnMount: 'always',
   });
 
@@ -256,7 +241,7 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
     queryKey: [
       'reporting',
       'costes-extra-summary',
-      resolvedEntry?.userId ?? null,
+      entry?.userId ?? null,
       monthRange?.startDate ?? null,
       monthRange?.endDate ?? null,
     ],
@@ -265,17 +250,17 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
         startDate: monthRange?.startDate,
         endDate: monthRange?.endDate,
       }),
-    enabled: Boolean(resolvedEntry?.userId && monthRange),
+    enabled: Boolean(entry?.userId && monthRange),
     staleTime: 5 * 60 * 1000,
     refetchOnMount: 'always',
   });
 
   const matchingExtraCosts = useMemo(() => {
-    if (!resolvedEntry) return [];
+    if (!entry) return [];
     return (extraCostsQuery.data ?? []).filter(
-      (item) => item.trainerId === resolvedEntry.userId || item.trainerUserId === resolvedEntry.userId,
+      (item) => item.trainerId === entry.userId || item.trainerUserId === entry.userId,
     );
-  }, [resolvedEntry, extraCostsQuery.data]);
+  }, [entry, extraCostsQuery.data]);
 
   const extrasTotals = useMemo(() => {
     const totals = EXTRAS_SUMMARY_FIELDS.reduce((acc, field) => {
@@ -312,9 +297,9 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
   const mutation = useMutation({
     mutationFn: () =>
       saveOfficePayroll({
-        userId: resolvedEntry?.userId as string,
-        year: resolvedEntry?.year as number,
-        month: resolvedEntry?.month as number,
+        userId: entry?.userId as string,
+        year: entry?.year as number,
+        month: entry?.month as number,
         dietas: fields.dietas,
         kilometrajes: fields.kilometraje,
         pernocta: fields.pernocta,
@@ -330,7 +315,7 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
   });
 
   const matchingExpenseDocuments = useMemo(() => {
-    if (!resolvedEntry || !documents?.length) return [];
+    if (!entry || !documents?.length) return [];
 
     return documents.filter((document) => {
       if (document.document_type !== 'gasto') return false;
@@ -340,14 +325,14 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
       if (Number.isNaN(createdAt.getTime())) return false;
 
       return (
-        createdAt.getUTCFullYear() === resolvedEntry.year &&
-        createdAt.getUTCMonth() + 1 === resolvedEntry.month
+        createdAt.getUTCFullYear() === entry.year &&
+        createdAt.getUTCMonth() + 1 === entry.month
       );
     });
-  }, [documents, resolvedEntry]);
+  }, [documents, entry]);
 
-  if (!resolvedEntry) return null;
-  const monthLabel = MONTH_LABELS[resolvedEntry.month - 1] ?? `${resolvedEntry.month}`;
+  if (!entry) return null;
+  const monthLabel = MONTH_LABELS[entry.month - 1] ?? `${entry.month}`;
   const isLoadingExtraCosts = extraCostsQuery.isLoading;
   const extraCostsError = extraCostsQuery.isError;
 
@@ -355,7 +340,7 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
     <Modal show={Boolean(entry)} onHide={onHide} centered backdrop="static">
       <Modal.Header closeButton>
         <Modal.Title>
-          Extras de {resolvedEntry.fullName} · {monthLabel} {resolvedEntry.year}
+          Extras de {entry.fullName} · {monthLabel} {entry.year}
         </Modal.Title>
       </Modal.Header>
       <Modal.Body className="d-grid gap-3">
