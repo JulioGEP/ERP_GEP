@@ -264,6 +264,7 @@ function preservePayrollBaseValues(
 }
 
 function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
+  const navigate = useNavigate();
   const [fields, setFields] = useState<Record<ExtrasSummaryKey, string>>(extrasInitialFields);
 
   useEffect(() => {
@@ -390,6 +391,15 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
   const monthLabel = MONTH_LABELS[entry.month - 1] ?? `${entry.month}`;
   const isLoadingExtraCosts = extraCostsQuery.isLoading;
   const extraCostsError = extraCostsQuery.isError;
+  const handleModifyClick = () => {
+    if (!entry || !monthRange) return;
+    const params = new URLSearchParams({
+      trainerId: entry.userId,
+      startDate: monthRange.startDate,
+      endDate: monthRange.endDate,
+    });
+    navigate(`/usuarios/costes_extra?${params.toString()}`);
+  };
 
   return (
     <Modal show={Boolean(entry)} onHide={onHide} centered backdrop="static">
@@ -469,6 +479,9 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
         <div className="d-flex justify-content-end gap-2">
           <Button variant="secondary" onClick={onHide} disabled={mutation.isPending}>
             Cancelar
+          </Button>
+          <Button variant="outline-primary" onClick={handleModifyClick} disabled={mutation.isPending}>
+            Modificar
           </Button>
           {allowEdit ? (
             <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
