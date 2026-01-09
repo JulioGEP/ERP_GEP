@@ -267,15 +267,34 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
   const navigate = useNavigate();
   const [fields, setFields] = useState<Record<ExtrasSummaryKey, string>>(extrasInitialFields);
 
+  const refreshedPayrollQuery = useQuery({
+    queryKey: ['reporting', 'nominas-oficina-entry', entry?.userId ?? null, entry?.year ?? null, entry?.month ?? null],
+    queryFn: async () => {
+      const response = await fetchOfficePayrolls(entry?.year);
+      return (
+        response.entries.find(
+          (item) =>
+            item.userId === entry?.userId && item.year === entry?.year && item.month === entry?.month,
+        ) ?? null
+      );
+    },
+    enabled: Boolean(entry?.userId && entry?.year && entry?.month),
+    refetchOnMount: 'always',
+  });
+
   useEffect(() => {
-    if (!entry) return;
+    if (!entry) {
+      setFields(extrasInitialFields);
+      return;
+    }
+    const sourceEntry = refreshedPayrollQuery.data ?? entry;
     const nextFields = { ...extrasInitialFields };
     for (const field of EXTRAS_SUMMARY_FIELDS) {
-      const rawValue = entry[field.entryKey];
+      const rawValue = sourceEntry[field.entryKey];
       nextFields[field.key] = typeof rawValue === 'number' ? rawValue.toFixed(2) : rawValue ?? '';
     }
     setFields(nextFields);
-  }, [entry]);
+  }, [entry, refreshedPayrollQuery.data]);
 
   const monthRange = useMemo(() => {
     if (!entry) return null;
