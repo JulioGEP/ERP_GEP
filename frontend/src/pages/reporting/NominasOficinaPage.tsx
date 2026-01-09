@@ -6,6 +6,7 @@ import {
   fetchTrainerExtraCosts,
   fetchOfficePayrolls,
   saveOfficePayroll,
+  type TrainerExtraCostFieldKey,
   type OfficePayrollRecord,
   type OfficePayrollResponse,
 } from '../../features/reporting/api';
@@ -169,20 +170,29 @@ function calculateTotals(entries: OfficePayrollRecord[]) {
 type ExtrasModalProps = {
   entry: OfficePayrollRecord | null;
   onHide: () => void;
+  onSaved: (entry: OfficePayrollRecord) => void;
   allowEdit: boolean;
 };
 
-const EXTRAS_SUMMARY_FIELDS = [
-  { key: 'dietas', label: 'Dietas', col: 6 },
-  { key: 'kilometraje', label: 'Kilometraje', col: 6 },
-  { key: 'pernocta', label: 'Pernocta', col: 6 },
-  { key: 'nocturnidad', label: 'Nocturnidad', col: 6 },
-  { key: 'festivo', label: 'Festivo', col: 6 },
-  { key: 'horasExtras', label: 'Horas extras', col: 6 },
-  { key: 'gastosExtras', label: 'Otros gastos', col: 12 },
-] as const;
+type ExtrasFieldConfig = {
+  key: 'dietas' | 'kilometraje' | 'pernocta' | 'nocturnidad' | 'festivo' | 'horasExtras' | 'otrosGastos';
+  label: string;
+  col: number;
+  entryKey: keyof OfficePayrollRecord;
+  costsKey: TrainerExtraCostFieldKey;
+};
 
-type ExtrasSummaryKey = (typeof EXTRAS_SUMMARY_FIELDS)[number]['key'];
+type ExtrasSummaryKey = ExtrasFieldConfig['key'];
+
+const EXTRAS_SUMMARY_FIELDS = [
+  { key: 'dietas', label: 'Dietas', col: 6, entryKey: 'dietas', costsKey: 'dietas' },
+  { key: 'kilometraje', label: 'Kilometraje', col: 6, entryKey: 'kilometrajes', costsKey: 'kilometraje' },
+  { key: 'pernocta', label: 'Pernocta', col: 6, entryKey: 'pernocta', costsKey: 'pernocta' },
+  { key: 'nocturnidad', label: 'Nocturnidad', col: 6, entryKey: 'nocturnidad', costsKey: 'nocturnidad' },
+  { key: 'festivo', label: 'Festivo', col: 6, entryKey: 'festivo', costsKey: 'festivo' },
+  { key: 'horasExtras', label: 'Horas extras', col: 6, entryKey: 'horasExtras', costsKey: 'horasExtras' },
+  { key: 'otrosGastos', label: 'Otros gastos', col: 12, entryKey: 'otrosGastos', costsKey: 'gastosExtras' },
+] as const satisfies ExtrasFieldConfig[];
 const EXTRAS_TOTAL_FIELDS: ExtrasSummaryKey[] = [
   'dietas',
   'kilometraje',
@@ -190,11 +200,26 @@ const EXTRAS_TOTAL_FIELDS: ExtrasSummaryKey[] = [
   'nocturnidad',
   'festivo',
   'horasExtras',
-  'gastosExtras',
+  'otrosGastos',
 ];
 
-function ExtrasModal({ entry, onHide, allowEdit }: ExtrasModalProps) {
-  const navigate = useNavigate();
+const extrasInitialFields = EXTRAS_SUMMARY_FIELDS.reduce((acc, field) => {
+  acc[field.key] = '';
+  return acc;
+}, {} as Record<ExtrasSummaryKey, string>);
+
+function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
+  const [fields, setFields] = useState<Record<ExtrasSummaryKey, string>>(extrasInitialFields);
+
+  useEffect(() => {
+    if (!entry) return;
+    const nextFields = { ...extrasInitialFields };
+    for (const field of EXTRAS_SUMMARY_FIELDS) {
+      const rawValue = entry[field.entryKey];
+      nextFields[field.key] = typeof rawValue === 'number' ? rawValue.toFixed(2) : rawValue ?? '';
+    }
+    setFields(nextFields);
+  }, [entry]);
 
   const monthRange = useMemo(() => {
     if (!entry) return null;
@@ -245,7 +270,7 @@ function ExtrasModal({ entry, onHide, allowEdit }: ExtrasModalProps) {
 
     for (const item of matchingExtraCosts) {
       for (const field of EXTRAS_SUMMARY_FIELDS) {
-        totals[field.key] += item.costs[field.key] ?? 0;
+        totals[field.key] += item.costs[field.costsKey] ?? 0;
       }
     }
 
@@ -260,6 +285,34 @@ function ExtrasModal({ entry, onHide, allowEdit }: ExtrasModalProps) {
     const total = EXTRAS_TOTAL_FIELDS.reduce((sum, fieldKey) => sum + extrasTotals[fieldKey], 0);
     return total.toFixed(2);
   }, [extrasTotals]);
+
+  const editableTotalExtras = useMemo(() => {
+    const total = EXTRAS_TOTAL_FIELDS.reduce((sum, key) => {
+      const parsed = parseLocaleNumber(fields[key]) ?? 0;
+      return sum + parsed;
+    }, 0);
+    return total.toFixed(2);
+  }, [fields]);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      saveOfficePayroll({
+        userId: entry?.userId as string,
+        year: entry?.year as number,
+        month: entry?.month as number,
+        dietas: fields.dietas,
+        kilometrajes: fields.kilometraje,
+        pernocta: fields.pernocta,
+        nocturnidad: fields.nocturnidad,
+        festivo: fields.festivo,
+        horasExtras: fields.horasExtras,
+        otrosGastos: fields.otrosGastos,
+        totalExtras: editableTotalExtras,
+      }),
+    onSuccess: (saved) => {
+      onSaved(saved);
+    },
+  });
 
   const matchingExpenseDocuments = useMemo(() => {
     if (!entry || !documents?.length) return [];
@@ -329,9 +382,18 @@ function ExtrasModal({ entry, onHide, allowEdit }: ExtrasModalProps) {
                 <Form.Control
                   type="number"
                   step="0.01"
-                  value={extrasTotals[field.key].toFixed(2)}
-                  readOnly
-                  disabled
+                  value={allowEdit ? fields[field.key] : extrasTotals[field.key].toFixed(2)}
+                  onChange={(event) =>
+                    allowEdit
+                      ? setFields((prev) => ({
+                          ...prev,
+                          [field.key]: event.target.value,
+                        }))
+                      : undefined
+                  }
+                  readOnly={!allowEdit}
+                  disabled={!allowEdit}
+                  inputMode="decimal"
                 />
               </Form.Group>
             </Col>
@@ -339,33 +401,31 @@ function ExtrasModal({ entry, onHide, allowEdit }: ExtrasModalProps) {
           <Col md={12}>
             <Form.Group controlId="extras-total">
               <Form.Label>Total Extras</Form.Label>
-              <Form.Control type="number" step="0.01" value={totalExtrasDisplay} readOnly disabled />
+              <Form.Control
+                type="number"
+                step="0.01"
+                value={allowEdit ? editableTotalExtras : totalExtrasDisplay}
+                readOnly
+                disabled
+              />
             </Form.Group>
           </Col>
         </Row>
         <div className="d-flex justify-content-end gap-2">
-          {allowEdit ? (
-            <Button
-              variant="outline-primary"
-              onClick={() => {
-                const range = buildMonthRange(entry.year, entry.month);
-                const params = new URLSearchParams({
-                  trainerId: entry.userId,
-                  trainerName: entry.fullName,
-                  startDate: range.startDate,
-                  endDate: range.endDate,
-                });
-                navigate(`/usuarios/costes_extra?${params.toString()}`);
-                onHide();
-              }}
-            >
-              Modificar
-            </Button>
-          ) : null}
-          <Button variant="secondary" onClick={onHide}>
+          <Button variant="secondary" onClick={onHide} disabled={mutation.isPending}>
             Cancelar
           </Button>
+          {allowEdit ? (
+            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+              {mutation.isPending ? 'Guardando…' : 'Guardar cambios'}
+            </Button>
+          ) : null}
         </div>
+        {mutation.isError ? (
+          <Alert variant="danger" className="mb-0">
+            No se pudieron guardar los extras. Revisa los datos e inténtalo de nuevo.
+          </Alert>
+        ) : null}
       </Modal.Body>
     </Modal>
   );
@@ -1098,6 +1158,7 @@ export default function NominasOficinaPage({
       <ExtrasModal
         entry={selectedExtrasEntry}
         onHide={() => setSelectedExtrasEntry(null)}
+        onSaved={handleEntrySaved}
         allowEdit={allowExtrasEdit}
       />
       <UserFormModal
