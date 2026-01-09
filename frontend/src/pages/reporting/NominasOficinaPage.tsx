@@ -18,6 +18,7 @@ type NominasOficinaPageProps = {
   description?: string;
   filterEntries?: (entry: OfficePayrollRecord) => boolean;
   enableSessionsAction?: boolean;
+  allowExtrasEdit?: boolean;
 };
 
 const DEFAULT_WEEKLY_HOURS = '40';
@@ -168,6 +169,7 @@ function calculateTotals(entries: OfficePayrollRecord[]) {
 type ExtrasModalProps = {
   entry: OfficePayrollRecord | null;
   onHide: () => void;
+  allowEdit: boolean;
 };
 
 const EXTRAS_SUMMARY_FIELDS = [
@@ -184,7 +186,7 @@ const EXTRAS_SUMMARY_FIELDS = [
 
 type ExtrasSummaryKey = (typeof EXTRAS_SUMMARY_FIELDS)[number]['key'];
 
-function ExtrasModal({ entry, onHide }: ExtrasModalProps) {
+function ExtrasModal({ entry, onHide, allowEdit }: ExtrasModalProps) {
   const navigate = useNavigate();
 
   const monthRange = useMemo(() => {
@@ -200,6 +202,7 @@ function ExtrasModal({ entry, onHide }: ExtrasModalProps) {
     queryKey: ['user-documents', entry?.userId],
     queryFn: () => fetchUserDocuments(entry?.userId as string),
     enabled: Boolean(entry?.userId),
+    refetchOnMount: 'always',
   });
 
   const extraCostsQuery = useQuery({
@@ -217,6 +220,7 @@ function ExtrasModal({ entry, onHide }: ExtrasModalProps) {
       }),
     enabled: Boolean(entry?.userId && monthRange),
     staleTime: 5 * 60 * 1000,
+    refetchOnMount: 'always',
   });
 
   const matchingExtraCosts = useMemo(() => {
@@ -333,22 +337,24 @@ function ExtrasModal({ entry, onHide }: ExtrasModalProps) {
           </Col>
         </Row>
         <div className="d-flex justify-content-end gap-2">
-          <Button
-            variant="outline-primary"
-            onClick={() => {
-              const range = buildMonthRange(entry.year, entry.month);
-              const params = new URLSearchParams({
-                trainerId: entry.userId,
-                trainerName: entry.fullName,
-                startDate: range.startDate,
-                endDate: range.endDate,
-              });
-              navigate(`/usuarios/costes_extra?${params.toString()}`);
-              onHide();
-            }}
-          >
-            Modificar
-          </Button>
+          {allowEdit ? (
+            <Button
+              variant="outline-primary"
+              onClick={() => {
+                const range = buildMonthRange(entry.year, entry.month);
+                const params = new URLSearchParams({
+                  trainerId: entry.userId,
+                  trainerName: entry.fullName,
+                  startDate: range.startDate,
+                  endDate: range.endDate,
+                });
+                navigate(`/usuarios/costes_extra?${params.toString()}`);
+                onHide();
+              }}
+            >
+              Modificar
+            </Button>
+          ) : null}
           <Button variant="secondary" onClick={onHide}>
             Cancelar
           </Button>
@@ -777,6 +783,7 @@ export default function NominasOficinaPage({
   description = 'Listado mensual de nóminas para personal no formador.',
   filterEntries,
   enableSessionsAction = false,
+  allowExtrasEdit = true,
 }: NominasOficinaPageProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -1084,6 +1091,7 @@ export default function NominasOficinaPage({
       <ExtrasModal
         entry={selectedExtrasEntry}
         onHide={() => setSelectedExtrasEntry(null)}
+        allowEdit={allowExtrasEdit}
       />
       <UserFormModal
         show={Boolean(editingUser)}
