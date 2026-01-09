@@ -5,6 +5,7 @@ import type { Product, ProductAttribute } from '../../types/product';
 export type ProductUpdatePayload = {
   template?: string | null;
   url_formacion?: string | null;
+  siglas?: string | null;
   active?: boolean | null;
   id_woo?: number | null;
   provider_ids?: number[] | null;
@@ -99,6 +100,7 @@ function normalizeProduct(row: any): Product {
     id_woo: row.id_woo == null ? null : Number(row.id_woo),
     id_holded: row.id_holded == null ? null : String(row.id_holded),
     name: row.name == null ? null : String(row.name),
+    siglas: row.siglas == null ? null : String(row.siglas),
     code: row.code == null ? null : String(row.code),
     category: row.category == null ? null : String(row.category),
     type: row.type == null ? null : String(row.type),
@@ -137,6 +139,10 @@ function buildUpdateBody(payload: ProductUpdatePayload): Record<string, any> {
 
   if ('url_formacion' in payload) {
     body.url_formacion = toNullableString(payload.url_formacion);
+  }
+
+  if ('siglas' in payload) {
+    body.siglas = toNullableString(payload.siglas);
   }
 
   if ('active' in payload) {

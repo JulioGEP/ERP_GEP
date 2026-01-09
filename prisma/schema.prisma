@@ -124,6 +124,7 @@ model products {
   price                          Decimal?  @db.Decimal(12, 2)
   id_holded                      String?
   name                           String?
+  siglas                         String?
   code                           String?
   category                       String?
   type                           String?

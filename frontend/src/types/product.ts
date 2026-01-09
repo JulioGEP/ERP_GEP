@@ -11,6 +11,7 @@ export type Product = {
   id_woo: number | null;
   id_holded: string | null;
   name: string | null;
+  siglas: string | null;
   code: string | null;
   category: string | null;
   type: string | null;
