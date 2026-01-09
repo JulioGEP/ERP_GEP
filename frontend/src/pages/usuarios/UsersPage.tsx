@@ -375,32 +375,31 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
 
   const handleModalSubmit = useCallback(
     async (values: UserFormValues) => {
-    const normalizedPayload = {
-      ...values,
-      bankAccount: values.bankAccount.trim(),
-      address: values.address.trim(),
-    };
-    const payrollPayload = buildPayrollPayload(values.payroll);
-    if (editingUser) {
-      return updateMutation.mutateAsync({
-        id: editingUser.id,
-        payload: {
-          ...normalizedPayload,
-          bankAccount: normalizedPayload.bankAccount || null,
-          address: normalizedPayload.address || null,
-          payroll: payrollPayload,
-        },
-      });
-    } else {
+      const normalizedPayload = {
+        ...values,
+        bankAccount: values.bankAccount.trim(),
+        address: values.address.trim(),
+      };
+      const { payroll: _payroll, ...userPayload } = normalizedPayload;
+      const payrollPayload = buildPayrollPayload(values.payroll);
+      if (editingUser) {
+        return updateMutation.mutateAsync({
+          id: editingUser.id,
+          payload: {
+            ...userPayload,
+            bankAccount: userPayload.bankAccount || null,
+            address: userPayload.address || null,
+          },
+        });
+      }
       return createMutation.mutateAsync({
-        ...normalizedPayload,
-        bankAccount: normalizedPayload.bankAccount || null,
-        address: normalizedPayload.address || null,
+        ...userPayload,
+        bankAccount: userPayload.bankAccount || null,
+        address: userPayload.address || null,
         payroll: payrollPayload,
       });
-    }
-  },
-  [createMutation, editingUser, updateMutation],
+    },
+    [createMutation, editingUser, updateMutation],
   );
 
   const totalUsers = usersQuery.data?.total ?? 0;
@@ -646,6 +645,7 @@ type UserFormModalProps = {
 export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: UserFormModalProps) {
   const queryClient = useQueryClient();
   const userId = initialValue?.id ?? null;
+  const payrollReadOnly = Boolean(initialValue);
 
   const buildFormValuesFromUser = useCallback(
     (user?: UserSummary | null): UserFormValues => ({
@@ -868,7 +868,11 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
               </div>
             </div>
             <div className="text-muted small">
-              {isLoadingDetails ? 'Cargando detalles del usuario…' : 'Todos los campos son editables desde este panel.'}
+              {isLoadingDetails
+                ? 'Cargando detalles del usuario…'
+                : payrollReadOnly
+                  ? 'Los datos de nómina son de solo lectura.'
+                  : 'Todos los campos son editables desde este panel.'}
             </div>
           </div>
         </Modal.Header>
@@ -984,7 +988,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                         type="text"
                         value={values.payroll.convenio}
                         onChange={(event) => handlePayrollChange('convenio', event.target.value)}
-                        disabled={disableForm}
+                        disabled={disableForm || payrollReadOnly}
                       />
                     </Form.Group>
                   </Col>
@@ -995,7 +999,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                         type="text"
                         value={values.payroll.categoria}
                         onChange={(event) => handlePayrollChange('categoria', event.target.value)}
-                        disabled={disableForm}
+                        disabled={disableForm || payrollReadOnly}
                       />
                     </Form.Group>
                   </Col>
@@ -1006,7 +1010,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                         type="date"
                         value={values.payroll.antiguedad}
                         onChange={(event) => handlePayrollChange('antiguedad', event.target.value)}
-                        disabled={disableForm}
+                        disabled={disableForm || payrollReadOnly}
                       />
                     </Form.Group>
                   </Col>
@@ -1019,7 +1023,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                         value={values.payroll.horasSemana}
                         onChange={(event) => handlePayrollChange('horasSemana', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('horasSemana', event.target.value)}
-                        disabled={disableForm}
+                        disabled={disableForm || payrollReadOnly}
                         inputMode="decimal"
                       />
                     </Form.Group>
@@ -1032,7 +1036,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                         value={values.payroll.baseRetencionDetalle}
                         onChange={(event) => handlePayrollChange('baseRetencionDetalle', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('baseRetencionDetalle', event.target.value)}
-                        disabled={disableForm}
+                        disabled={disableForm || payrollReadOnly}
                         inputMode="decimal"
                       />
                       <Form.Text className="text-muted">Usa este valor para calcular la base mensual.</Form.Text>
@@ -1050,7 +1054,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                         value={values.payroll.baseRetencion}
                         onChange={(event) => handlePayrollChange('baseRetencion', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('baseRetencion', event.target.value)}
-                        disabled={disableForm}
+                        disabled={disableForm || payrollReadOnly}
                         inputMode="decimal"
                       />
                     </Form.Group>
@@ -1064,7 +1068,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                         value={values.payroll.salarioBruto}
                         onChange={(event) => handlePayrollChange('salarioBruto', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('salarioBruto', event.target.value)}
-                        disabled={disableForm}
+                        disabled={disableForm || payrollReadOnly}
                         inputMode="decimal"
                       />
                     </Form.Group>
@@ -1084,7 +1088,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                         value={values.payroll.salarioBrutoTotal}
                         onChange={(event) => handlePayrollChange('salarioBrutoTotal', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('salarioBrutoTotal', event.target.value)}
-                        disabled={disableForm}
+                        disabled={disableForm || payrollReadOnly}
                         inputMode="decimal"
                       />
                     </Form.Group>
@@ -1098,7 +1102,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                         value={values.payroll.retencion}
                         onChange={(event) => handlePayrollChange('retencion', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('retencion', event.target.value)}
-                        disabled={disableForm}
+                        disabled={disableForm || payrollReadOnly}
                         inputMode="decimal"
                       />
                     </Form.Group>
@@ -1111,7 +1115,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                         value={values.payroll.aportacionSsIrpfDetalle}
                         onChange={(event) => handlePayrollChange('aportacionSsIrpfDetalle', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('aportacionSsIrpfDetalle', event.target.value)}
-                        disabled={disableForm}
+                        disabled={disableForm || payrollReadOnly}
                         placeholder="4,8%+1,65%"
                       />
                     </Form.Group>
@@ -1125,7 +1129,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                         value={values.payroll.aportacionSsIrpf}
                         onChange={(event) => handlePayrollChange('aportacionSsIrpf', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('aportacionSsIrpf', event.target.value)}
-                        disabled={disableForm}
+                        disabled={disableForm || payrollReadOnly}
                         inputMode="decimal"
                       />
                     </Form.Group>
@@ -1139,7 +1143,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                         value={values.payroll.salarioLimpio}
                         onChange={(event) => handlePayrollChange('salarioLimpio', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('salarioLimpio', event.target.value)}
-                        disabled={disableForm}
+                        disabled={disableForm || payrollReadOnly}
                         inputMode="decimal"
                       />
                     </Form.Group>
@@ -1152,7 +1156,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                         value={values.payroll.contingenciasComunesDetalle}
                         onChange={(event) => handlePayrollChange('contingenciasComunesDetalle', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('contingenciasComunesDetalle', event.target.value)}
-                        disabled={disableForm}
+                        disabled={disableForm || payrollReadOnly}
                         placeholder="4,8%+1,65%"
                       />
                     </Form.Group>
@@ -1166,7 +1170,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                         value={values.payroll.contingenciasComunes}
                         onChange={(event) => handlePayrollChange('contingenciasComunes', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('contingenciasComunes', event.target.value)}
-                        disabled={disableForm}
+                        disabled={disableForm || payrollReadOnly}
                         inputMode="decimal"
                       />
                     </Form.Group>
@@ -1180,7 +1184,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                         value={values.payroll.totalEmpresa}
                         onChange={(event) => handlePayrollChange('totalEmpresa', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('totalEmpresa', event.target.value)}
-                        disabled={disableForm}
+                        disabled={disableForm || payrollReadOnly}
                         inputMode="decimal"
                       />
                     </Form.Group>

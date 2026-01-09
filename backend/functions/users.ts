@@ -85,6 +85,11 @@ function serializePayroll(payroll: any | null | undefined): SerializedPayroll {
 }
 
 function serializeUser(user: any) {
+  const payrollSource =
+    Array.isArray(user.office_payrolls) && user.office_payrolls.length > 0
+      ? user.office_payrolls[0]
+      : user.payroll;
+
   return {
     id: user.id,
     firstName: user.first_name,
@@ -98,7 +103,7 @@ function serializeUser(user: any) {
     updatedAt: user.updated_at,
     trainerId: user.trainer?.trainer_id ?? null,
     trainerFixedContract: user.trainer?.contrato_fijo ?? null,
-    payroll: serializePayroll(user.payroll),
+    payroll: serializePayroll(payrollSource),
   };
 }
 
@@ -287,7 +292,11 @@ async function handleGet(
 
     const user = await prisma.users.findUnique({
       where: { id: userId },
-      include: { trainer: true, payroll: true },
+      include: {
+        trainer: true,
+        payroll: true,
+        office_payrolls: { orderBy: [{ year: 'desc' }, { month: 'desc' }], take: 1 },
+      },
     });
 
     if (!user) {
@@ -360,7 +369,11 @@ async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
         skip: (page - 1) * pageSize,
         take: pageSize,
         where: where as any,
-        include: { trainer: true, payroll: true },
+        include: {
+          trainer: true,
+          payroll: true,
+          office_payrolls: { orderBy: [{ year: 'desc' }, { month: 'desc' }], take: 1 },
+        },
       }),
     ]);
 
