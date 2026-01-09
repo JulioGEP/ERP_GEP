@@ -12,6 +12,7 @@ type ProductRecord = {
   id_woo: bigint | number | null;
   id_holded: string | null;
   name: string | null;
+  siglas: string | null;
   code: string | null;
   category: string | null;
   hora_inicio: Date | string | null;
@@ -67,6 +68,7 @@ function normalizeProduct(record: ProductRecord) {
     id_woo: record.id_woo == null ? null : Number(record.id_woo),
     id_holded: record.id_holded ?? null,
     name: record.name ?? null,
+    siglas: record.siglas ?? null,
     code: record.code ?? null,
     category: record.category ?? null,
     hora_inicio: formatTimeFromDb(record.hora_inicio),
@@ -106,6 +108,12 @@ function buildUpdateData(body: any) {
   if (Object.prototype.hasOwnProperty.call(body, 'url_formacion')) {
     const value = toNullableTrimmedString(body.url_formacion);
     data.url_formacion = value;
+    hasChanges = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'siglas')) {
+    const value = toNullableTrimmedString(body.siglas);
+    data.siglas = value;
     hasChanges = true;
   }
 

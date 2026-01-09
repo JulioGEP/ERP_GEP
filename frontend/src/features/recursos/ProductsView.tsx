@@ -45,7 +45,7 @@ type UpdateVariables = {
   id: string;
   payload: ProductUpdatePayload;
   product: Product;
-  field: 'template' | 'url_formacion' | 'active' | 'id_woo';
+  field: 'template' | 'url_formacion' | 'siglas' | 'active' | 'id_woo';
 };
 
 type TrainingTemplatesApi = TrainingTemplatesManager;
@@ -122,6 +122,7 @@ const PRODUCT_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'id_pipe', label: 'ID de Pipedrive' },
   { key: 'id_woo', label: 'Id Producto WC' },
   { key: 'name', label: 'Nombre' },
+  { key: 'siglas', label: 'Siglas' },
   { key: 'code', label: 'Código' },
   { key: 'category', label: 'Categoría' },
   { key: 'type', label: 'Tipo' },
@@ -134,6 +135,7 @@ const PRODUCT_FILTER_ACCESSORS: Record<string, (product: Product) => string> = {
   id_pipe: (product) => String(product.id_pipe ?? '').trim(),
   id_woo: (product) => (product.id_woo != null ? String(product.id_woo) : ''),
   name: (product) => String(product.name ?? '').trim(),
+  siglas: (product) => String(product.siglas ?? '').trim(),
   code: (product) => String(product.code ?? '').trim(),
   category: (product) => String(product.category ?? '').trim(),
   type: (product) => String(product.type ?? '').trim(),
@@ -148,6 +150,7 @@ const PRODUCT_SELECT_FILTER_KEYS = new Set<string>([
   'id_pipe',
   'id_woo',
   'name',
+  'siglas',
   'code',
   'category',
   'type',
@@ -245,6 +248,7 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
   const [urlDrafts, setUrlDrafts] = useState<Record<string, string>>({});
   const [templateDrafts, setTemplateDrafts] = useState<Record<string, string>>({});
   const [idWooDrafts, setIdWooDrafts] = useState<Record<string, string>>({});
+  const [siglasDrafts, setSiglasDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const api = getTrainingTemplatesApi();
@@ -333,11 +337,21 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
         });
       }
 
+      if (variables.field === 'siglas') {
+        setSiglasDrafts((current) => {
+          const next = { ...current };
+          delete next[variables.id];
+          return next;
+        });
+      }
+
       const fieldLabel =
         variables.field === 'template'
           ? 'template'
           : variables.field === 'url_formacion'
           ? 'URL de formación'
+          : variables.field === 'siglas'
+          ? 'siglas'
           : variables.field === 'id_woo'
           ? 'Id Producto WC'
           : 'estado';
@@ -367,6 +381,14 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
 
       if (variables.field === 'id_woo') {
         setIdWooDrafts((current) => {
+          const next = { ...current };
+          delete next[variables.id];
+          return next;
+        });
+      }
+
+      if (variables.field === 'siglas') {
+        setSiglasDrafts((current) => {
           const next = { ...current };
           delete next[variables.id];
           return next;
@@ -414,6 +436,10 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
     setUrlDrafts((current) => ({ ...current, [productId]: value }));
   }, []);
 
+  const handleSiglasChange = useCallback((productId: string, value: string) => {
+    setSiglasDrafts((current) => ({ ...current, [productId]: value }));
+  }, []);
+
   const handleIdWooChange = useCallback((productId: string, value: string) => {
     setIdWooDrafts((current) => ({ ...current, [productId]: value }));
   }, []);
@@ -444,6 +470,34 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
       });
     },
     [updateMutation, urlDrafts]
+  );
+
+  const handleSiglasCommit = useCallback(
+    (product: Product) => {
+      const draft = siglasDrafts[product.id];
+      const current = product.siglas ?? '';
+      const normalized = (draft ?? current).trim();
+
+      if ((normalized || '') === (current || '').trim()) {
+        setSiglasDrafts((currentDrafts) => {
+          if (currentDrafts[product.id] === undefined) {
+            return currentDrafts;
+          }
+          const next = { ...currentDrafts };
+          delete next[product.id];
+          return next;
+        });
+        return;
+      }
+
+      updateMutation.mutate({
+        id: product.id,
+        payload: { siglas: normalized.length ? normalized : null },
+        product,
+        field: 'siglas',
+      });
+    },
+    [siglasDrafts, updateMutation]
   );
 
   const handleIdWooCommit = useCallback(
@@ -505,6 +559,17 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
       }
     },
     [handleUrlCommit]
+  );
+
+  const handleSiglasKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>, product: Product) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        event.currentTarget.blur();
+        handleSiglasCommit(product);
+      }
+    },
+    [handleSiglasCommit]
   );
 
   const {
@@ -720,6 +785,43 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
         meta: { style: { minWidth: 200 } },
       },
       {
+        id: 'siglas',
+        header: ({ column }) => {
+          const sorted = column.getIsSorted();
+          return (
+            <button
+              type="button"
+              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
+              onClick={column.getToggleSortingHandler()}
+            >
+              Siglas
+              {sorted && (
+                <span className="ms-1" aria-hidden="true">
+                  {sorted === 'asc' ? '▲' : '▼'}
+                </span>
+              )}
+            </button>
+          );
+        },
+        accessorFn: (product) => String(product.siglas ?? '').trim(),
+        cell: ({ row }) => {
+          const product = row.original;
+          const siglasValue = siglasDrafts[product.id] ?? product.siglas ?? '';
+          return (
+            <Form.Control
+              type="text"
+              placeholder="—"
+              value={siglasValue}
+              onChange={(event) => handleSiglasChange(product.id, event.target.value)}
+              onBlur={() => handleSiglasCommit(product)}
+              onKeyDown={(event) => handleSiglasKeyDown(event, product)}
+              disabled={isUpdating}
+            />
+          );
+        },
+        meta: { style: { minWidth: 140 } },
+      },
+      {
         id: 'code',
         header: ({ column }) => {
           const sorted = column.getIsSorted();
@@ -873,8 +975,12 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
     handleUrlChange,
     handleUrlCommit,
     handleUrlKeyDown,
+    handleSiglasChange,
+    handleSiglasCommit,
+    handleSiglasKeyDown,
     idWooDrafts,
     isUpdating,
+    siglasDrafts,
     templateDrafts,
     templateOptions,
     urlDrafts,
