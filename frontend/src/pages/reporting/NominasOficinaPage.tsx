@@ -208,6 +208,61 @@ const extrasInitialFields = EXTRAS_SUMMARY_FIELDS.reduce((acc, field) => {
   return acc;
 }, {} as Record<ExtrasSummaryKey, string>);
 
+const PAYROLL_BASE_FIELDS: Array<keyof OfficePayrollRecord> = [
+  'id',
+  'userId',
+  'fullName',
+  'email',
+  'role',
+  'trainerFixedContract',
+  'year',
+  'month',
+  'startDate',
+  'convenio',
+  'categoria',
+  'antiguedad',
+  'horasSemana',
+  'baseRetencion',
+  'baseRetencionDetalle',
+  'salarioBruto',
+  'salarioBrutoTotal',
+  'retencion',
+  'aportacionSsIrpf',
+  'aportacionSsIrpfDetalle',
+  'salarioLimpio',
+  'contingenciasComunes',
+  'contingenciasComunesDetalle',
+  'totalEmpresa',
+  'defaultConvenio',
+  'defaultCategoria',
+  'defaultAntiguedad',
+  'defaultHorasSemana',
+  'defaultBaseRetencion',
+  'defaultBaseRetencionDetalle',
+  'defaultSalarioBruto',
+  'defaultSalarioBrutoTotal',
+  'defaultRetencion',
+  'defaultAportacionSsIrpf',
+  'defaultAportacionSsIrpfDetalle',
+  'defaultSalarioLimpio',
+  'defaultContingenciasComunes',
+  'defaultContingenciasComunesDetalle',
+  'defaultTotalEmpresa',
+];
+
+function preservePayrollBaseValues(
+  existing: OfficePayrollRecord,
+  updated: OfficePayrollRecord,
+): OfficePayrollRecord {
+  const merged = { ...existing, ...updated };
+  for (const field of PAYROLL_BASE_FIELDS) {
+    if (updated[field] === null || updated[field] === undefined) {
+      merged[field] = existing[field];
+    }
+  }
+  return merged;
+}
+
 function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
   const [fields, setFields] = useState<Record<ExtrasSummaryKey, string>>(extrasInitialFields);
 
@@ -310,7 +365,7 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
         totalExtras: editableTotalExtras,
       }),
     onSuccess: (saved) => {
-      onSaved(saved);
+      onSaved(entry ? preservePayrollBaseValues(entry, saved) : saved);
     },
   });
 
