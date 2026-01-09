@@ -236,6 +236,7 @@ model products {
   id_woo                 BigInt?    @unique
   id_holded              String?
   name                   String?
+  siglas                 String?
   code                   String?
   category               String?
   type                   String?
