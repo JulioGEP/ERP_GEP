@@ -173,8 +173,6 @@ type ExtrasModalProps = {
 };
 
 const EXTRAS_SUMMARY_FIELDS = [
-  { key: 'precioCosteFormacion', label: 'Coste formación', col: 6 },
-  { key: 'precioCostePreventivo', label: 'Coste preventivo', col: 6 },
   { key: 'dietas', label: 'Dietas', col: 6 },
   { key: 'kilometraje', label: 'Kilometraje', col: 6 },
   { key: 'pernocta', label: 'Pernocta', col: 6 },
