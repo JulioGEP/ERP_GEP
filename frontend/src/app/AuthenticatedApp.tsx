@@ -652,11 +652,11 @@ export default function AuthenticatedApp() {
       paths.add(legacy);
     }
     paths.add('/perfil');
-    if (hasPermission('/perfil/control_horas')) {
+    if (hasPermission('/perfil/control_horas') && !isFixedTrainer) {
       paths.add('/perfil/control_horas');
     }
     return paths;
-  }, [hasPermission, navigationCatalog, permissions]);
+  }, [hasPermission, isFixedTrainer, navigationCatalog, permissions]);
 
   const fallbackPath = useMemo(() => {
     const firstAllowed = allowedPaths.values().next().value as string | undefined;
@@ -1714,7 +1714,7 @@ export default function AuthenticatedApp() {
                     id="nav-user"
                     className="w-100 w-xl-auto"
                   >
-                    {isFormador && hasPermission('/perfil/control_horas') ? (
+                    {isFormador && hasPermission('/perfil/control_horas') && !isFixedTrainer ? (
                       <NavDropdown.Item as={NavLink} to="/perfil/control_horas">
                         Control de horas
                       </NavDropdown.Item>

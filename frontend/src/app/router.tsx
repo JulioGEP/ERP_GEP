@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
 import type { AllBudgetsPageProps } from '../pages/presupuestos/AllBudgetsPage';
 import type { UnworkedBudgetsPageProps } from '../pages/presupuestos/UnworkedBudgetsPage';
@@ -27,6 +28,7 @@ import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/Formac
 import type { ConfirmacionesPageProps } from '../pages/recursos/ConfirmacionesPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext';
+import { fetchTrainers } from '../features/recursos/api';
 
 const DashboardPage = lazy(() => import('../pages/dashboard/DashboardPage'));
 const BudgetsPage = lazy(() => import('../pages/presupuestos/BudgetsPage'));
@@ -655,7 +657,7 @@ export function AppRouter({
             <GuardedRoute
               path="/perfil/control_horas"
               roles={['Formador']}
-              element={<ControlHorasPage />}
+              element={<ControlHorasGuard />}
             />
           }
         />
@@ -697,6 +699,35 @@ function GuardedRoute({ path, element, roles }: GuardedRouteProps) {
   }
 
   return element;
+}
+
+function ControlHorasGuard() {
+  const { user } = useAuth();
+  const trainerId = user?.trainerId ?? null;
+  const isFormador = user?.role?.trim().toLowerCase() === 'formador';
+
+  const trainerDetailsQuery = useQuery({
+    queryKey: ['trainer-details', 'control-horas', trainerId],
+    queryFn: async () => {
+      if (!trainerId) return null;
+      const trainers = await fetchTrainers();
+      return trainers.find((trainer) => trainer.trainer_id === trainerId) ?? null;
+    },
+    enabled: isFormador && Boolean(trainerId),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const isFixedTrainer = trainerDetailsQuery.data?.contrato_fijo === true;
+
+  if (trainerDetailsQuery.isLoading) {
+    return <div className="text-muted">Cargando información del formador…</div>;
+  }
+
+  if (isFixedTrainer) {
+    return <ForbiddenPage />;
+  }
+
+  return <ControlHorasPage />;
 }
 
 function HomeRedirect({ defaultRedirectPath, knownPaths, activePathStorageKey }: HomeRedirectProps) {
