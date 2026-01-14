@@ -13,6 +13,7 @@ import { VariantModal } from '../features/formacion_abierta/ProductVariantsList'
 import type { ActiveVariant, ProductInfo, VariantInfo } from '../features/formacion_abierta/types';
 import { ApiError } from '../api/client';
 import { fetchMaterialOrders } from '../features/materials/orders.api';
+import { fetchTrainers } from '../features/recursos/api';
 import {
   deleteDeal,
   fetchDealDetail,
@@ -561,11 +562,25 @@ export default function AuthenticatedApp() {
   }, [user, navigate]);
 
   const normalizedRole = (user?.role ?? '').trim().toLowerCase();
+  const trainerId = user?.trainerId ?? null;
+
+  const trainerDetailsQuery = useQuery({
+    queryKey: ['trainer-details-navigation', trainerId],
+    queryFn: async () => {
+      if (!trainerId) return null;
+      const trainers = await fetchTrainers();
+      return trainers.find((trainer) => trainer.trainer_id === trainerId) ?? null;
+    },
+    enabled: normalizedRole === 'formador' && Boolean(trainerId),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const isFixedTrainer = trainerDetailsQuery.data?.contrato_fijo === true;
 
   const navigationCatalog = useMemo(() => {
     const items: NavItem[] = [...BASE_NAVIGATION_ITEMS];
     if (normalizedRole === 'formador') {
-      items.unshift(
+      const trainerItems: NavItem[] = [
         { key: 'Trainer/Dashboard', label: 'Mi panel', path: '/usuarios/trainer/dashboard' },
         { key: 'Trainer/PendingSessions', label: 'Pendientes', path: '/usuarios/trainer/pendientes' },
         { key: 'Trainer/Sessions', label: 'Mis sesiones', path: '/usuarios/trainer/sesiones' },
@@ -574,11 +589,20 @@ export default function AuthenticatedApp() {
           label: 'Informes',
           path: '/usuarios/trainer/informes/informes',
         },
-        { key: 'Trainer/Availability', label: 'Mi disponibilidad', path: '/usuarios/trainer/disponibilidad' },
-      );
+      ];
+
+      if (!isFixedTrainer) {
+        trainerItems.push({
+          key: 'Trainer/Availability',
+          label: 'Mi disponibilidad',
+          path: '/usuarios/trainer/disponibilidad',
+        });
+      }
+
+      items.unshift(...trainerItems);
     }
     return items;
-  }, [normalizedRole]);
+  }, [isFixedTrainer, normalizedRole]);
 
   // Calcula path por defecto según permisos visibles en el menú
   const computeDefaultPath = useCallback((): string => {
