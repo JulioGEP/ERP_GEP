@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   Badge,
+  Button,
   ButtonGroup,
   Card,
   Col,
@@ -8,6 +9,11 @@ import {
   Row,
   ToggleButton,
 } from 'react-bootstrap';
+import {
+  fetchLeadsReportingOptions,
+  type LeadsChannelOption,
+  type LeadsPipelineOption,
+} from '../../features/reporting/api';
 
 const QUICK_RANGE_OPTIONS = [
   { label: 'Este mes', value: 'current-month' },
@@ -21,8 +27,8 @@ const GROUPING_OPTIONS = [
   { label: 'Semanal', value: 'weekly' },
 ] as const;
 
-const CHANNEL_OPTIONS = ['Web', 'Referidos', 'Paid Media', 'Eventos', 'Partners', 'Outbound'] as const;
-const BUSINESS_LINES = ['Formación', 'Servicios', 'Consultoría', 'Digital'] as const;
+const FALLBACK_CHANNEL_OPTIONS = ['Web', 'Referidos', 'Paid Media', 'Eventos', 'Partners', 'Outbound'] as const;
+const FALLBACK_BUSINESS_LINES = ['Formación', 'Servicios', 'Consultoría', 'Digital'] as const;
 
 const FUNNEL_STEPS = [
   {
@@ -88,6 +94,44 @@ export default function LeadsDashboardPage() {
   const [grouping, setGrouping] = useState(GROUPING_OPTIONS[0].value);
   const [channel, setChannel] = useState('');
   const [businessLine, setBusinessLine] = useState('');
+  const [pipelines, setPipelines] = useState<LeadsPipelineOption[]>([]);
+  const [channels, setChannels] = useState<LeadsChannelOption[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+
+  const channelRows = useMemo(() => {
+    if (channels.length > 0) {
+      return channels.map((option) => ({
+        channel: option.label,
+        leads: '—',
+        winRate: '—',
+        avgDeal: '—',
+      }));
+    }
+    return CHANNEL_QUALITY;
+  }, [channels]);
+
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    setRefreshError(null);
+    try {
+      const data = await fetchLeadsReportingOptions();
+      setPipelines(data.pipelines);
+      setChannels(data.channels);
+      if (businessLine && !data.pipelines.some((option) => option.id === businessLine)) {
+        setBusinessLine('');
+      }
+      if (channel && !data.channels.some((option) => option.id === channel)) {
+        setChannel('');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo actualizar la información de Pipedrive.';
+      setRefreshError(message);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   return (
     <div className="px-2 px-lg-3 py-3">
@@ -153,23 +197,44 @@ export default function LeadsDashboardPage() {
               <Form.Label>Canal</Form.Label>
               <Form.Select value={channel} onChange={(event) => setChannel(event.target.value)}>
                 <option value="">Todos</option>
-                {CHANNEL_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
+                {channels.length > 0
+                  ? channels.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))
+                  : FALLBACK_CHANNEL_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
               </Form.Select>
             </Col>
             <Col xs={12} lg={2}>
               <Form.Label>Línea de negocio</Form.Label>
               <Form.Select value={businessLine} onChange={(event) => setBusinessLine(event.target.value)}>
                 <option value="">Todas</option>
-                {BUSINESS_LINES.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
+                {pipelines.length > 0
+                  ? pipelines.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.name}
+                      </option>
+                    ))
+                  : FALLBACK_BUSINESS_LINES.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
               </Form.Select>
+            </Col>
+            <Col xs={12} lg="auto" className="d-flex flex-column">
+              <Form.Label>&nbsp;</Form.Label>
+              <Button variant="outline-primary" onClick={handleRefresh} disabled={isRefreshing}>
+                {isRefreshing ? 'Actualizando…' : 'Actualizar'}
+              </Button>
+              {refreshError ? (
+                <small className="text-danger mt-2">{refreshError}</small>
+              ) : null}
             </Col>
           </Row>
         </Card.Body>
@@ -275,7 +340,7 @@ export default function LeadsDashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {CHANNEL_QUALITY.map((row) => (
+                    {channelRows.map((row) => (
                       <tr key={row.channel}>
                         <td>{row.channel}</td>
                         <td>{row.leads}</td>

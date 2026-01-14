@@ -159,6 +159,13 @@ export async function getDealFields() {
   return setC(key, await pd(`/dealFields`));
 }
 
+export async function getOrganizationFields() {
+  const key = "organizationFields";
+  const c = getC(key);
+  if (c) return c;
+  return setC(key, await pd(`/organizationFields`));
+}
+
 export async function getProductFields() {
   const key = "productFields";
   const c = getC(key);
