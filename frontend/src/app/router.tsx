@@ -97,6 +97,7 @@ const ControlHorarioPage = lazy(() => import('../pages/reporting/ControlHorarioP
 const CostesExtraPage = lazy(() => import('../pages/reporting/CostesExtraPage'));
 const LogsPage = lazy(() => import('../pages/reporting/LogsPage'));
 const ComparativaDashboardPage = lazy(() => import('../pages/reporting/ComparativaDashboardPage'));
+const LeadsDashboardPage = lazy(() => import('../pages/reporting/LeadsDashboardPage'));
 const WebhooksPipedrivePage = lazy(() => import('../pages/reporting/WebhooksPipedrivePage'));
 const NominasFijosPage = lazy(() => import('../pages/reporting/NominasFijosPage'));
 const NominasFijosDiscontinuosPage = lazy(
@@ -598,6 +599,17 @@ export function AppRouter({
               path="/reporting/comparativa"
               roles={['Admin']}
               element={<ComparativaDashboardPage />}
+            />
+          }
+        />
+
+        <Route
+          path="/reporting/leads"
+          element={
+            <GuardedRoute
+              path="/reporting/leads"
+              roles={['Admin']}
+              element={<LeadsDashboardPage />}
             />
           }
         />
