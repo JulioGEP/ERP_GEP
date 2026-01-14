@@ -120,6 +120,13 @@ export const handler = createHttpHandler(async (request) => {
   }
 
   const logs = (await prisma.trainer_session_time_logs.findMany({
+    where: {
+      trainer: {
+        is: {
+          contrato_fijo: false,
+        },
+      },
+    },
     orderBy: { check_in_utc: 'desc' },
     include: {
       trainer: {
