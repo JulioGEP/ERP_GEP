@@ -67,7 +67,6 @@ import type { DealDocument, DealNote } from '../../../types/deal';
 import type { SessionDocumentsPayload } from '../../../api/sessions.types';
 
 const TRAINER_EXPENSE_FOLDER_NAME = 'Gastos Formador';
-const SHOW_TIME_LOG_SECTION = false;
 
 function formatDateLabel(date: string): string {
   const parts = date.split('-').map((value) => Number.parseInt(value, 10));
@@ -162,10 +161,10 @@ function InfoField({ label, children, className }: InfoFieldProps) {
 
 type SessionDetailCardProps = {
   session: TrainerSessionDetail;
-  isFixedTrainer?: boolean;
+  showTimeLogSection?: boolean;
 };
 
-export function SessionDetailCard({ session, isFixedTrainer }: SessionDetailCardProps) {
+export function SessionDetailCard({ session, showTimeLogSection }: SessionDetailCardProps) {
   const queryClient = useQueryClient();
   const { userId, userName } = useCurrentUserIdentity();
   const mapsUrl = session.address
@@ -234,6 +233,7 @@ export function SessionDetailCard({ session, isFixedTrainer }: SessionDetailCard
   const timeLogQuery = useQuery<TrainerSessionTimeLog | null>({
     queryKey: ['trainer', 'session', session.sessionId, 'time-log'],
     queryFn: () => fetchTrainerSessionTimeLog({ sessionId: session.sessionId }),
+    enabled: showTimeLogSection,
   });
 
   const commentsQuery = useQuery({
@@ -1566,7 +1566,7 @@ export function SessionDetailCard({ session, isFixedTrainer }: SessionDetailCard
                       </div>
                     ) : null}
                   </Form.Group>
-                  {SHOW_TIME_LOG_SECTION ? (
+                  {showTimeLogSection ? (
                     <div className="trainer-session-section mt-2">
                       <h5 className="fw-semibold mb-2">Fichar sesión</h5>
                       {timeLogLoadErrorMessage ? (
@@ -2038,6 +2038,7 @@ function VariantDealAccordionItem({ variantId, deal, eventKey }: VariantDealAcco
 
 type VariantDetailCardProps = {
   variant: TrainerVariantDetail;
+  showTimeLogSection?: boolean;
 };
 
 type VariantStudentsQueryData = {
@@ -2045,7 +2046,7 @@ type VariantStudentsQueryData = {
   byDeal: Record<string, SessionStudent[]>;
 };
 
-function VariantDetailCard({ variant }: VariantDetailCardProps) {
+function VariantDetailCard({ variant, showTimeLogSection }: VariantDetailCardProps) {
   const queryClient = useQueryClient();
   const { userId, userName } = useCurrentUserIdentity();
   const formattedDate = useMemo(() => formatDateTime(variant.date), [variant.date]);
@@ -2097,6 +2098,7 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
   const timeLogQuery = useQuery<TrainerSessionTimeLog | null>({
     queryKey: ['trainer', 'variant', variant.variantId, 'time-log'],
     queryFn: () => fetchTrainerSessionTimeLog({ variantId: variant.variantId }),
+    enabled: showTimeLogSection,
   });
 
   const [timeLogEntryValue, setTimeLogEntryValue] = useState('');
@@ -3096,7 +3098,7 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
               </div>
             ) : null}
 
-            {SHOW_TIME_LOG_SECTION ? (
+            {showTimeLogSection ? (
               <div>
                 <h5 className="fw-semibold mb-2">Fichar sesión</h5>
                 {timeLogLoadErrorMessage ? (
@@ -3209,6 +3211,7 @@ export default function TrainerSessionsPage() {
   });
 
   const isFixedTrainer = trainerDetailsQuery.data?.contrato_fijo === true;
+  const showTimeLogSection = trainerDetailsQuery.data?.contrato_fijo === false;
 
   const sessionsQuery = useQuery({
     queryKey: ['trainer', 'sessions'],
@@ -3424,11 +3427,15 @@ export default function TrainerSessionsPage() {
         <SessionDetailCard
           key={session.sessionId}
           session={session}
-          isFixedTrainer={isFixedTrainer}
+          showTimeLogSection={showTimeLogSection}
         />
       ))}
       {variants.map((variant) => (
-        <VariantDetailCard key={variant.variantId} variant={variant} />
+        <VariantDetailCard
+          key={variant.variantId}
+          variant={variant}
+          showTimeLogSection={showTimeLogSection}
+        />
       ))}
     </Stack>
   );
