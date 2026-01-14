@@ -46,15 +46,17 @@ const SESSION_FORMACION_ABIERTA_URL = `${TRAINERLESS_BUDGETS_PATH}?budgets-table
 )}`;
 
 const BUDGETS_PENDING_CAES_URL =
-  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__caes_label=Si&budgets-table__filter__caes_val=no`;
+  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__caes=Si&budgets-table__filter__caes_val=No`;
 const BUDGETS_PENDING_FUNDAE_URL =
-  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__fundae_label=si&budgets-table__filter__fundae_val=no`;
+  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__fundae=SI&budgets-table__filter__fundae_val=No`;
 const BUDGETS_PENDING_HOTEL_URL =
-  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__hotel_label=Si&budgets-table__filter__hotel_val=no`;
+  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__hotel=${encodeBudgetsQueryValue(
+    'Sí',
+  )}&budgets-table__filter__hotel_val=No`;
 const BUDGETS_PENDING_PO_URL =
   `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__po=Si&budgets-table__filter__po_val=No`;
 const BUDGETS_PENDING_TRANSPORT_URL =
-  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__transporte=Si&budgets-table__filter__transporte_val=no`;
+  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__transporte=Si&budgets-table__filter__transporte_val=No`;
 
 type MetricCardProps = {
   title: string;
@@ -781,4 +783,3 @@ export default function DashboardPage() {
     </Stack>
   );
 }
-
