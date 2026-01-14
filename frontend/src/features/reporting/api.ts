@@ -294,6 +294,25 @@ export async function fetchPipedriveWebhookEvents(
     .filter((record): record is PipedriveWebhookEvent => record !== null);
 }
 
+export type LeadsPipelineOption = {
+  id: string;
+  name: string;
+};
+
+export type LeadsChannelOption = {
+  id: string;
+  label: string;
+};
+
+export type LeadsReportingOptions = {
+  pipelines: LeadsPipelineOption[];
+  channels: LeadsChannelOption[];
+};
+
+export async function fetchLeadsReportingOptions(): Promise<LeadsReportingOptions> {
+  return getJson<LeadsReportingOptions>('/reporting-leads');
+}
+
 const EXTRA_COST_FIELD_KEYS = [
   'precioCosteFormacion',
   'precioCostePreventivo',
