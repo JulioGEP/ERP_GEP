@@ -194,31 +194,31 @@ export const handler = createHttpHandler(async (request) => {
       prisma.deals.count({
         where: {
           ...buildYesLabelFilter('caes_label'),
-          caes_val: false,
+          caes_val: { not: true },
         },
       }),
       prisma.deals.count({
         where: {
           ...buildYesLabelFilter('fundae_label'),
-          fundae_val: false,
+          fundae_val: { not: true },
         },
       }),
       prisma.deals.count({
         where: {
           ...buildYesLabelFilter('hotel_label'),
-          hotel_val: false,
+          hotel_val: { not: true },
         },
       }),
       prisma.deals.count({
         where: {
           ...buildYesLabelFilter('po'),
-          po_val: false,
+          po_val: { not: true },
         },
       }),
       prisma.deals.count({
         where: {
           ...buildYesLabelFilter('transporte'),
-          transporte_val: false,
+          transporte_val: { not: true },
         },
       }),
       prisma.sesiones.findMany({
@@ -591,4 +591,3 @@ export const handler = createHttpHandler(async (request) => {
     return errorResponse('DASHBOARD_ERROR', 'No se pudieron cargar las métricas del dashboard', 500);
   }
 });
-
