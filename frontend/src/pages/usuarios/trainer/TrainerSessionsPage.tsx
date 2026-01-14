@@ -162,9 +162,14 @@ function InfoField({ label, children, className }: InfoFieldProps) {
 type SessionDetailCardProps = {
   session: TrainerSessionDetail;
   showTimeLogSection?: boolean;
+  isFixedTrainer?: boolean;
 };
 
-export function SessionDetailCard({ session, showTimeLogSection }: SessionDetailCardProps) {
+export function SessionDetailCard({
+  session,
+  showTimeLogSection,
+  isFixedTrainer = false,
+}: SessionDetailCardProps) {
   const queryClient = useQueryClient();
   const { userId, userName } = useCurrentUserIdentity();
   const mapsUrl = session.address
@@ -3428,6 +3433,7 @@ export default function TrainerSessionsPage() {
           key={session.sessionId}
           session={session}
           showTimeLogSection={showTimeLogSection}
+          isFixedTrainer={isFixedTrainer}
         />
       ))}
       {variants.map((variant) => (
