@@ -81,6 +81,5 @@ export const DEFAULT_ROUTE_ORDER = [
   '/perfil/control_horas',
   '/reporting/webhooks_pipedrive',
   '/reporting/comparativa',
-  '/reporting/leads',
   '/usuarios',
 ] as const;
