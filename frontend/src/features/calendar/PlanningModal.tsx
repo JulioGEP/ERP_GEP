@@ -157,18 +157,10 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
   }, [trainersQuery.data]);
 
   const availableTrainerSet = useMemo(() => {
-    if (!availabilityQuery.isSuccess) return null;
-    const available = availabilityQuery.data?.availableTrainers ?? [];
-    if (!available.length) return null;
+    const available = availabilityQuery.data?.availableTrainers;
+    if (!available || !available.length) return null;
     return new Set(available);
-  }, [availabilityQuery.data?.availableTrainers, availabilityQuery.isSuccess]);
-
-  const blockedTrainerSet = useMemo(() => {
-    if (!availabilityQuery.isSuccess) return null;
-    const blocked = availabilityQuery.data?.trainers ?? [];
-    if (!blocked.length) return null;
-    return new Set(blocked);
-  }, [availabilityQuery.data?.trainers, availabilityQuery.isSuccess]);
+  }, [availabilityQuery.data]);
 
   const trainerNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -366,9 +358,7 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
                 const isSelected = selectedTrainerIds.includes(trainer.trainer_id);
                 const isUnavailable = availableTrainerSet
                   ? !availableTrainerSet.has(trainer.trainer_id)
-                  : blockedTrainerSet
-                    ? blockedTrainerSet.has(trainer.trainer_id)
-                    : false;
+                  : false;
                 return (
                   <Form.Check
                     key={trainer.trainer_id}
@@ -382,7 +372,7 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
                         </span>
                         {isBombero ? <Badge bg="dark">Bombero</Badge> : null}
                         {isUnavailable ? (
-                          <span className="erp-planning-resource-unavailable">No disponible</span>
+                          <span className="erp-planning-resource-unavailable">No - Disponible</span>
                         ) : null}
                       </span>
                     }
