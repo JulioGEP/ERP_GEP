@@ -29,6 +29,9 @@
     "node_modules/.prisma/client/libquery_engine-rhel-openssl-3.0.x.so.node"
   ]
 
+[functions."slack-daily-availability"]
+  schedule = "0 * * * *"
+
 # --------- Redirects ---------
 
 # Health
