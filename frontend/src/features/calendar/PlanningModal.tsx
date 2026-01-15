@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
+import { Alert, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CalendarSession } from './api';
 import { fetchCalendarSessions } from './api';
@@ -367,7 +367,6 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
             ) : filteredTrainers.length ? (
               filteredTrainers.map((trainer) => {
                 const label = formatTrainerName(trainer);
-                const isBombero = Boolean(trainer.certificado_bombero_caducidad);
                 const isSelected = selectedTrainerIds.includes(trainer.trainer_id);
                 const isUnavailable = unavailableTrainerSet.has(trainer.trainer_id);
                 return (
@@ -381,7 +380,6 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
                         <span className={isUnavailable ? 'erp-planning-resource-name--unavailable' : undefined}>
                           {label || 'Sin nombre'}
                         </span>
-                        {isBombero ? <Badge bg="dark">Bombero</Badge> : null}
                         {isUnavailable ? (
                           <span className="erp-planning-resource-unavailable">No disponible</span>
                         ) : null}
