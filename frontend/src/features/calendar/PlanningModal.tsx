@@ -156,11 +156,26 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
     return trainers.filter((trainer) => trainer.activo);
   }, [trainersQuery.data]);
 
+  const displayedTrainers = useMemo(() => activeTrainers, [activeTrainers]);
+
   const availableTrainerSet = useMemo(() => {
     const available = availabilityQuery.data?.availableTrainers;
     if (!available || !available.length) return null;
     return new Set(available);
-  }, [availabilityQuery.data]);
+  }, [availabilityQuery.data?.availableTrainers]);
+
+  const unavailableTrainerSet = useMemo(() => {
+    const blocked = new Set<string>();
+    availabilityQuery.data?.trainers?.forEach((trainerId) => blocked.add(trainerId));
+    if (availableTrainerSet) {
+      displayedTrainers.forEach((trainer) => {
+        if (!availableTrainerSet.has(trainer.trainer_id)) {
+          blocked.add(trainer.trainer_id);
+        }
+      });
+    }
+    return blocked;
+  }, [availabilityQuery.data?.trainers, availableTrainerSet, displayedTrainers]);
 
   const trainerNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -174,8 +189,6 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
     });
     return map;
   }, [activeTrainers, session?.trainers]);
-
-  const displayedTrainers = useMemo(() => activeTrainers, [activeTrainers]);
 
   const filteredTrainers = useMemo(() => {
     const search = searchValue.trim().toLowerCase();
@@ -356,9 +369,7 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
                 const label = formatTrainerName(trainer);
                 const isBombero = Boolean(trainer.certificado_bombero_caducidad);
                 const isSelected = selectedTrainerIds.includes(trainer.trainer_id);
-                const isUnavailable = availableTrainerSet
-                  ? !availableTrainerSet.has(trainer.trainer_id)
-                  : false;
+                const isUnavailable = unavailableTrainerSet.has(trainer.trainer_id);
                 return (
                   <Form.Check
                     key={trainer.trainer_id}
@@ -372,7 +383,7 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
                         </span>
                         {isBombero ? <Badge bg="dark">Bombero</Badge> : null}
                         {isUnavailable ? (
-                          <span className="erp-planning-resource-unavailable">No - Disponible</span>
+                          <span className="erp-planning-resource-unavailable">No disponible</span>
                         ) : null}
                       </span>
                     }
