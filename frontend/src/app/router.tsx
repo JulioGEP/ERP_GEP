@@ -15,6 +15,7 @@ import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovilPage';
 import type { PorFormadorPageProps } from '../pages/calendario/PorFormadorPage';
 import type { PorEmpresaPageProps } from '../pages/calendario/PorEmpresaPage';
+import type { PlanificacionPageProps } from '../pages/calendario/PlanificacionPage';
 import type { FormadoresBomberosPageProps } from '../pages/recursos/FormadoresBomberosPage';
 import type { UnidadesMovilesPageProps } from '../pages/recursos/UnidadesMovilesPage';
 import type { SalasPageProps } from '../pages/recursos/SalasPage';
@@ -44,6 +45,7 @@ const MaterialsOrdersPage = lazy(() => import('../pages/materiales/MaterialsOrde
 const PorSesionesPage = lazy(() => import('../pages/calendario/PorSesionesPage'));
 const PorUnidadMovilPage = lazy(() => import('../pages/calendario/PorUnidadMovilPage'));
 const PorFormadorPage = lazy(() => import('../pages/calendario/PorFormadorPage'));
+const PlanificacionPage = lazy(() => import('../pages/calendario/PlanificacionPage'));
 const PorEmpresaPage = lazy(() => import('../pages/calendario/PorEmpresaPage'));
 const DisponibilidadPage = lazy(() => import('../pages/calendario/DisponibilidadPage'));
 const FormadoresBomberosPage = lazy(() => import('../pages/recursos/FormadoresBomberosPage'));
@@ -117,6 +119,7 @@ type AppRouterProps = {
   porSesionesPageProps: PorSesionesPageProps;
   porUnidadMovilPageProps: PorUnidadMovilPageProps;
   porFormadorPageProps: PorFormadorPageProps;
+  planificacionPageProps: PlanificacionPageProps;
   porEmpresaPageProps: PorEmpresaPageProps;
   formadoresBomberosPageProps: FormadoresBomberosPageProps;
   unidadesMovilesPageProps: UnidadesMovilesPageProps;
@@ -147,6 +150,7 @@ export function AppRouter({
   porSesionesPageProps,
   porUnidadMovilPageProps,
   porFormadorPageProps,
+  planificacionPageProps,
   porEmpresaPageProps,
   formadoresBomberosPageProps,
   unidadesMovilesPageProps,
@@ -302,6 +306,21 @@ export function AppRouter({
                 <PorFormadorPage
                   {...(porFormadorPageProps as PorFormadorPageProps & Record<string, unknown>)}
                   key="calendar-formadores"
+                />
+              }
+            />
+          }
+        />
+
+        <Route
+          path="/calendario/planificacion"
+          element={
+            <GuardedRoute
+              path="/calendario/planificacion"
+              element={
+                <PlanificacionPage
+                  {...(planificacionPageProps as PlanificacionPageProps & Record<string, unknown>)}
+                  key="calendar-planificacion"
                 />
               }
             />

@@ -760,6 +760,36 @@ option.session-option-unavailable {
   --erp-calendar-event-bg: #edf3ff;
 }
 
+.erp-planning-resource-list {
+  border: 1px solid rgba(86, 86, 86, 0.16);
+  border-radius: 12px;
+  padding: 0.75rem;
+  max-height: 260px;
+  overflow-y: auto;
+  display: grid;
+  gap: 0.5rem;
+  background-color: #fdfdfd;
+}
+
+.erp-planning-resource-item {
+  margin-bottom: 0;
+}
+
+.erp-planning-hours--ok {
+  color: #198754;
+  font-weight: 600;
+}
+
+.erp-planning-hours--warn {
+  color: #f59f00;
+  font-weight: 600;
+}
+
+.erp-planning-hours--alert {
+  color: #dc3545;
+  font-weight: 600;
+}
+
 .erp-calendar-event.erp-calendar-event-variant {
   --erp-calendar-accent: #6f42c1;
   --erp-calendar-status-bg: rgba(111, 66, 193, 0.16);
