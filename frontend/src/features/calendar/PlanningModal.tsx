@@ -82,6 +82,8 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
   const queryClient = useQueryClient();
   const [searchValue, setSearchValue] = useState('');
   const [selectedTrainerIds, setSelectedTrainerIds] = useState<string[]>([]);
+  const [sortKey, setSortKey] = useState<keyof TrainerSummary>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
     if (!session) return;
@@ -173,22 +175,16 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
     return map;
   }, [activeTrainers, session?.trainers]);
 
-  const trainersWithAvailability = useMemo(() => {
-    if (!availableTrainerSet) return activeTrainers;
-    const selected = new Set(selectedTrainerIds);
-    return activeTrainers.filter(
-      (trainer) => availableTrainerSet.has(trainer.trainer_id) || selected.has(trainer.trainer_id),
-    );
-  }, [activeTrainers, availableTrainerSet, selectedTrainerIds]);
+  const displayedTrainers = useMemo(() => activeTrainers, [activeTrainers]);
 
   const filteredTrainers = useMemo(() => {
     const search = searchValue.trim().toLowerCase();
-    if (!search) return trainersWithAvailability;
-    return trainersWithAvailability.filter((trainer) => {
+    if (!search) return displayedTrainers;
+    return displayedTrainers.filter((trainer) => {
       const label = `${trainer.name} ${trainer.apellido ?? ''}`.toLowerCase();
       return label.includes(search);
     });
-  }, [searchValue, trainersWithAvailability]);
+  }, [searchValue, displayedTrainers]);
 
   const trainerSummaries = useMemo<TrainerSummary[]>(() => {
     if (!monthRange) return [];
@@ -239,8 +235,8 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
       });
     });
 
-    const availableIds = new Set(trainersWithAvailability.map((trainer) => trainer.trainer_id));
-    trainersWithAvailability.forEach((trainer) => {
+    const availableIds = new Set(displayedTrainers.map((trainer) => trainer.trainer_id));
+    displayedTrainers.forEach((trainer) => {
       if (!summaries.has(trainer.trainer_id)) {
         summaries.set(trainer.trainer_id, {
           trainerId: trainer.trainer_id,
@@ -256,7 +252,21 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
     return Array.from(summaries.values())
       .filter((summary) => availableIds.has(summary.trainerId))
       .sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
-  }, [monthRange, monthSessionsQuery.data?.sessions, trainerNameById, trainersWithAvailability]);
+  }, [monthRange, monthSessionsQuery.data?.sessions, trainerNameById, displayedTrainers]);
+
+  const sortedTrainerSummaries = useMemo(() => {
+    const sorted = [...trainerSummaries];
+    const direction = sortDirection === 'asc' ? 1 : -1;
+    sorted.sort((a, b) => {
+      const aValue = a[sortKey];
+      const bValue = b[sortKey];
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return (aValue - bValue) * direction;
+      }
+      return String(aValue).localeCompare(String(bValue), 'es', { sensitivity: 'base' }) * direction;
+    });
+    return sorted;
+  }, [trainerSummaries, sortDirection, sortKey]);
 
   const handleToggleTrainer = useCallback(
     (trainerId: string, checked: boolean) => {
@@ -271,6 +281,26 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
     },
     [selectedTrainerIds, session, updateMutation],
   );
+
+  const handleSort = useCallback((key: keyof TrainerSummary) => {
+    setSortKey((currentKey) => {
+      if (currentKey !== key) {
+        setSortDirection('asc');
+        return key;
+      }
+      setSortDirection((currentDirection) => (currentDirection === 'asc' ? 'desc' : 'asc'));
+      return currentKey;
+    });
+  }, []);
+
+  const renderSortIndicator = (key: keyof TrainerSummary) => {
+    if (sortKey !== key) return <span className="erp-planning-sort-indicator">↕</span>;
+    return (
+      <span className="erp-planning-sort-indicator">
+        {sortDirection === 'asc' ? '↑' : '↓'}
+      </span>
+    );
+  };
 
   if (!session) {
     return null;
@@ -326,6 +356,9 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
                 const label = formatTrainerName(trainer);
                 const isBombero = Boolean(trainer.certificado_bombero_caducidad);
                 const isSelected = selectedTrainerIds.includes(trainer.trainer_id);
+                const isUnavailable = availableTrainerSet
+                  ? !availableTrainerSet.has(trainer.trainer_id)
+                  : false;
                 return (
                   <Form.Check
                     key={trainer.trainer_id}
@@ -334,12 +367,17 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
                     className="erp-planning-resource-item"
                     label={
                       <span className="d-flex align-items-center gap-2">
-                        <span>{label || 'Sin nombre'}</span>
+                        <span className={isUnavailable ? 'erp-planning-resource-name--unavailable' : undefined}>
+                          {label || 'Sin nombre'}
+                        </span>
                         {isBombero ? <Badge bg="dark">Bombero</Badge> : null}
+                        {isUnavailable ? (
+                          <span className="erp-planning-resource-unavailable">No - Disponible</span>
+                        ) : null}
                       </span>
                     }
                     checked={isSelected}
-                    disabled={updateMutation.isPending}
+                    disabled={updateMutation.isPending || (isUnavailable && !isSelected)}
                     onChange={(event) =>
                       handleToggleTrainer(trainer.trainer_id, event.target.checked)
                     }
@@ -361,11 +399,46 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
             <Table bordered hover size="sm" className="mb-0 align-middle">
               <thead className="table-light">
                 <tr>
-                  <th>Formador</th>
-                  <th className="text-center">Días totales</th>
-                  <th className="text-center">Días L-V</th>
-                  <th className="text-center">Días S-D</th>
-                  <th className="text-center">Horas totales</th>
+                  <th
+                    className="erp-planning-sortable-header"
+                    onClick={() => handleSort('name')}
+                  >
+                    <span className="erp-planning-sort-label">
+                      Formador {renderSortIndicator('name')}
+                    </span>
+                  </th>
+                  <th
+                    className="text-center erp-planning-sortable-header"
+                    onClick={() => handleSort('totalDays')}
+                  >
+                    <span className="erp-planning-sort-label">
+                      Días totales {renderSortIndicator('totalDays')}
+                    </span>
+                  </th>
+                  <th
+                    className="text-center erp-planning-sortable-header"
+                    onClick={() => handleSort('weekdayDays')}
+                  >
+                    <span className="erp-planning-sort-label">
+                      Días L-V {renderSortIndicator('weekdayDays')}
+                    </span>
+                  </th>
+                  <th
+                    className="text-center erp-planning-sortable-header"
+                    onClick={() => handleSort('weekendDays')}
+                  >
+                    <span className="erp-planning-sort-label">
+                      Días S-D {renderSortIndicator('weekendDays')}
+                    </span>
+                  </th>
+                  <th
+                    className="text-center erp-planning-sortable-header"
+                    onClick={() => handleSort('totalHours')}
+                  >
+                    <span className="erp-planning-sort-label">
+                      Horas totales {renderSortIndicator('totalHours')}
+                    </span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -376,8 +449,8 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
                       Cargando resumen...
                     </td>
                   </tr>
-                ) : trainerSummaries.length ? (
-                  trainerSummaries.map((summary) => (
+                ) : sortedTrainerSummaries.length ? (
+                  sortedTrainerSummaries.map((summary) => (
                     <tr key={summary.trainerId}>
                       <td>{summary.name}</td>
                       <td className="text-center">{summary.totalDays}</td>

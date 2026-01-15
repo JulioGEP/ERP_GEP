@@ -775,6 +775,33 @@ option.session-option-unavailable {
   margin-bottom: 0;
 }
 
+.erp-planning-resource-name--unavailable {
+  color: #dc3545;
+  font-weight: 600;
+}
+
+.erp-planning-resource-unavailable {
+  color: #dc3545;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.erp-planning-sortable-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.erp-planning-sort-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.erp-planning-sort-indicator {
+  font-size: 0.85rem;
+  color: #6c757d;
+}
+
 .erp-planning-hours--ok {
   color: #198754;
   font-weight: 600;
