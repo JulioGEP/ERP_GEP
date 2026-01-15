@@ -157,10 +157,10 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
   }, [trainersQuery.data]);
 
   const availableTrainerSet = useMemo(() => {
-    const available = availabilityQuery.data?.availableTrainers;
-    if (!available || !available.length) return null;
+    if (!availabilityQuery.isSuccess) return null;
+    const available = availabilityQuery.data?.availableTrainers ?? [];
     return new Set(available);
-  }, [availabilityQuery.data]);
+  }, [availabilityQuery.data?.availableTrainers, availabilityQuery.isSuccess]);
 
   const trainerNameById = useMemo(() => {
     const map = new Map<string, string>();
