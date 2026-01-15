@@ -177,14 +177,22 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
 
   const displayedTrainers = useMemo(() => activeTrainers, [activeTrainers]);
 
+  const trainersWithAvailability = useMemo(() => {
+    if (!availableTrainerSet) return displayedTrainers;
+    const selected = new Set(selectedTrainerIds);
+    return displayedTrainers.filter(
+      (trainer) => availableTrainerSet.has(trainer.trainer_id) || selected.has(trainer.trainer_id),
+    );
+  }, [availableTrainerSet, displayedTrainers, selectedTrainerIds]);
+
   const filteredTrainers = useMemo(() => {
     const search = searchValue.trim().toLowerCase();
-    if (!search) return displayedTrainers;
-    return displayedTrainers.filter((trainer) => {
+    if (!search) return trainersWithAvailability;
+    return trainersWithAvailability.filter((trainer) => {
       const label = `${trainer.name} ${trainer.apellido ?? ''}`.toLowerCase();
       return label.includes(search);
     });
-  }, [searchValue, displayedTrainers]);
+  }, [searchValue, trainersWithAvailability]);
 
   const trainerSummaries = useMemo<TrainerSummary[]>(() => {
     if (!monthRange) return [];
@@ -368,13 +376,13 @@ export function PlanningModal({ session, show, onClose, onNotify }: PlanningModa
                     label={
                       <span className="d-flex align-items-center gap-2">
                         <span className={isUnavailable ? 'erp-planning-resource-name--unavailable' : undefined}>
-                          {label || 'Sin nombre'}
-                        </span>
-                        {isBombero ? <Badge bg="dark">Bombero</Badge> : null}
-                        {isUnavailable ? (
-                          <span className="erp-planning-resource-unavailable">No - Disponible</span>
-                        ) : null}
+                        {label || 'Sin nombre'}
                       </span>
+                      {isBombero ? <Badge bg="dark">Bombero</Badge> : null}
+                      {isUnavailable ? (
+                          <span className="erp-planning-resource-unavailable">No disponible</span>
+                      ) : null}
+                    </span>
                     }
                     checked={isSelected}
                     disabled={updateMutation.isPending || (isUnavailable && !isSelected)}
