@@ -2583,13 +2583,7 @@ function SessionEditor({
     return new Set(ids);
   }, [availability?.availableTrainers]);
 
-  const trainersWithAvailability = useMemo(() => {
-    if (!availableTrainerSet) return trainers;
-    const selected = new Set(form.trainer_ids);
-    return trainers.filter(
-      (trainer) => availableTrainerSet.has(trainer.trainer_id) || selected.has(trainer.trainer_id),
-    );
-  }, [availableTrainerSet, form.trainer_ids, trainers]);
+  const trainersWithAvailability = useMemo(() => trainers, [trainers]);
 
   const scheduleBlockedTrainers = useMemo(() => {
     if (!availableTrainerSet) return new Set<string>();
