@@ -31,6 +31,7 @@ const SESSION_STATE_VALUES: SessionEstado[] = [
 ];
 const MANUAL_SESSION_STATES = new Set<SessionEstado>(['SUSPENDIDA', 'CANCELADA', 'FINALIZADA']);
 const BORRADOR_TRANSITION_STATES = new Set<SessionEstado>(['SUSPENDIDA', 'CANCELADA']);
+const NON_BLOCKING_SESSION_STATES: SessionEstado[] = ['SUSPENDIDA', 'CANCELADA', 'FINALIZADA'];
 
 type AutomaticSessionEstado = Extract<SessionEstado, 'BORRADOR' | 'PLANIFICADA'>;
 
@@ -829,7 +830,11 @@ async function ensureResourcesAvailable(
   if (!resourceConditions.length) return;
 
   const sessionsRaw = await tx.sesiones.findMany({
-    where: { ...(sessionId ? { id: { not: sessionId } } : {}), OR: resourceConditions },
+    where: {
+      ...(sessionId ? { id: { not: sessionId } } : {}),
+      estado: { notIn: NON_BLOCKING_SESSION_STATES },
+      OR: resourceConditions,
+    },
     select: {
       id: true,
       fecha_inicio_utc: true,
@@ -992,6 +997,7 @@ export const handler = async (event: any) => {
       const sessionsRaw = await prisma.sesiones.findMany({
         where: {
           ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}),
+          estado: { notIn: NON_BLOCKING_SESSION_STATES },
           OR: [{ sala_id: { not: null } }, { sesion_trainers: { some: {} } }, { sesion_unidades: { some: {} } }],
         },
         select: {
@@ -1029,6 +1035,7 @@ export const handler = async (event: any) => {
             where: {
               ...(excludeVariantId ? { id: { not: excludeVariantId } } : {}),
               date: { not: null },
+              finalizar: { not: 'Finalizada' },
               OR: [{ trainer_id: { not: null } }, { sala_id: { not: null } }, { unidad_movil_id: { not: null } }],
             },
             select: {

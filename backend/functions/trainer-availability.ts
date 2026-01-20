@@ -86,6 +86,7 @@ async function computeAssignedDates(
   const sessionRows = await client.sesiones.findMany({
     where: {
       sesion_trainers: { some: { trainer_id: trainerId } },
+      estado: { notIn: ['SUSPENDIDA', 'CANCELADA', 'FINALIZADA'] },
       OR: [
         { fecha_inicio_utc: { gte: startOfYearUtc, lt: startOfNextYearUtc } },
         { fecha_fin_utc: { gte: startOfYearUtc, lt: startOfNextYearUtc } },
@@ -105,6 +106,7 @@ async function computeAssignedDates(
     where: {
       trainer_id: trainerId,
       date: { gte: startOfYearUtc, lt: startOfNextYearUtc },
+      finalizar: { not: 'Finalizada' },
     },
     select: { id: true, date: true },
   });
@@ -141,6 +143,7 @@ async function computeAssignedDates(
       where: {
         id: { in: missingVariantIds },
         date: { gte: startOfYearUtc, lt: startOfNextYearUtc },
+        finalizar: { not: 'Finalizada' },
       },
       select: { id: true, date: true },
     });
