@@ -628,6 +628,12 @@ export type ComparativaSessionGroup = {
   sessions: ComparativaSessionDetail[];
 };
 
+export type ComparativaMobileUnitUsage = {
+  key: string;
+  label: string;
+  currentValue: number;
+};
+
 export type ComparativaDashboardResponse = {
   highlights: ComparativaKpi[];
   trends: ComparativaTrend[];
@@ -639,6 +645,7 @@ export type ComparativaDashboardResponse = {
   ranking: ComparativaRankingRow[];
   metricSessions: ComparativaMetricSessionGroup[];
   listingSessions: ComparativaSessionGroup[];
+  mobileUnitsUsage: ComparativaMobileUnitUsage[];
   filterOptions: {
     sites: string[];
     trainingTypes: string[];

@@ -874,6 +874,47 @@ export default function ComparativaDashboardPage() {
     );
   };
 
+  const renderMobileUnitsUsage = () => {
+    const items = dashboardQuery.data?.mobileUnitsUsage ?? [];
+
+    return (
+      <Card className="h-100 shadow-sm">
+        <Card.Body className="d-flex flex-column gap-3">
+          <div>
+            <Card.Title as="h6" className="mb-1">Uso de unidades móviles</Card.Title>
+            <div className="text-muted small">Sumatorio de sesiones por unidad móvil</div>
+          </div>
+
+          <div className="table-responsive">
+            <table className="table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th className="text-muted small">Unidad móvil</th>
+                  <th className="text-muted small text-end">Sesiones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.length === 0 && (
+                  <tr>
+                    <td colSpan={2} className="text-muted small py-3">
+                      Sin unidades móviles registradas en el rango
+                    </td>
+                  </tr>
+                )}
+                {items.map((item) => (
+                  <tr key={item.key} {...getRowActionProps(item.key)}>
+                    <td className="small">{item.label}</td>
+                    <td className="text-end fw-semibold">{numberFormatter.format(item.currentValue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card.Body>
+      </Card>
+    );
+  };
+
   const renderContent = () => {
     if (dashboardQuery.isLoading) {
       return (
@@ -954,6 +995,12 @@ export default function ComparativaDashboardPage() {
               {renderBreakdownCard(item)}
             </Col>
           ))}
+        </Row>
+
+        <Row className="g-3">
+          <Col xs={12}>
+            {renderMobileUnitsUsage()}
+          </Col>
         </Row>
 
         <Row className="g-3">

@@ -207,6 +207,14 @@ type SessionRow = {
       name: string | null;
     } | null;
   }>;
+  sesion_unidades: Array<{
+    unidad_movil_id: string;
+    unidades_moviles: {
+      unidad_id: string | null;
+      name: string | null;
+      matricula: string | null;
+    } | null;
+  }>;
 };
 
 type VariantRow = {
@@ -220,6 +228,12 @@ type VariantRow = {
   } | null;
   trainers: {
     name: string | null;
+  } | null;
+  unidad_movil_id: string | null;
+  unidades_moviles: {
+    unidad_id: string | null;
+    name: string | null;
+    matricula: string | null;
   } | null;
 };
 
@@ -281,7 +295,7 @@ type MetricSessionGroup = {
   sessions: MetricSessionDetail[];
 };
 
-function buildListingKey(section: 'breakdown' | 'ranking', category: string, label: string): string {
+function buildListingKey(section: 'breakdown' | 'ranking' | 'mobileUnits', category: string, label: string): string {
   return `${section}:${category}:${label}`;
 }
 
@@ -302,6 +316,19 @@ function buildTrainerList(names: Array<string | null | undefined>): string[] {
     .map((name) => name?.trim())
     .filter((name): name is string => Boolean(name));
   return normalized.length ? normalized : ['Sin formador'];
+}
+
+function buildUnitLabel(
+  unit: { unidad_id: string | null; name: string | null; matricula: string | null } | null,
+  fallbackId: string | null,
+): string {
+  const name = unit?.name?.trim();
+  const matricula = unit?.matricula?.trim();
+  if (name && matricula) return `${name} (${matricula})`;
+  if (name) return name;
+  if (matricula) return matricula;
+  const fallback = fallbackId?.trim();
+  return fallback || 'Sin unidad móvil';
 }
 
 function toDateList(
@@ -444,6 +471,18 @@ export const handler = createHttpHandler(async (request) => {
             trainers: { select: { name: true } },
           },
         },
+        sesion_unidades: {
+          select: {
+            unidad_movil_id: true,
+            unidades_moviles: {
+              select: {
+                unidad_id: true,
+                name: true,
+                matricula: true,
+              },
+            },
+          },
+        },
       },
     }) as Promise<SessionRow[]>,
     prisma.sesiones.findMany({
@@ -480,6 +519,18 @@ export const handler = createHttpHandler(async (request) => {
             trainers: { select: { name: true } },
           },
         },
+        sesion_unidades: {
+          select: {
+            unidad_movil_id: true,
+            unidades_moviles: {
+              select: {
+                unidad_id: true,
+                name: true,
+                matricula: true,
+              },
+            },
+          },
+        },
       },
     }) as Promise<SessionRow[]>,
     prisma.variants.findMany({
@@ -492,6 +543,14 @@ export const handler = createHttpHandler(async (request) => {
         name: true,
         date: true,
         sede: true,
+        unidad_movil_id: true,
+        unidades_moviles: {
+          select: {
+            unidad_id: true,
+            name: true,
+            matricula: true,
+          },
+        },
         products: { select: { name: true, code: true } },
         trainers: { select: { name: true } },
       },
@@ -506,6 +565,14 @@ export const handler = createHttpHandler(async (request) => {
         name: true,
         date: true,
         sede: true,
+        unidad_movil_id: true,
+        unidades_moviles: {
+          select: {
+            unidad_id: true,
+            name: true,
+            matricula: true,
+          },
+        },
         products: { select: { name: true, code: true } },
         trainers: { select: { name: true } },
       },
@@ -855,6 +922,46 @@ export const handler = createHttpHandler(async (request) => {
     return right.date.localeCompare(left.date);
   };
 
+  const mobileUnitSessionsMap = new Map<string, MetricSessionGroup>();
+
+  const addMobileUnitSession = (
+    unitId: string | null,
+    unitRecord: { unidad_id: string | null; name: string | null; matricula: string | null } | null,
+    sessionDetail: MetricSessionDetail,
+  ) => {
+    const resolvedId = unitRecord?.unidad_id ?? unitId;
+    if (!resolvedId) return;
+    const key = buildListingKey('mobileUnits', 'unidad_movil', resolvedId);
+    const label = buildUnitLabel(unitRecord, resolvedId);
+    const existing = mobileUnitSessionsMap.get(key);
+    if (existing) {
+      existing.sessions.push(sessionDetail);
+      return;
+    }
+    mobileUnitSessionsMap.set(key, {
+      key,
+      label,
+      sessions: [sessionDetail],
+    });
+  };
+
+  for (const session of currentSessions) {
+    if (!session.sesion_unidades.length) continue;
+    const sessionDetail = buildSessionDetailFromSession(session);
+    for (const link of session.sesion_unidades) {
+      addMobileUnitSession(link.unidad_movil_id, link.unidades_moviles, sessionDetail);
+    }
+  }
+
+  for (const variant of filteredCurrentVariants) {
+    if (!variant.unidad_movil_id && !variant.unidades_moviles?.unidad_id) continue;
+    addMobileUnitSession(
+      variant.unidad_movil_id,
+      variant.unidades_moviles,
+      buildSessionDetailFromVariant(variant),
+    );
+  }
+
   const metricSessions: MetricSessionGroup[] = [
     {
       key: 'gepServicesSessions',
@@ -1014,9 +1121,27 @@ export const handler = createHttpHandler(async (request) => {
     ...mergeCounts(gepServicesTypeCurrentCounts, gepServicesTypePreviousCounts, 'gepServicesType'),
   ];
 
+  const mobileUnitsUsage = Array.from(mobileUnitSessionsMap.values())
+    .map((item) => ({
+      key: item.key,
+      label: item.label,
+      currentValue: item.sessions.length,
+    }))
+    .sort((a, b) => b.currentValue - a.currentValue || a.label.localeCompare(b.label));
+
+  const mobileUnitSessionGroups = mobileUnitsUsage.map((item) => {
+    const group = mobileUnitSessionsMap.get(item.key);
+    return {
+      key: item.key,
+      label: item.label,
+      sessions: group ? group.sessions.sort(sortByDateDesc) : [],
+    };
+  });
+
   const listingSessions = [
     ...buildBreakdownSessionGroups(breakdowns),
     ...buildRankingSessionGroups(ranking),
+    ...mobileUnitSessionGroups,
   ];
 
   const [dealSites, variantSites, pipelineOptions, comercialOptions]: [
@@ -1089,6 +1214,7 @@ export const handler = createHttpHandler(async (request) => {
     ranking,
     metricSessions,
     listingSessions,
+    mobileUnitsUsage,
     filterOptions,
   });
 });
