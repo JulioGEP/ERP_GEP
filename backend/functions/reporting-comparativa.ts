@@ -275,6 +275,16 @@ type MetricSessionDetail = {
   trainers: string[];
 };
 
+type MetricSessionGroup = {
+  key: string;
+  label: string;
+  sessions: MetricSessionDetail[];
+};
+
+function buildListingKey(section: 'breakdown' | 'ranking', category: string, label: string): string {
+  return `${section}:${category}:${label}`;
+}
+
 function formatSessionDate(value: Date | string | null): string {
   if (!value) return '';
   const parsed = value instanceof Date ? value : new Date(value);
@@ -845,7 +855,7 @@ export const handler = createHttpHandler(async (request) => {
     return right.date.localeCompare(left.date);
   };
 
-  const metricSessions = [
+  const metricSessions: MetricSessionGroup[] = [
     {
       key: 'gepServicesSessions',
       label: 'GEP Services',
@@ -872,6 +882,141 @@ export const handler = createHttpHandler(async (request) => {
         ...filteredCurrentVariants.map(buildSessionDetailFromVariant),
       ].sort(sortByDateDesc),
     },
+  ];
+
+  const normalizeSiteLabel = (value: string | null | undefined) => value?.trim() || 'Sin sede';
+  const normalizeServiceType = (value: string | null | undefined) => value?.trim() || 'Sin tipo de servicio';
+
+  const buildBreakdownSessionGroups = (
+    breakdownItems: Array<{ dimension: string; label: string }>,
+  ): MetricSessionGroup[] =>
+    breakdownItems.map((item) => {
+      let sessions: MetricSessionDetail[] = [];
+      if (item.dimension === 'formacionEmpresaSite') {
+        sessions = currentSessions
+          .filter((session) => classifySession(session) === 'formacionEmpresa')
+          .filter((session) => normalizeSiteLabel(session.deals?.sede_label) === item.label)
+          .map(buildSessionDetailFromSession);
+      }
+      if (item.dimension === 'formacionAbiertaSite') {
+        sessions = [
+          ...currentSessions
+            .filter((session) => classifySession(session) === 'formacionAbierta')
+            .filter((session) => normalizeSiteLabel(session.deals?.sede_label) === item.label)
+            .map(buildSessionDetailFromSession),
+          ...filteredCurrentVariants
+            .filter((variant) => normalizeSiteLabel(variant.sede) === item.label)
+            .map(buildSessionDetailFromVariant),
+        ];
+      }
+      if (item.dimension === 'gepServicesType') {
+        sessions = currentSessions
+          .filter((session) => classifySession(session) === 'gepServices')
+          .filter((session) => normalizeServiceType(session.deals?.tipo_servicio) === item.label)
+          .map(buildSessionDetailFromSession);
+      }
+
+      return {
+        key: buildListingKey('breakdown', item.dimension, item.label),
+        label: item.label,
+        sessions: sessions.sort(sortByDateDesc),
+      };
+    });
+
+  const sessionHasTrainerLabel = (trainers: string[], label: string) => trainers.includes(label);
+
+  const buildRankingSessionGroups = (
+    rankingItems: Array<{ category: string; label: string }>,
+  ): MetricSessionGroup[] =>
+    rankingItems.map((item) => {
+      let sessions: MetricSessionDetail[] = [];
+      if (item.category === 'formacionEmpresa') {
+        sessions = currentSessions
+          .filter((session) => classifySession(session) === 'formacionEmpresa')
+          .filter(
+            (session) =>
+              getProductLabel(session.deal_products?.name, session.deal_products?.code) === item.label,
+          )
+          .map(buildSessionDetailFromSession);
+      }
+      if (item.category === 'gepServices') {
+        sessions = currentSessions
+          .filter((session) => classifySession(session) === 'gepServices')
+          .filter(
+            (session) =>
+              getProductLabel(session.deal_products?.name, session.deal_products?.code) === item.label,
+          )
+          .map(buildSessionDetailFromSession);
+      }
+      if (item.category === 'formacionAbierta') {
+        sessions = [
+          ...currentSessions
+            .filter((session) => classifySession(session) === 'formacionAbierta')
+            .filter(
+              (session) =>
+                getProductLabel(session.deal_products?.name, session.deal_products?.code) === item.label,
+            )
+            .map(buildSessionDetailFromSession),
+          ...filteredCurrentVariants
+            .filter((variant) => getProductLabel(variant.products?.name, variant.products?.code) === item.label)
+            .map(buildSessionDetailFromVariant),
+        ];
+      }
+      if (item.category === 'formacionEmpresaTrainers') {
+        sessions = currentSessions
+          .filter((session) => classifySession(session) === 'formacionEmpresa')
+          .filter((session) =>
+            sessionHasTrainerLabel(
+              buildTrainerList(session.sesion_trainers.map((trainer) => trainer.trainers?.name)),
+              item.label,
+            ),
+          )
+          .map(buildSessionDetailFromSession);
+      }
+      if (item.category === 'gepServicesTrainers') {
+        sessions = currentSessions
+          .filter((session) => classifySession(session) === 'gepServices')
+          .filter((session) =>
+            sessionHasTrainerLabel(
+              buildTrainerList(session.sesion_trainers.map((trainer) => trainer.trainers?.name)),
+              item.label,
+            ),
+          )
+          .map(buildSessionDetailFromSession);
+      }
+      if (item.category === 'formacionAbiertaTrainers') {
+        sessions = [
+          ...currentSessions
+            .filter((session) => classifySession(session) === 'formacionAbierta')
+            .filter((session) =>
+              sessionHasTrainerLabel(
+                buildTrainerList(session.sesion_trainers.map((trainer) => trainer.trainers?.name)),
+                item.label,
+              ),
+            )
+            .map(buildSessionDetailFromSession),
+          ...filteredCurrentVariants
+            .filter((variant) => sessionHasTrainerLabel(buildTrainerList([variant.trainers?.name]), item.label))
+            .map(buildSessionDetailFromVariant),
+        ];
+      }
+
+      return {
+        key: buildListingKey('ranking', item.category, item.label),
+        label: item.label,
+        sessions: sessions.sort(sortByDateDesc),
+      };
+    });
+
+  const breakdowns = [
+    ...mergeCounts(formacionEmpresaSiteCurrentCounts, formacionEmpresaSitePreviousCounts, 'formacionEmpresaSite'),
+    ...mergeCounts(formacionAbiertaSiteCurrentCounts, formacionAbiertaSitePreviousCounts, 'formacionAbiertaSite'),
+    ...mergeCounts(gepServicesTypeCurrentCounts, gepServicesTypePreviousCounts, 'gepServicesType'),
+  ];
+
+  const listingSessions = [
+    ...buildBreakdownSessionGroups(breakdowns),
+    ...buildRankingSessionGroups(ranking),
   ];
 
   const [dealSites, variantSites, pipelineOptions, comercialOptions]: [
@@ -911,11 +1056,7 @@ export const handler = createHttpHandler(async (request) => {
   return successResponse({
     highlights,
     trends,
-    breakdowns: [
-      ...mergeCounts(formacionEmpresaSiteCurrentCounts, formacionEmpresaSitePreviousCounts, 'formacionEmpresaSite'),
-      ...mergeCounts(formacionAbiertaSiteCurrentCounts, formacionAbiertaSitePreviousCounts, 'formacionAbiertaSite'),
-      ...mergeCounts(gepServicesTypeCurrentCounts, gepServicesTypePreviousCounts, 'gepServicesType'),
-    ],
+    breakdowns,
     revenueMix: [],
     binaryMixes: [
       {
@@ -947,6 +1088,7 @@ export const handler = createHttpHandler(async (request) => {
     funnel: [],
     ranking,
     metricSessions,
+    listingSessions,
     filterOptions,
   });
 });
