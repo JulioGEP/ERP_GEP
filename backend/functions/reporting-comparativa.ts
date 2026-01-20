@@ -194,7 +194,7 @@ type SessionRow = {
     caes_val: boolean | null;
     hotel_val: boolean | null;
     comercial: string | null;
-    organization: {
+    organizations: {
       name: string;
     } | null;
   } | null;
@@ -421,7 +421,7 @@ export const handler = createHttpHandler(async (request) => {
             caes_val: true,
             hotel_val: true,
             comercial: true,
-            organization: {
+            organizations: {
               select: {
                 name: true,
               },
@@ -457,7 +457,7 @@ export const handler = createHttpHandler(async (request) => {
             caes_val: true,
             hotel_val: true,
             comercial: true,
-            organization: {
+            organizations: {
               select: {
                 name: true,
               },
@@ -510,7 +510,7 @@ export const handler = createHttpHandler(async (request) => {
       },
       select: {
         w_id_variation: true,
-        organization: {
+        organizations: {
           select: {
             name: true,
           },
@@ -527,7 +527,7 @@ export const handler = createHttpHandler(async (request) => {
       },
       select: {
         w_id_variation: true,
-        organization: {
+        organizations: {
           select: {
             name: true,
           },
@@ -549,10 +549,13 @@ export const handler = createHttpHandler(async (request) => {
   );
 
   const currentVariantOrgById = new Map<string, string>();
-  for (const deal of currentVariantDeals as Array<{ w_id_variation: unknown; organization?: { name: string } | null }>) {
+  for (const deal of currentVariantDeals as Array<{
+    w_id_variation: unknown;
+    organizations?: { name: string } | null;
+  }>) {
     const normalizedId = normalizeVariantWooId(deal.w_id_variation);
     if (!normalizedId || currentVariantOrgById.has(normalizedId)) continue;
-    currentVariantOrgById.set(normalizedId, normalizeLabel(deal.organization?.name, 'Sin organización'));
+    currentVariantOrgById.set(normalizedId, normalizeLabel(deal.organizations?.name, 'Sin organización'));
   }
 
   const filteredCurrentVariants = currentVariants.filter((variant) => {
@@ -812,7 +815,7 @@ export const handler = createHttpHandler(async (request) => {
     return {
       date: formatSessionDate(session.fecha_inicio_utc),
       sessionName,
-      organizationName: normalizeLabel(session.deals?.organization?.name, 'Sin organización'),
+      organizationName: normalizeLabel(session.deals?.organizations?.name, 'Sin organización'),
       site: normalizeLabel(session.deals?.sede_label, 'Sin sede'),
       trainers: buildTrainerList(session.sesion_trainers.map((trainer) => trainer.trainers?.name)),
     };
