@@ -622,6 +622,12 @@ export type ComparativaMetricSessionGroup = {
   sessions: ComparativaSessionDetail[];
 };
 
+export type ComparativaSessionGroup = {
+  key: string;
+  label: string;
+  sessions: ComparativaSessionDetail[];
+};
+
 export type ComparativaDashboardResponse = {
   highlights: ComparativaKpi[];
   trends: ComparativaTrend[];
@@ -632,6 +638,7 @@ export type ComparativaDashboardResponse = {
   funnel: ComparativaFunnelStage[];
   ranking: ComparativaRankingRow[];
   metricSessions: ComparativaMetricSessionGroup[];
+  listingSessions: ComparativaSessionGroup[];
   filterOptions: {
     sites: string[];
     trainingTypes: string[];

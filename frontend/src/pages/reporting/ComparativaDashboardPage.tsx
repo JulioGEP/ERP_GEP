@@ -9,6 +9,7 @@ import {
   type ComparativaKpi,
   type ComparativaBinaryMix,
   type ComparativaTrend,
+  type ComparativaSessionGroup,
 } from '../../features/reporting/api';
 
 const METRIC_CONFIG: { key: string; label: string }[] = [
@@ -262,7 +263,7 @@ export default function ComparativaDashboardPage() {
     previousPeriod: buildComparisonPeriod(today),
     granularity: 'isoWeek',
   });
-  const [activeMetricKey, setActiveMetricKey] = useState<string | null>(null);
+  const [activeSessionKey, setActiveSessionKey] = useState<string | null>(null);
 
   const comparisonRangeLabel = useMemo(
     () => formatDisplayRange(filters.previousPeriod),
@@ -321,12 +322,35 @@ export default function ComparativaDashboardPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const metricSessionMap = useMemo(() => {
-    if (!dashboardQuery.data?.metricSessions) return new Map();
-    return new Map(dashboardQuery.data.metricSessions.map((item) => [item.key, item]));
-  }, [dashboardQuery.data?.metricSessions]);
+  const sessionGroupMap = useMemo(() => {
+    const metricSessions = dashboardQuery.data?.metricSessions ?? [];
+    const listingSessions = dashboardQuery.data?.listingSessions ?? [];
+    return new Map(
+      [...metricSessions, ...listingSessions].map((item) => [item.key, item]),
+    ) as Map<string, ComparativaSessionGroup>;
+  }, [dashboardQuery.data?.listingSessions, dashboardQuery.data?.metricSessions]);
 
-  const activeMetric = activeMetricKey ? metricSessionMap.get(activeMetricKey) : null;
+  const activeSessionGroup = activeSessionKey ? sessionGroupMap.get(activeSessionKey) : null;
+
+  const buildListingKey = (section: 'breakdown' | 'ranking', category: string, label: string) =>
+    `${section}:${category}:${label}`;
+
+  const handleRowAction = (key: string) => {
+    setActiveSessionKey(key);
+  };
+
+  const getRowActionProps = (key: string) => ({
+    role: 'button' as const,
+    tabIndex: 0,
+    onClick: () => handleRowAction(key),
+    onKeyDown: (event: React.KeyboardEvent<HTMLTableRowElement>) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        handleRowAction(key);
+      }
+    },
+    style: { cursor: 'pointer' },
+  });
 
   const numberFormatter = useMemo(
     () => new Intl.NumberFormat('es-ES', { maximumFractionDigits: 0 }),
@@ -475,7 +499,7 @@ export default function ComparativaDashboardPage() {
         type="button"
         className="btn p-0 text-start w-100"
         aria-label={`Ver sesiones de ${kpi.label}`}
-        onClick={() => setActiveMetricKey(kpi.key)}
+        onClick={() => setActiveSessionKey(kpi.key)}
       >
         <Card className="h-100 shadow-sm" style={{ cursor: 'pointer' }}>
           <Card.Body className="d-flex flex-column gap-3">
@@ -542,9 +566,10 @@ export default function ComparativaDashboardPage() {
                   const diffLabel = `${diff >= 0 ? '+' : ''}${numberFormatter.format(diff)}`;
                   const percentageLabel = formatPercentageDifference(item.current, item.previous);
                   const badgeVariant = diff > 0 ? 'success' : diff < 0 ? 'danger' : 'secondary';
+                  const rowKey = buildListingKey('breakdown', config.dimension, item.label);
 
                   return (
-                    <tr key={item.label}>
+                    <tr key={item.label} {...getRowActionProps(rowKey)}>
                       <td className="small">{item.label}</td>
                       <td className="text-end fw-semibold">{numberFormatter.format(item.current)}</td>
                       <td className="text-end">{numberFormatter.format(item.previous)}</td>
@@ -825,9 +850,10 @@ export default function ComparativaDashboardPage() {
                   const badgeVariant = diff > 0 ? 'success' : diff < 0 ? 'danger' : 'secondary';
                   const diffLabel = `${diff >= 0 ? '+' : ''}${numberFormatter.format(diff)}`;
                   const percentageLabel = formatPercentageDifference(item.currentValue, item.previousValue);
+                  const rowKey = buildListingKey('ranking', category, item.label);
 
                   return (
-                    <tr key={`${category}-${item.label}`}>
+                    <tr key={`${category}-${item.label}`} {...getRowActionProps(rowKey)}>
                       <td className="small">{item.label}</td>
                       <td className="text-end fw-semibold">{numberFormatter.format(item.currentValue)}</td>
                       <td className="text-end">{numberFormatter.format(item.previousValue)}</td>
@@ -993,12 +1019,14 @@ export default function ComparativaDashboardPage() {
         </div>
       </div>
 
-      <Modal show={Boolean(activeMetric)} onHide={() => setActiveMetricKey(null)} size="lg" centered>
+      <Modal show={Boolean(activeSessionGroup)} onHide={() => setActiveSessionKey(null)} size="lg" centered>
         <Modal.Header closeButton>
-          <Modal.Title>{activeMetric ? `Sesiones · ${activeMetric.label}` : 'Sesiones'}</Modal.Title>
+          <Modal.Title>
+            {activeSessionGroup ? `Sesiones · ${activeSessionGroup.label}` : 'Sesiones'}
+          </Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {activeMetric?.sessions.length ? (
+          {activeSessionGroup?.sessions.length ? (
             <div className="table-responsive">
               <table className="table align-middle">
                 <thead>
@@ -1011,7 +1039,7 @@ export default function ComparativaDashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {activeMetric.sessions.map((session, index) => (
+                  {activeSessionGroup.sessions.map((session, index) => (
                     <tr key={`${session.sessionName}-${session.date}-${index}`}>
                       <td className="small">{formatDisplayDate(session.date) || session.date}</td>
                       <td className="small">{session.sessionName}</td>
