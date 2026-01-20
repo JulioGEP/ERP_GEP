@@ -608,6 +608,20 @@ export type ComparativaRankingRow = {
   conversionRate?: number;
 };
 
+export type ComparativaSessionDetail = {
+  date: string;
+  sessionName: string;
+  organizationName: string;
+  site: string;
+  trainers: string[];
+};
+
+export type ComparativaMetricSessionGroup = {
+  key: string;
+  label: string;
+  sessions: ComparativaSessionDetail[];
+};
+
 export type ComparativaDashboardResponse = {
   highlights: ComparativaKpi[];
   trends: ComparativaTrend[];
@@ -617,6 +631,7 @@ export type ComparativaDashboardResponse = {
   heatmap: ComparativaHeatmapCell[];
   funnel: ComparativaFunnelStage[];
   ranking: ComparativaRankingRow[];
+  metricSessions: ComparativaMetricSessionGroup[];
   filterOptions: {
     sites: string[];
     trainingTypes: string[];

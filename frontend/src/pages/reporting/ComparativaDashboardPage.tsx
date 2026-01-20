@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { Badge, Button, Card, Col, Collapse, Form, ListGroup, Row, Spinner } from 'react-bootstrap';
+import { Badge, Button, Card, Col, Collapse, Form, ListGroup, Modal, Row, Spinner } from 'react-bootstrap';
 import { isApiError } from '../../api/client';
 import {
   fetchComparativaDashboard,
@@ -262,6 +262,7 @@ export default function ComparativaDashboardPage() {
     previousPeriod: buildComparisonPeriod(today),
     granularity: 'isoWeek',
   });
+  const [activeMetricKey, setActiveMetricKey] = useState<string | null>(null);
 
   const comparisonRangeLabel = useMemo(
     () => formatDisplayRange(filters.previousPeriod),
@@ -319,6 +320,13 @@ export default function ComparativaDashboardPage() {
     placeholderData: keepPreviousData,
     staleTime: 5 * 60 * 1000,
   });
+
+  const metricSessionMap = useMemo(() => {
+    if (!dashboardQuery.data?.metricSessions) return new Map();
+    return new Map(dashboardQuery.data.metricSessions.map((item) => [item.key, item]));
+  }, [dashboardQuery.data?.metricSessions]);
+
+  const activeMetric = activeMetricKey ? metricSessionMap.get(activeMetricKey) : null;
 
   const numberFormatter = useMemo(
     () => new Intl.NumberFormat('es-ES', { maximumFractionDigits: 0 }),
@@ -463,29 +471,36 @@ export default function ComparativaDashboardPage() {
     const deltaVariant = percentageDifference > 0 ? 'success' : percentageDifference < 0 ? 'danger' : 'secondary';
 
     return (
-      <Card className="h-100 shadow-sm">
-        <Card.Body className="d-flex flex-column gap-3">
-          <div className="d-flex justify-content-between align-items-start">
-            <Card.Title as="h6" className="mb-0">
-              {kpi.label}
-            </Card.Title>
-            <Badge bg={deltaVariant} pill>
-              {percentageDifferenceLabel}
-            </Badge>
-          </div>
+      <button
+        type="button"
+        className="btn p-0 text-start w-100"
+        aria-label={`Ver sesiones de ${kpi.label}`}
+        onClick={() => setActiveMetricKey(kpi.key)}
+      >
+        <Card className="h-100 shadow-sm" style={{ cursor: 'pointer' }}>
+          <Card.Body className="d-flex flex-column gap-3">
+            <div className="d-flex justify-content-between align-items-start">
+              <Card.Title as="h6" className="mb-0">
+                {kpi.label}
+              </Card.Title>
+              <Badge bg={deltaVariant} pill>
+                {percentageDifferenceLabel}
+              </Badge>
+            </div>
 
-          <div>
-            <div className="fs-3 fw-semibold">{currentValue}</div>
-            <div className="text-muted">Comparativa: {comparativaValue}</div>
-            <div className="text-muted">Diferencia absoluta: {absoluteDifferenceLabel}</div>
-          </div>
+            <div>
+              <div className="fs-3 fw-semibold">{currentValue}</div>
+              <div className="text-muted">Comparativa: {comparativaValue}</div>
+              <div className="text-muted">Diferencia absoluta: {absoluteDifferenceLabel}</div>
+            </div>
 
-          <div>
-            <div className="small text-muted mb-1">Evolutivo semanal · últimas 12 semanas</div>
-            {renderSparkline(normalizeSparkline(kpi.sparkline))}
-          </div>
-        </Card.Body>
-      </Card>
+            <div>
+              <div className="small text-muted mb-1">Evolutivo semanal · últimas 12 semanas</div>
+              {renderSparkline(normalizeSparkline(kpi.sparkline))}
+            </div>
+          </Card.Body>
+        </Card>
+      </button>
     );
   };
 
@@ -977,6 +992,42 @@ export default function ComparativaDashboardPage() {
           <div className="text-muted">Elige fechas y compara</div>
         </div>
       </div>
+
+      <Modal show={Boolean(activeMetric)} onHide={() => setActiveMetricKey(null)} size="lg" centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{activeMetric ? `Sesiones · ${activeMetric.label}` : 'Sesiones'}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {activeMetric?.sessions.length ? (
+            <div className="table-responsive">
+              <table className="table align-middle">
+                <thead>
+                  <tr>
+                    <th className="text-muted small">Fecha</th>
+                    <th className="text-muted small">Sesión</th>
+                    <th className="text-muted small">Organización</th>
+                    <th className="text-muted small">Sede</th>
+                    <th className="text-muted small">Formadores</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeMetric.sessions.map((session, index) => (
+                    <tr key={`${session.sessionName}-${session.date}-${index}`}>
+                      <td className="small">{formatDisplayDate(session.date) || session.date}</td>
+                      <td className="small">{session.sessionName}</td>
+                      <td className="small">{session.organizationName}</td>
+                      <td className="small">{session.site}</td>
+                      <td className="small">{session.trainers.join(', ')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-muted small">Sin sesiones para mostrar en el periodo seleccionado.</div>
+          )}
+        </Modal.Body>
+      </Modal>
 
       <Card className="shadow-sm">
         <Card.Body className="pb-3">

@@ -185,6 +185,7 @@ function buildTrainerRanking(
 
 type SessionRow = {
   fecha_inicio_utc: Date | null;
+  nombre_cache: string | null;
   deals: {
     pipeline_id: string | null;
     sede_label: string | null;
@@ -193,6 +194,9 @@ type SessionRow = {
     caes_val: boolean | null;
     hotel_val: boolean | null;
     comercial: string | null;
+    organization: {
+      name: string;
+    } | null;
   } | null;
   deal_products: {
     name: string | null;
@@ -207,6 +211,7 @@ type SessionRow = {
 
 type VariantRow = {
   id_woo: bigint | number | string | null;
+  name: string | null;
   date: Date | string | null;
   sede: string | null;
   products: {
@@ -260,6 +265,33 @@ function classifySession(row: SessionRow): 'gepServices' | 'formacionEmpresa' | 
   if (pipeline === 'formacion empresa' || pipeline === 'formacion empresas') return 'formacionEmpresa';
   if (pipeline === 'formacion abierta') return 'formacionAbierta';
   return null;
+}
+
+type MetricSessionDetail = {
+  date: string;
+  sessionName: string;
+  organizationName: string;
+  site: string;
+  trainers: string[];
+};
+
+function formatSessionDate(value: Date | string | null): string {
+  if (!value) return '';
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(parsed.getTime())) return '';
+  return parsed.toISOString().slice(0, 10);
+}
+
+function normalizeLabel(value: string | null | undefined, fallback: string): string {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : fallback;
+}
+
+function buildTrainerList(names: Array<string | null | undefined>): string[] {
+  const normalized = names
+    .map((name) => name?.trim())
+    .filter((name): name is string => Boolean(name));
+  return normalized.length ? normalized : ['Sin formador'];
 }
 
 function toDateList(
@@ -379,6 +411,7 @@ export const handler = createHttpHandler(async (request) => {
       },
       select: {
         fecha_inicio_utc: true,
+        nombre_cache: true,
         deals: {
           select: {
             pipeline_id: true,
@@ -388,6 +421,11 @@ export const handler = createHttpHandler(async (request) => {
             caes_val: true,
             hotel_val: true,
             comercial: true,
+            organization: {
+              select: {
+                name: true,
+              },
+            },
           },
         },
         deal_products: { select: { name: true, code: true } },
@@ -409,6 +447,7 @@ export const handler = createHttpHandler(async (request) => {
       },
       select: {
         fecha_inicio_utc: true,
+        nombre_cache: true,
         deals: {
           select: {
             pipeline_id: true,
@@ -418,6 +457,11 @@ export const handler = createHttpHandler(async (request) => {
             caes_val: true,
             hotel_val: true,
             comercial: true,
+            organization: {
+              select: {
+                name: true,
+              },
+            },
           },
         },
         deal_products: { select: { name: true, code: true } },
@@ -435,6 +479,7 @@ export const handler = createHttpHandler(async (request) => {
       },
       select: {
         id_woo: true,
+        name: true,
         date: true,
         sede: true,
         products: { select: { name: true, code: true } },
@@ -448,6 +493,7 @@ export const handler = createHttpHandler(async (request) => {
       },
       select: {
         id_woo: true,
+        name: true,
         date: true,
         sede: true,
         products: { select: { name: true, code: true } },
@@ -462,7 +508,14 @@ export const handler = createHttpHandler(async (request) => {
         ...(trainingTypes ? { pipeline_id: { in: trainingTypes } } : {}),
         ...(comerciales ? { comercial: { in: comerciales } } : {}),
       },
-      select: { w_id_variation: true },
+      select: {
+        w_id_variation: true,
+        organization: {
+          select: {
+            name: true,
+          },
+        },
+      },
     }),
     prisma.deals.findMany({
       where: {
@@ -472,7 +525,14 @@ export const handler = createHttpHandler(async (request) => {
         ...(trainingTypes ? { pipeline_id: { in: trainingTypes } } : {}),
         ...(comerciales ? { comercial: { in: comerciales } } : {}),
       },
-      select: { w_id_variation: true },
+      select: {
+        w_id_variation: true,
+        organization: {
+          select: {
+            name: true,
+          },
+        },
+      },
     }),
   ]);
 
@@ -487,6 +547,13 @@ export const handler = createHttpHandler(async (request) => {
       .map((deal) => normalizeVariantWooId(deal.w_id_variation))
       .filter((value): value is string => Boolean(value)),
   );
+
+  const currentVariantOrgById = new Map<string, string>();
+  for (const deal of currentVariantDeals as Array<{ w_id_variation: unknown; organization?: { name: string } | null }>) {
+    const normalizedId = normalizeVariantWooId(deal.w_id_variation);
+    if (!normalizedId || currentVariantOrgById.has(normalizedId)) continue;
+    currentVariantOrgById.set(normalizedId, normalizeLabel(deal.organization?.name, 'Sin organización'));
+  }
 
   const filteredCurrentVariants = currentVariants.filter((variant) => {
     const normalizedIdWoo = normalizeVariantWooId(variant.id_woo);
@@ -737,6 +804,73 @@ export const handler = createHttpHandler(async (request) => {
     },
   ];
 
+  const buildSessionDetailFromSession = (session: SessionRow): MetricSessionDetail => {
+    const sessionName = normalizeLabel(
+      session.nombre_cache ?? session.deal_products?.name ?? session.deal_products?.code,
+      'Sesión sin nombre',
+    );
+    return {
+      date: formatSessionDate(session.fecha_inicio_utc),
+      sessionName,
+      organizationName: normalizeLabel(session.deals?.organization?.name, 'Sin organización'),
+      site: normalizeLabel(session.deals?.sede_label, 'Sin sede'),
+      trainers: buildTrainerList(session.sesion_trainers.map((trainer) => trainer.trainers?.name)),
+    };
+  };
+
+  const buildSessionDetailFromVariant = (variant: VariantRow): MetricSessionDetail => {
+    const normalizedId = normalizeVariantWooId(variant.id_woo);
+    const organizationName = normalizedId ? currentVariantOrgById.get(normalizedId) : null;
+    return {
+      date: formatSessionDate(variant.date),
+      sessionName: normalizeLabel(
+        variant.name ?? variant.products?.name ?? variant.products?.code,
+        'Sesión sin nombre',
+      ),
+      organizationName: normalizeLabel(organizationName, 'Sin organización'),
+      site: normalizeLabel(variant.sede, 'Sin sede'),
+      trainers: buildTrainerList([variant.trainers?.name]),
+    };
+  };
+
+  const sortByDateDesc = (left: MetricSessionDetail, right: MetricSessionDetail) => {
+    if (left.date === right.date) {
+      return left.sessionName.localeCompare(right.sessionName);
+    }
+    if (!left.date) return 1;
+    if (!right.date) return -1;
+    return right.date.localeCompare(left.date);
+  };
+
+  const metricSessions = [
+    {
+      key: 'gepServicesSessions',
+      label: 'GEP Services',
+      sessions: currentSessions
+        .filter((session) => classifySession(session) === 'gepServices')
+        .map(buildSessionDetailFromSession)
+        .sort(sortByDateDesc),
+    },
+    {
+      key: 'formacionEmpresaSessions',
+      label: 'Formacion Empresa',
+      sessions: currentSessions
+        .filter((session) => classifySession(session) === 'formacionEmpresa')
+        .map(buildSessionDetailFromSession)
+        .sort(sortByDateDesc),
+    },
+    {
+      key: 'formacionAbiertaVariantesSessions',
+      label: 'Formación Abierta',
+      sessions: [
+        ...currentSessions
+          .filter((session) => classifySession(session) === 'formacionAbierta')
+          .map(buildSessionDetailFromSession),
+        ...filteredCurrentVariants.map(buildSessionDetailFromVariant),
+      ].sort(sortByDateDesc),
+    },
+  ];
+
   const [dealSites, variantSites, pipelineOptions, comercialOptions]: [
     { sede_label: string | null }[],
     { sede: string | null }[],
@@ -809,7 +943,7 @@ export const handler = createHttpHandler(async (request) => {
     heatmap: [],
     funnel: [],
     ranking,
+    metricSessions,
     filterOptions,
   });
 });
-
