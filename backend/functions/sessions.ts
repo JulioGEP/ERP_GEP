@@ -492,6 +492,7 @@ async function attachSessionAuditInfo(
   return sessions.map((session) => ({
     ...session,
     updated_by: auditMap.get(session.id)?.userName ?? null,
+    updated_at: auditMap.get(session.id)?.createdAt ?? session.updated_at,
   }));
 }
 
