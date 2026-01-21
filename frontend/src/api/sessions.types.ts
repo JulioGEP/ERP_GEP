@@ -33,8 +33,6 @@ export type SessionDTO = {
   direccion: string;
   estado: SessionEstado;
   drive_url: string | null;
-  updated_at: string | null;
-  updated_by: string | null;
   trainer_ids: string[];
   unidad_movil_ids: string[];
   trainer_invite_status: SessionTrainerInviteStatus;
