@@ -698,6 +698,7 @@ export default function AuthenticatedApp() {
   const [isCheckingExistingDeal, setIsCheckingExistingDeal] = useState(false);
   const [activeCalendarVariant, setActiveCalendarVariant] = useState<ActiveVariant | null>(null);
   const [highlightedCalendarSessionId, setHighlightedCalendarSessionId] = useState<string | null>(null);
+  const [isNavbarOffcanvasOpen, setIsNavbarOffcanvasOpen] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -1650,6 +1651,13 @@ export default function AuthenticatedApp() {
   };
 
   const isFormador = user?.role?.trim().toLowerCase() === 'formador';
+  const handleOffcanvasClose = useCallback(() => {
+    setIsNavbarOffcanvasOpen(false);
+  }, []);
+
+  const handleOffcanvasToggle = useCallback(() => {
+    setIsNavbarOffcanvasOpen((prev) => !prev);
+  }, []);
 
   return (
     <div className="min-vh-100 d-flex flex-column">
@@ -1665,11 +1673,13 @@ export default function AuthenticatedApp() {
           >
             <img src={logo} height={64} alt="GEP Group" />
           </Navbar.Brand>
-          <Navbar.Toggle aria-controls={NAVBAR_OFFCANVAS_ID} />
+          <Navbar.Toggle aria-controls={NAVBAR_OFFCANVAS_ID} onClick={handleOffcanvasToggle} />
           <Navbar.Offcanvas
             id={NAVBAR_OFFCANVAS_ID}
             aria-labelledby={NAVBAR_OFFCANVAS_LABEL_ID}
             placement="start"
+            show={isNavbarOffcanvasOpen}
+            onHide={handleOffcanvasClose}
           >
             <Offcanvas.Header closeButton closeVariant="white" className="border-bottom">
               <Offcanvas.Title id={NAVBAR_OFFCANVAS_LABEL_ID} className="text-uppercase fw-semibold">
@@ -1693,7 +1703,12 @@ export default function AuthenticatedApp() {
                       menuVariant="light"
                     >
                       {item.children.map((child) => (
-                        <NavDropdown.Item key={child.key} as={NavLink} to={child.path}>
+                        <NavDropdown.Item
+                          key={child.key}
+                          as={NavLink}
+                          to={child.path}
+                          onClick={handleOffcanvasClose}
+                        >
                           {child.label}
                         </NavDropdown.Item>
                       ))}
@@ -1704,6 +1719,7 @@ export default function AuthenticatedApp() {
                         as={NavLink}
                         to={item.path}
                         className="text-uppercase w-100 w-xl-auto text-start text-xl-center"
+                        onClick={handleOffcanvasClose}
                       >
                         {item.label}
                       </Nav.Link>
@@ -1722,15 +1738,22 @@ export default function AuthenticatedApp() {
                     className="w-100 w-xl-auto"
                   >
                     {isFormador && hasPermission('/perfil/control_horas') && !isFixedTrainer ? (
-                      <NavDropdown.Item as={NavLink} to="/perfil/control_horas">
+                      <NavDropdown.Item as={NavLink} to="/perfil/control_horas" onClick={handleOffcanvasClose}>
                         Control de horas
                       </NavDropdown.Item>
                     ) : null}
-                    <NavDropdown.Item as={NavLink} to="/perfil">
+                    <NavDropdown.Item as={NavLink} to="/perfil" onClick={handleOffcanvasClose}>
                       Mi perfil
                     </NavDropdown.Item>
                     <NavDropdown.Divider />
-                    <NavDropdown.Item onClick={handleLogout}>Cerrar sesión</NavDropdown.Item>
+                    <NavDropdown.Item
+                      onClick={() => {
+                        handleOffcanvasClose();
+                        handleLogout();
+                      }}
+                    >
+                      Cerrar sesión
+                    </NavDropdown.Item>
                   </NavDropdown>
                 )}
               </Nav>
