@@ -58,8 +58,9 @@ export async function fetchLatestAuditEntries(params: {
   prisma: PrismaClientOrTransaction;
   entityType: string;
   entityIds: string[];
+  actions?: string[];
 }): Promise<Map<string, AuditUserSummary>> {
-  const { prisma, entityType, entityIds } = params;
+  const { prisma, entityType, entityIds, actions } = params;
   const normalizedIds = Array.from(new Set(entityIds.map((id) => id.trim()).filter(Boolean)));
   if (!normalizedIds.length) {
     return new Map();
@@ -69,6 +70,7 @@ export async function fetchLatestAuditEntries(params: {
     where: {
       entity_type: entityType,
       entity_id: { in: normalizedIds },
+      ...(actions && actions.length ? { action: { in: actions } } : {}),
     },
     orderBy: { created_at: 'desc' },
     include: {
