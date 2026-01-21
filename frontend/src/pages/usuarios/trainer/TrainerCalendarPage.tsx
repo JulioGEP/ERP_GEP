@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarView } from '../../../features/calendar/CalendarView';
 import type { CalendarSession, CalendarVariantEvent } from '../../../features/calendar/api';
+import { useAuth } from '../../../context/AuthContext';
 
 const MADRID_TIMEZONE = 'Europe/Madrid';
 
@@ -25,6 +26,8 @@ function getMadridDateKey(value: string | null): string | null {
 
 export default function TrainerCalendarPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const trainerId = user?.trainerId ?? null;
 
   const handleCalendarNavigate = useCallback(
     (date: string | null) => {
@@ -56,6 +59,7 @@ export default function TrainerCalendarPage() {
       title="Calendario · Por empresa"
       mode="organizations"
       initialView="month"
+      trainerId={trainerId}
       onSessionOpen={handleSessionOpen}
       onVariantOpen={handleVariantOpen}
     />

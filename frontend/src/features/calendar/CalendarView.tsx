@@ -135,6 +135,7 @@ type CalendarViewProps = {
   title?: string;
   mode?: CalendarMode;
   initialView?: CalendarViewType;
+  trainerId?: string | null;
 };
 
 type MadridDate = { year: number; month: number; day: number };
@@ -995,7 +996,12 @@ export function CalendarView({
   title = 'Calendario',
   mode = 'sessions',
   initialView = 'month',
+  trainerId = null,
 }: CalendarViewProps) {
+  const normalizedTrainerId = useMemo(() => {
+    const trimmed = safeString(trainerId);
+    return trimmed.length ? trimmed : null;
+  }, [trainerId]);
   const storageKey = `${STORAGE_KEY_PREFIX}-${mode}`;
   const stored = useMemo(() => readStoredPreferences(storageKey, initialView), [storageKey, initialView]);
   const [view, setView] = useState<CalendarViewType>(stored.view);
@@ -1035,8 +1041,18 @@ export function CalendarView({
     mode === 'sessions' || mode === 'trainers' || mode === 'units' || mode === 'organizations';
 
   const sessionsQuery = useQuery<CalendarSessionsResponse, ApiError>({
-    queryKey: ['calendarSessions', fetchRange?.start ?? null, fetchRange?.end ?? null],
-    queryFn: () => fetchCalendarSessions({ start: fetchRange!.start, end: fetchRange!.end }),
+    queryKey: [
+      'calendarSessions',
+      fetchRange?.start ?? null,
+      fetchRange?.end ?? null,
+      normalizedTrainerId ?? null,
+    ],
+    queryFn: () =>
+      fetchCalendarSessions({
+        start: fetchRange!.start,
+        end: fetchRange!.end,
+        trainerId: normalizedTrainerId ?? undefined,
+      }),
     enabled: !!fetchRange,
     staleTime: 5 * 60 * 1000,
   });
@@ -1048,18 +1064,32 @@ export function CalendarView({
     staleTime: 5 * 60 * 1000,
   });
 
-  const sessions = sessionsQuery.data?.sessions ?? [];
+  const sessions = useMemo(() => {
+    const data = sessionsQuery.data?.sessions ?? [];
+    if (!normalizedTrainerId) {
+      return data;
+    }
+    return data.filter((session) => session.trainers.some((trainer) => trainer.id === normalizedTrainerId));
+  }, [sessionsQuery.data?.sessions, normalizedTrainerId]);
   const rawVariants = includeVariants ? variantsQuery.data?.variants ?? [] : [];
 
   const variants = useMemo(() => {
     if (!includeVariants) {
       return [];
     }
-    if (mode !== 'trainers') {
-      return rawVariants;
+    let output = rawVariants;
+    if (mode === 'trainers') {
+      output = output.filter((variant) => getVariantTrainerResources(variant).length > 0);
     }
-    return rawVariants.filter((variant) => getVariantTrainerResources(variant).length > 0);
-  }, [includeVariants, mode, rawVariants]);
+    if (normalizedTrainerId) {
+      output = output.filter((variant) =>
+        getVariantTrainerResources(variant).some(
+          (trainer) => safeString(trainer.trainer_id) === normalizedTrainerId,
+        ),
+      );
+    }
+    return output;
+  }, [includeVariants, mode, rawVariants, normalizedTrainerId]);
 
   const productOptionsQuery = useQuery({
     queryKey: ['calendar-filter-products'],
