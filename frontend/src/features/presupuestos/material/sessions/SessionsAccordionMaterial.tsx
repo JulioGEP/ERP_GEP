@@ -2737,9 +2737,6 @@ export function SessionsAccordionMaterial({
                   Última modificación: {activeLastUpdatedBy}
                   {activeLastUpdatedAt ? ` · ${activeLastUpdatedAt}` : ''}.
                 </div>
-                <div className="session-modal-footer-hint">
-                  Este dato indica quién guardó los últimos cambios en esta sesión.
-                </div>
               </div>
             </Modal.Footer>
           </Modal>
