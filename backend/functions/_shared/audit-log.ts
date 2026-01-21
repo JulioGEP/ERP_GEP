@@ -29,6 +29,82 @@ export type LogAuditParams = {
   prisma?: PrismaClientOrTransaction;
 };
 
+export type AuditUserSummary = {
+  userId: string | null;
+  userName: string | null;
+  userEmail: string | null;
+  createdAt: string | null;
+};
+
+export function buildUserDisplayName(
+  user: { first_name?: string | null; last_name?: string | null; email?: string | null } | null,
+): string | null {
+  if (!user) {
+    return null;
+  }
+
+  const firstName = typeof user.first_name === 'string' ? user.first_name.trim() : '';
+  const lastName = typeof user.last_name === 'string' ? user.last_name.trim() : '';
+  const parts = [firstName, lastName].filter((part) => part.length > 0);
+
+  if (parts.length) {
+    return parts.join(' ');
+  }
+
+  return typeof user.email === 'string' ? user.email.trim() : null;
+}
+
+export async function fetchLatestAuditEntries(params: {
+  prisma: PrismaClientOrTransaction;
+  entityType: string;
+  entityIds: string[];
+}): Promise<Map<string, AuditUserSummary>> {
+  const { prisma, entityType, entityIds } = params;
+  const normalizedIds = Array.from(new Set(entityIds.map((id) => id.trim()).filter(Boolean)));
+  if (!normalizedIds.length) {
+    return new Map();
+  }
+
+  const logs = await prisma.audit_logs.findMany({
+    where: {
+      entity_type: entityType,
+      entity_id: { in: normalizedIds },
+    },
+    orderBy: { created_at: 'desc' },
+    include: {
+      user: {
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+        },
+      },
+    },
+  });
+
+  const results = new Map<string, AuditUserSummary>();
+  for (const log of logs) {
+    const entityId = typeof log.entity_id === 'string' ? log.entity_id : '';
+    if (!entityId || results.has(entityId)) {
+      continue;
+    }
+
+    const userName = buildUserDisplayName(log.user);
+    const userEmail = log.user?.email ?? null;
+    const createdAt = log.created_at ? log.created_at.toISOString() : null;
+
+    results.set(entityId, {
+      userId: log.user_id ?? null,
+      userName,
+      userEmail,
+      createdAt,
+    });
+  }
+
+  return results;
+}
+
 export async function logAudit({
   userId,
   action,

@@ -1,8 +1,8 @@
 // backend/functions/sesiones.ts
 import { randomUUID } from 'crypto';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
-import { logAudit, resolveUserIdFromEvent, type JsonValue } from './_shared/audit-log';
+import { fetchLatestAuditEntries, logAudit, resolveUserIdFromEvent, type JsonValue } from './_shared/audit-log';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
 import { isTrustedClient, logSuspiciousRequest } from './_shared/security';
@@ -468,11 +468,31 @@ function normalizeSession(row: SessionRecord) {
     direccion: normalized.direccion,
     estado,
     drive_url: toTrimmed(normalized.drive_url),
+    updated_at: toIsoOrNull(normalized.updated_at),
     trainer_ids: trainerIds,
     unidad_movil_ids: unidadIds,
     trainer_invite_status: trainerInviteStatus,
     trainer_invites: trainerInvites,
   };
+}
+
+type NormalizedSession = ReturnType<typeof normalizeSession>;
+
+async function attachSessionAuditInfo(
+  prisma: Prisma.TransactionClient | PrismaClient,
+  sessions: NormalizedSession[],
+): Promise<Array<NormalizedSession & { updated_by: string | null }>> {
+  const sessionIds = sessions.map((session) => session.id).filter(Boolean);
+  const auditMap = await fetchLatestAuditEntries({
+    prisma,
+    entityType: 'session',
+    entityIds: sessionIds,
+  });
+
+  return sessions.map((session) => ({
+    ...session,
+    updated_by: auditMap.get(session.id)?.userName ?? null,
+  }));
 }
 
 function buildSessionAuditSnapshot(session: ReturnType<typeof normalizeSession>) {
@@ -1504,6 +1524,7 @@ if (method === 'GET') {
       filteredProducts.map(async (product: any) => {
         const { total, rows } = await fetchSessionsByProduct(tx, deal.deal_id, product.id, page, limit);
         const mapped = (rows as any[]).map((r: any) => normalizeSession(r as unknown as SessionRecord));
+        const sesiones = await attachSessionAuditInfo(tx, mapped);
         return {
           product: {
             id: product.id as string,
@@ -1511,7 +1532,7 @@ if (method === 'GET') {
             name: product.name as string,
             quantity: toNonNegativeInt(product.quantity, 0),
           },
-          sesiones: mapped,
+          sesiones,
           pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
         };
       }),
@@ -1667,7 +1688,8 @@ if (method === 'GET') {
         after: auditAfter as JsonValue,
       });
 
-      return successResponse({ session: result }, 201);
+      const [withAudit] = await attachSessionAuditInfo(prisma, [result]);
+      return successResponse({ session: withAudit }, 201);
     }
 
     // Patch
@@ -1817,7 +1839,8 @@ if (method === 'GET') {
         }
       }
 
-      return successResponse({ session: normalizedSession });
+      const [withAudit] = await attachSessionAuditInfo(prisma, [normalizedSession]);
+      return successResponse({ session: withAudit });
     }
 
     // Delete

@@ -1545,6 +1545,8 @@ type SessionFormState = {
   direccion: string;
   estado: SessionEstado;
   drive_url: string | null;
+  updated_at: string | null;
+  updated_by: string | null;
   trainer_ids: string[];
   unidad_movil_ids: string[];
 };
@@ -1582,6 +1584,16 @@ function formatDateForInput(iso: string | null): string | null {
     return null;
   }
   return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
+}
+
+function formatLastUpdateLabel(iso: string | null): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return null;
+  return new Intl.DateTimeFormat('es-ES', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
 }
 
 function getTimeZoneOffset(date: Date, timeZone: string): number {
@@ -1688,6 +1700,8 @@ function mapSessionToForm(session: SessionDTO): SessionFormState {
     direccion: session.direccion ?? '',
     estado: session.estado,
     drive_url: session.drive_url ?? null,
+    updated_at: session.updated_at ?? null,
+    updated_by: session.updated_by ?? null,
     trainer_ids: Array.isArray(session.trainer_ids) ? [...session.trainer_ids] : [],
     unidad_movil_ids: Array.isArray(session.unidad_movil_ids) ? [...session.unidad_movil_ids] : [],
   };
@@ -2355,6 +2369,8 @@ export function SessionsAccordionMaterial({
   };
 
   const activeForm = activeSession ? forms[activeSession.sessionId] ?? null : null;
+  const activeLastUpdatedAt = formatLastUpdateLabel(activeForm?.updated_at ?? null);
+  const activeLastUpdatedBy = activeForm?.updated_by?.trim() || '—';
   const activeProductHours = activeSession
     ? (() => {
         const directProduct = applicableProducts.find((product) => product.id === activeSession.productId);
@@ -2715,6 +2731,17 @@ export function SessionsAccordionMaterial({
                 <p className="text-muted mb-0">No se pudo cargar la sesión seleccionada.</p>
               )}
             </Modal.Body>
+            <Modal.Footer className="session-modal-footer">
+              <div className="text-muted small">
+                <div>
+                  Última modificación: {activeLastUpdatedBy}
+                  {activeLastUpdatedAt ? ` · ${activeLastUpdatedAt}` : ''}.
+                </div>
+                <div className="session-modal-footer-hint">
+                  Este dato indica quién guardó los últimos cambios en esta sesión.
+                </div>
+              </div>
+            </Modal.Footer>
           </Modal>
         )}
         <Modal show={showMapModal} onHide={handleCloseMap} size="lg" centered>
