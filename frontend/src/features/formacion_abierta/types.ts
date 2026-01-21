@@ -34,7 +34,6 @@ export type VariantInfo = {
   unidades: Array<{ unidad_id: string; name: string; matricula: string | null }>;
   created_at: string | null;
   updated_at: string | null;
-  updated_by: string | null;
 };
 
 export type VariantComment = {

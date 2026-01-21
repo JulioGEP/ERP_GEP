@@ -1051,8 +1051,6 @@ export function VariantModal({
   }
 
   const formattedVariantDate = variant?.date ? formatDate(variant.date) : null;
-  const variantUpdatedAtLabel = formatDate(variant?.updated_at ?? null);
-  const variantUpdatedByLabel = variant?.updated_by?.trim() || '—';
   if (formattedVariantDate) {
     variantSummaryParts.push(formattedVariantDate);
   }
@@ -3181,15 +3179,6 @@ export function VariantModal({
         ) : null}
       </Modal.Body>
       <Modal.Footer>
-        <div className="me-auto text-muted small">
-          <div>
-            Última modificación: {variantUpdatedByLabel}
-            {variantUpdatedAtLabel ? ` · ${variantUpdatedAtLabel}` : ''}.
-          </div>
-          <div className="session-modal-footer-hint">
-            Este dato indica quién guardó los últimos cambios en esta variante.
-          </div>
-        </div>
         <Button
           variant="outline-primary"
           onClick={handleNavigateToCertificates}
