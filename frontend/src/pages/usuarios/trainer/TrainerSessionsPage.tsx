@@ -3191,12 +3191,23 @@ function selectDefaultDate(entries: TrainerSessionsDateEntry[]): string | null {
   return (upcoming ?? entries[0]).date;
 }
 
+function normalizeDateKey(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.split('T')[0] ?? null;
+}
+
 export default function TrainerSessionsPage() {
   const location = useLocation();
   const { user } = useAuth();
   const locationState = (location.state ?? null) as
-    | { trainerSessionId?: unknown; trainerVariantId?: unknown }
+    | { trainerSessionDate?: unknown; trainerSessionId?: unknown; trainerVariantId?: unknown }
     | null;
+  const preselectedSessionDate =
+    typeof locationState?.trainerSessionDate === 'string'
+      ? normalizeDateKey(locationState.trainerSessionDate)
+      : null;
   const preselectedSessionId =
     typeof locationState?.trainerSessionId === 'string' ? locationState.trainerSessionId : null;
   const preselectedVariantId =
@@ -3246,6 +3257,10 @@ export default function TrainerSessionsPage() {
 
   const preselectedDate = useMemo(() => {
     if (!dateEntries.length) return null;
+    if (preselectedSessionDate) {
+      const entry = dateEntries.find((dateEntry) => dateEntry.date === preselectedSessionDate);
+      if (entry) return entry.date;
+    }
     if (preselectedSessionId) {
       const entry = dateEntries.find((dateEntry) =>
         dateEntry.sessions.some((session) => session.sessionId === preselectedSessionId),
@@ -3259,7 +3274,7 @@ export default function TrainerSessionsPage() {
       if (entry) return entry.date;
     }
     return null;
-  }, [dateEntries, preselectedSessionId, preselectedVariantId]);
+  }, [dateEntries, preselectedSessionDate, preselectedSessionId, preselectedVariantId]);
 
   useEffect(() => {
     if (!dateEntries.length) {
