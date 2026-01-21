@@ -6,6 +6,7 @@ import { ensureMadridTimezone } from './_shared/timezone';
 
 const CHANNEL_ID = 'C063C7QRHK4';
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
+const SLACK_SENDER_NAME = 'ERP GEP Group';
 
 const VACATION_REASON_BY_TYPE: Record<string, string> = {
   V: 'Vacaciones',
@@ -85,7 +86,11 @@ async function postSlackMessage(token: string, text: string): Promise<void> {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json; charset=utf-8',
     },
-    body: JSON.stringify({ channel: CHANNEL_ID, text }),
+    body: JSON.stringify({
+      channel: CHANNEL_ID,
+      text,
+      username: SLACK_SENDER_NAME,
+    }),
   });
 
   const payload = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
