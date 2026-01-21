@@ -15,6 +15,7 @@ import { getPrisma } from './_shared/prisma';
 import { errorResponse, successResponse } from './_shared/response';
 import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
 import { toMadridISOString } from './_shared/timezone';
+import { fetchLatestAuditEntries, logAudit, resolveUserIdFromEvent } from './_shared/audit-log';
 import {
   getVariantResourceColumnsSupport,
   isVariantResourceColumnError,
@@ -1072,6 +1073,7 @@ type VariantRecord = {
   unidad_links?: VariantUnitLink[];
   created_at: Date | string | null;
   updated_at: Date | string | null;
+  updated_by?: string | null;
 };
 
 type ProductRecord = {
@@ -1419,6 +1421,40 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
   }
 }
 
+function buildVariantAuditSnapshot(input: {
+  id: string;
+  name: string | null;
+  status: string | null;
+  finalizar: string | null;
+  price: Decimal | string | null;
+  stock: number | null;
+  stock_status: string | null;
+  sede: string | null;
+  date: Date | string | null;
+  trainer_id?: string | null;
+  sala_id?: string | null;
+  unidad_movil_id?: string | null;
+  trainer_ids?: string[];
+  unidad_movil_ids?: string[];
+}) {
+  return {
+    id: input.id,
+    name: input.name ?? null,
+    status: input.status ?? null,
+    finalizar: input.finalizar ?? null,
+    price: input.price == null ? null : String(input.price),
+    stock: input.stock ?? null,
+    stock_status: input.stock_status ?? null,
+    sede: input.sede ?? null,
+    date: toMadridISOString(input.date ?? null),
+    trainer_id: input.trainer_id ?? null,
+    sala_id: input.sala_id ?? null,
+    unidad_movil_id: input.unidad_movil_id ?? null,
+    trainer_ids: Array.isArray(input.trainer_ids) ? input.trainer_ids : [],
+    unidad_movil_ids: Array.isArray(input.unidad_movil_ids) ? input.unidad_movil_ids : [],
+  };
+}
+
 function normalizeVariant(record: VariantRecord) {
   const price =
     record.price == null ? null : typeof record.price === 'string' ? record.price : record.price.toString();
@@ -1606,6 +1642,7 @@ function normalizeVariant(record: VariantRecord) {
     unidades: unitRecords,
     created_at: toMadridISOString(record.created_at),
     updated_at: toMadridISOString(record.updated_at),
+    updated_by: record.updated_by ?? null,
   } as const;
 }
 
@@ -1751,6 +1788,8 @@ export const handler = createHttpHandler<any>(async (request) => {
     if (!Object.keys(updates).length && !hasResourceArrayUpdates)
       return errorResponse('VALIDATION_ERROR', 'No se proporcionaron cambios', 400);
 
+    const auditUserIdPromise = resolveUserIdFromEvent(request.event, prisma);
+
     const existing = await prisma.variants.findUnique({
       where: { id: variantId },
       select: {
@@ -1801,6 +1840,23 @@ export const handler = createHttpHandler<any>(async (request) => {
     if (trimmedExistingUnidadId && !normalizedExistingUnitIds.includes(trimmedExistingUnidadId)) {
       normalizedExistingUnitIds.unshift(trimmedExistingUnidadId);
     }
+
+    const auditBefore = buildVariantAuditSnapshot({
+      id: existing.id,
+      name: existing.name ?? null,
+      status: existing.status ?? null,
+      finalizar: existing.finalizar ?? null,
+      price: existing.price ?? null,
+      stock: existing.stock ?? null,
+      stock_status: existing.stock_status ?? null,
+      sede: existing.sede ?? null,
+      date: existing.date ?? null,
+      trainer_id: existing.trainer_id ?? null,
+      sala_id: existing.sala_id ?? null,
+      unidad_movil_id: existing.unidad_movil_id ?? null,
+      trainer_ids: normalizedExistingTrainerIds,
+      unidad_movil_ids: normalizedExistingUnitIds,
+    });
 
     const nextTrainerIds = trainerIdsUpdate !== undefined ? trainerIdsUpdate : normalizedExistingTrainerIds;
     const nextUnidadIds = unidadIdsUpdate !== undefined ? unidadIdsUpdate : normalizedExistingUnitIds;
@@ -1933,6 +1989,41 @@ export const handler = createHttpHandler<any>(async (request) => {
         unidad_links: refreshedUnitAssignments.get(variantId) ?? [],
       } as VariantRecord);
 
+    if (enrichedRefreshed) {
+      const auditAfter = buildVariantAuditSnapshot({
+        id: enrichedRefreshed.id,
+        name: enrichedRefreshed.name ?? null,
+        status: enrichedRefreshed.status ?? null,
+        finalizar: enrichedRefreshed.finalizar ?? null,
+        price: enrichedRefreshed.price ?? null,
+        stock: enrichedRefreshed.stock ?? null,
+        stock_status: enrichedRefreshed.stock_status ?? null,
+        sede: enrichedRefreshed.sede ?? null,
+        date: enrichedRefreshed.date ?? null,
+        trainer_id: enrichedRefreshed.trainer_id ?? null,
+        sala_id: enrichedRefreshed.sala_id ?? null,
+        unidad_movil_id: enrichedRefreshed.unidad_movil_id ?? null,
+        trainer_ids: nextTrainerIds,
+        unidad_movil_ids: nextUnidadIds,
+      });
+
+      await logAudit({
+        userId: await auditUserIdPromise,
+        action: 'variant.updated',
+        entityType: 'variant',
+        entityId: variantId,
+        before: auditBefore,
+        after: auditAfter,
+      });
+
+      const auditMap = await fetchLatestAuditEntries({
+        prisma,
+        entityType: 'variant',
+        entityIds: [variantId],
+      });
+      enrichedRefreshed.updated_by = auditMap.get(variantId)?.userName ?? null;
+    }
+
     return successResponse({ ok: true, variant: enrichedRefreshed ? normalizeVariant(enrichedRefreshed) : null });
   }
 
@@ -2001,10 +2092,31 @@ export const handler = createHttpHandler<any>(async (request) => {
       unidad_links: unitAssignments.get(variantId) ?? [],
     };
 
+    const auditMap = await fetchLatestAuditEntries({
+      prisma,
+      entityType: 'variant',
+      entityIds: [variantId],
+    });
+    enrichedVariant.updated_by = auditMap.get(variantId)?.userName ?? null;
+
     return successResponse({ variant: normalizeVariant(enrichedVariant) });
   }
 
   const productsRaw = await findProducts(prisma);
-  const products = productsRaw.map(normalizeProduct);
+  const variantIds = productsRaw.flatMap((product) => product.variants.map((variant) => variant.id));
+  const auditMap = await fetchLatestAuditEntries({
+    prisma,
+    entityType: 'variant',
+    entityIds: variantIds,
+  });
+  const products = productsRaw
+    .map((product) => ({
+      ...product,
+      variants: product.variants.map((variant) => ({
+        ...variant,
+        updated_by: auditMap.get(variant.id)?.userName ?? null,
+      })),
+    }))
+    .map(normalizeProduct);
   return successResponse({ products });
 });

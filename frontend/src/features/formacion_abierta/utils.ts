@@ -321,6 +321,7 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
     unidades,
     created_at: input?.created_at ?? null,
     updated_at: input?.updated_at ?? null,
+    updated_by: toTrimmedString(input?.updated_by) ?? null,
   } satisfies VariantInfo;
 }
 

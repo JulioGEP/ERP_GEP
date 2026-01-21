@@ -415,6 +415,16 @@ body > .modal-backdrop.show:nth-of-type(n + 3) {
   padding: 2rem;
 }
 
+.session-modal-footer {
+  background-color: #f5f5f5;
+  border-top: none;
+  padding: 0 2rem 1.5rem;
+}
+
+.session-modal-footer-hint {
+  font-size: 0.75rem;
+}
+
 .session-modal-title {
   font-size: 1.45rem;
   line-height: 1.25;
