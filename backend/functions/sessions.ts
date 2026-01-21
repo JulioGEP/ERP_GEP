@@ -478,6 +478,14 @@ function normalizeSession(row: SessionRecord) {
 
 type NormalizedSession = ReturnType<typeof normalizeSession>;
 
+const SESSION_LAST_UPDATE_ACTIONS = [
+  'session.created',
+  'session.trainers.updated',
+  'session.dates.updated',
+  'session.mobile_units.updated',
+  'session.address.updated',
+];
+
 async function attachSessionAuditInfo(
   prisma: Prisma.TransactionClient | PrismaClient,
   sessions: NormalizedSession[],
@@ -487,6 +495,7 @@ async function attachSessionAuditInfo(
     prisma,
     entityType: 'session',
     entityIds: sessionIds,
+    actions: SESSION_LAST_UPDATE_ACTIONS,
   });
 
   return sessions.map((session) => ({
@@ -509,6 +518,54 @@ function buildSessionAuditSnapshot(session: ReturnType<typeof normalizeSession>)
     trainer_ids: session.trainer_ids,
     unidad_movil_ids: session.unidad_movil_ids,
   };
+}
+
+function areStringArraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((value, index) => value === sortedB[index]);
+}
+
+function buildSessionFieldAuditEntries(
+  before: ReturnType<typeof buildSessionAuditSnapshot>,
+  after: ReturnType<typeof buildSessionAuditSnapshot>,
+) {
+  const entries: Array<{ action: string; before: Record<string, unknown>; after: Record<string, unknown> }> = [];
+
+  if (!areStringArraysEqual(before.trainer_ids, after.trainer_ids)) {
+    entries.push({
+      action: 'session.trainers.updated',
+      before: { trainer_ids: before.trainer_ids },
+      after: { trainer_ids: after.trainer_ids },
+    });
+  }
+
+  if (before.fecha_inicio_utc !== after.fecha_inicio_utc || before.fecha_fin_utc !== after.fecha_fin_utc) {
+    entries.push({
+      action: 'session.dates.updated',
+      before: { fecha_inicio_utc: before.fecha_inicio_utc, fecha_fin_utc: before.fecha_fin_utc },
+      after: { fecha_inicio_utc: after.fecha_inicio_utc, fecha_fin_utc: after.fecha_fin_utc },
+    });
+  }
+
+  if (!areStringArraysEqual(before.unidad_movil_ids, after.unidad_movil_ids)) {
+    entries.push({
+      action: 'session.mobile_units.updated',
+      before: { unidad_movil_ids: before.unidad_movil_ids },
+      after: { unidad_movil_ids: after.unidad_movil_ids },
+    });
+  }
+
+  if (before.direccion !== after.direccion) {
+    entries.push({
+      action: 'session.address.updated',
+      before: { direccion: before.direccion },
+      after: { direccion: after.direccion },
+    });
+  }
+
+  return entries;
 }
 function buildNombreBase(name?: string | null, code?: string | null): string {
   const fallback = 'Sesión';
@@ -1824,6 +1881,19 @@ if (method === 'GET') {
       if (beforeJson !== afterJson) {
         try {
           const auditUserId = await auditUserIdPromise;
+          const fieldAuditEntries = buildSessionFieldAuditEntries(auditBeforeSnapshot, auditAfterSnapshot);
+
+          for (const entry of fieldAuditEntries) {
+            await logAudit({
+              userId: auditUserId,
+              action: entry.action,
+              entityType: 'session',
+              entityId: sessionIdFromPath,
+              before: entry.before as JsonValue,
+              after: entry.after as JsonValue,
+            });
+          }
+
           await logAudit({
             userId: auditUserId,
             action: 'session.updated',
