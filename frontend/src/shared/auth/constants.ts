@@ -50,6 +50,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
 export const DEFAULT_ROUTE_ORDER = [
   '/usuarios/trainer/dashboard',
   '/usuarios/trainer/sesiones',
+  '/usuarios/trainer/calendario',
   '/usuarios/trainer/informes',
   '/usuarios/trainer/informes/informes',
   '/usuarios/trainer/informes/formacion',
