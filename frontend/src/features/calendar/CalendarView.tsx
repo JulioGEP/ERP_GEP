@@ -132,6 +132,8 @@ type CalendarViewProps = {
   onNotify?: (toast: ToastParams) => void;
   onSessionOpen?: (session: CalendarSession) => void;
   onVariantOpen?: (variant: CalendarVariantEvent) => void;
+  sessionFilter?: (session: CalendarSession) => boolean;
+  variantFilter?: (variant: CalendarVariantEvent) => boolean;
   title?: string;
   mode?: CalendarMode;
   initialView?: CalendarViewType;
@@ -993,6 +995,8 @@ export function CalendarView({
   onNotify,
   onSessionOpen,
   onVariantOpen,
+  sessionFilter,
+  variantFilter,
   title = 'Calendario',
   mode = 'sessions',
   initialView = 'month',
@@ -1065,12 +1069,15 @@ export function CalendarView({
   });
 
   const sessions = useMemo(() => {
-    const data = sessionsQuery.data?.sessions ?? [];
-    if (!normalizedTrainerId) {
-      return data;
+    let data = sessionsQuery.data?.sessions ?? [];
+    if (normalizedTrainerId) {
+      data = data.filter((session) => session.trainers.some((trainer) => trainer.id === normalizedTrainerId));
     }
-    return data.filter((session) => session.trainers.some((trainer) => trainer.id === normalizedTrainerId));
-  }, [sessionsQuery.data?.sessions, normalizedTrainerId]);
+    if (sessionFilter) {
+      data = data.filter((session) => sessionFilter(session));
+    }
+    return data;
+  }, [sessionsQuery.data?.sessions, normalizedTrainerId, sessionFilter]);
   const rawVariants = includeVariants ? variantsQuery.data?.variants ?? [] : [];
 
   const variants = useMemo(() => {
@@ -1088,8 +1095,11 @@ export function CalendarView({
         ),
       );
     }
+    if (variantFilter) {
+      output = output.filter((variant) => variantFilter(variant));
+    }
     return output;
-  }, [includeVariants, mode, rawVariants, normalizedTrainerId]);
+  }, [includeVariants, mode, rawVariants, normalizedTrainerId, variantFilter]);
 
   const productOptionsQuery = useQuery({
     queryKey: ['calendar-filter-products'],

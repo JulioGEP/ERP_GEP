@@ -28,6 +28,7 @@ import type { CertificadosPageProps } from '../pages/certificados/CertificadosPa
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
 import type { ConfirmacionesPageProps } from '../pages/recursos/ConfirmacionesPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
+import type { TrainerCalendarPageProps } from '../pages/usuarios/trainer/TrainerCalendarPage';
 import { useAuth } from '../context/AuthContext';
 import { fetchTrainers } from '../features/recursos/api';
 
@@ -134,6 +135,7 @@ type AppRouterProps = {
   certificadosPageProps: CertificadosPageProps;
   recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps;
   usersPageProps: UsersPageProps;
+  trainerCalendarPageProps: TrainerCalendarPageProps;
   defaultRedirectPath: string;
   knownPaths: ReadonlySet<string>;
   activePathStorageKey: string;
@@ -165,6 +167,7 @@ export function AppRouter({
   certificadosPageProps,
   recursosFormacionAbiertaPageProps,
   usersPageProps,
+  trainerCalendarPageProps,
   defaultRedirectPath,
   knownPaths,
   activePathStorageKey,
@@ -505,7 +508,7 @@ export function AppRouter({
             <GuardedRoute
               path="/usuarios/trainer/calendario"
               roles={['Formador']}
-              element={<TrainerCalendarPage />}
+              element={<TrainerCalendarPage {...trainerCalendarPageProps} />}
             />
           }
         />
