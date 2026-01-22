@@ -54,6 +54,7 @@ import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovil
 import type { PorFormadorPageProps } from '../pages/calendario/PorFormadorPage';
 import type { PorEmpresaPageProps } from '../pages/calendario/PorEmpresaPage';
 import type { PlanificacionPageProps } from '../pages/calendario/PlanificacionPage';
+import type { TrainerCalendarPageProps } from '../pages/usuarios/trainer/TrainerCalendarPage';
 import type { FormadoresBomberosPageProps } from '../pages/recursos/FormadoresBomberosPage';
 import type { UnidadesMovilesPageProps } from '../pages/recursos/UnidadesMovilesPage';
 import type { SalasPageProps } from '../pages/recursos/SalasPage';
@@ -1586,6 +1587,12 @@ export default function AuthenticatedApp() {
     onVariantOpen: handleOpenCalendarVariant,
   };
 
+  const trainerCalendarPageProps: TrainerCalendarPageProps = {
+    onNotify: pushToast,
+    onSessionOpen: handleOpenCalendarSession,
+    onVariantOpen: handleOpenCalendarVariant,
+  };
+
   const formadoresBomberosPageProps: FormadoresBomberosPageProps = {
     onNotify: pushToast,
   };
@@ -1791,6 +1798,7 @@ export default function AuthenticatedApp() {
             certificadosPageProps={certificadosPageProps}
             recursosFormacionAbiertaPageProps={recursosFormacionAbiertaPageProps}
             usersPageProps={usersPageProps}
+            trainerCalendarPageProps={trainerCalendarPageProps}
             defaultRedirectPath={homePath}
             knownPaths={allowedPaths}
             activePathStorageKey={ACTIVE_PATH_STORAGE_KEY}
