@@ -4,8 +4,10 @@ import { COMMON_HEADERS } from './_shared/response';
 import { buildMadridDateTime } from './_shared/time';
 import { ensureMadridTimezone } from './_shared/timezone';
 
-const CHANNEL_ID = 'C063C7QRHK4';
+const DEFAULT_CHANNEL_ID = 'C063C7QRHK4';
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
+const SLACK_CHANNEL_LIST_URL = 'https://slack.com/api/conversations.list';
+const SLACK_CHANNEL_JOIN_URL = 'https://slack.com/api/conversations.join';
 const SLACK_SENDER_NAME = 'ERP GEP Group';
 
 const VACATION_REASON_BY_TYPE: Record<string, string> = {
@@ -79,7 +81,72 @@ function buildDaySection(label: string, entries: DayEntry[]): string {
   return `${label} -\n${lines.join('\n')}`;
 }
 
-async function postSlackMessage(token: string, text: string): Promise<void> {
+async function resolveChannelId(token: string): Promise<string> {
+  const envChannelId = process.env.SLACK_CHANNEL_ID?.trim();
+  if (envChannelId) {
+    return envChannelId;
+  }
+
+  const channelName = process.env.SLACK_CHANNEL_NAME?.trim();
+  if (!channelName) {
+    return DEFAULT_CHANNEL_ID;
+  }
+
+  const response = await fetch(SLACK_CHANNEL_LIST_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify({ exclude_archived: true, limit: 1000, types: 'public_channel,private_channel' }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | { ok?: boolean; channels?: { id: string; name: string }[]; error?: string }
+    | null;
+
+  const normalized = channelName.replace(/^#/, '').toLowerCase();
+  const found = payload?.channels?.find((channel) => channel.name.toLowerCase() === normalized);
+  if (response.ok && payload?.ok && found) {
+    return found.id;
+  }
+
+  console.error('[slack-daily-availability] No se pudo resolver el canal Slack', {
+    status: response.status,
+    error: payload?.error ?? 'unknown_error',
+    channelName,
+  });
+
+  return DEFAULT_CHANNEL_ID;
+}
+
+async function ensureChannelMembership(token: string, channelId: string): Promise<void> {
+  const response = await fetch(SLACK_CHANNEL_JOIN_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify({ channel: channelId }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+  if (response.ok && payload?.ok) {
+    return;
+  }
+
+  if (payload?.error && ['already_in_channel', 'method_not_supported_for_channel_type'].includes(payload.error)) {
+    return;
+  }
+
+  console.error('[slack-daily-availability] No se pudo unir el bot al canal Slack', {
+    status: response.status,
+    error: payload?.error ?? 'unknown_error',
+    channelId,
+  });
+}
+
+async function postSlackMessage(token: string, channelId: string, text: string): Promise<void> {
   const response = await fetch(SLACK_API_URL, {
     method: 'POST',
     headers: {
@@ -87,7 +154,7 @@ async function postSlackMessage(token: string, text: string): Promise<void> {
       'Content-Type': 'application/json; charset=utf-8',
     },
     body: JSON.stringify({
-      channel: CHANNEL_ID,
+      channel: channelId,
       text,
       username: SLACK_SENDER_NAME,
     }),
@@ -99,6 +166,7 @@ async function postSlackMessage(token: string, text: string): Promise<void> {
     console.error('[slack-daily-availability] Error enviando mensaje a Slack', {
       status: response.status,
       error: payload?.error ?? 'unknown_error',
+      channelId,
     });
   }
 }
@@ -208,7 +276,9 @@ export const handler: Handler = async () => {
     buildDaySection('Mañana', tomorrowEntries),
   ].join('\n');
 
-  await postSlackMessage(token, message);
+  const channelId = await resolveChannelId(token);
+  await ensureChannelMembership(token, channelId);
+  await postSlackMessage(token, channelId, message);
 
   return {
     statusCode: 200,
