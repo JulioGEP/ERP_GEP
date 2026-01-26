@@ -2,7 +2,6 @@ import type { Handler } from '@netlify/functions';
 import { COMMON_HEADERS, preflightResponse } from './_shared/response';
 
 const SLACK_API_BASE = 'https://slack.com/api';
-const SLACK_USER_EMAIL = 'erp@gepgroup.es';
 
 type SlackApiResponse = {
   ok?: boolean;
@@ -51,39 +50,19 @@ async function slackRequest(
   return { response, data };
 }
 
-async function fetchSlackUserId(token: string): Promise<string> {
-  const { response, data } = await slackRequest(
-    token,
-    `users.lookupByEmail?email=${encodeURIComponent(SLACK_USER_EMAIL)}`,
-  );
-
-  if (!response.ok || !data.ok) {
-    const message = data.error ? `Slack error: ${data.error}` : 'No se pudo resolver el usuario de Slack.';
-    throw new Error(message);
-  }
-
-  const userId = (data.user as { id?: string } | undefined)?.id;
-  if (!userId) {
-    throw new Error('No se encontró el usuario de Slack.');
-  }
-
-  return userId;
-}
-
-async function fetchSlackChannels(token: string, userId: string) {
+async function fetchSlackChannels(token: string) {
   const channels: SlackChannel[] = [];
   let cursor: string | undefined;
 
   do {
     const params = new URLSearchParams({
-      user: userId,
       types: 'public_channel,private_channel',
       exclude_archived: 'true',
       limit: '200',
     });
     if (cursor) params.set('cursor', cursor);
 
-    const { response, data } = await slackRequest(token, `users.conversations?${params.toString()}`);
+    const { response, data } = await slackRequest(token, `conversations.list?${params.toString()}`);
 
     if (!response.ok || !data.ok) {
       const message = data.error ? `Slack error: ${data.error}` : 'No se pudieron listar los canales de Slack.';
@@ -136,8 +115,7 @@ export const handler: Handler = async (event) => {
 
   try {
     if (event.httpMethod === 'GET') {
-      const userId = await fetchSlackUserId(token);
-      const channels = await fetchSlackChannels(token, userId);
+      const channels = await fetchSlackChannels(token);
       return jsonResponse(200, {
         ok: true,
         channels: channels.map((channel) => ({
