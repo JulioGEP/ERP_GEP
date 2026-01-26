@@ -23,6 +23,8 @@ import {
   applyBulkVacationDay,
   fetchVacationRequests,
   fetchVacationsSummary,
+  sendSlackAvailabilityNotification,
+  type SlackAvailabilityResponse,
   type VacationSummaryUser,
   type VacationType,
   type UserVacationDay,
@@ -37,6 +39,7 @@ import {
 import { VacationManagerModal } from './UsersPage';
 
 const MONTH_FORMATTER = new Intl.DateTimeFormat('es-ES', { month: 'long' });
+const DEFAULT_SLACK_CHANNEL_ID = 'C063C7QRHK4';
 
 function buildIsoDate(year: number, monthIndex: number, day: number): string {
   return new Date(Date.UTC(year, monthIndex, day)).toISOString().slice(0, 10);
@@ -72,6 +75,7 @@ export default function UsersVacationsPage() {
   const [bulkUserFilter, setBulkUserFilter] = useState('');
   const [bulkUserListOpen, setBulkUserListOpen] = useState(false);
   const [vacationUser, setVacationUser] = useState<UserSummary | null>(null);
+  const [slackChannelId, setSlackChannelId] = useState(DEFAULT_SLACK_CHANNEL_ID);
   const bulkUserFieldRef = useRef<HTMLDivElement | null>(null);
   const bulkUserPointerInteractingRef = useRef(false);
 
@@ -211,6 +215,29 @@ export default function UsersVacationsPage() {
     onSettled: () => setRequestActionId(null),
   });
 
+  const slackNotificationMutation = useMutation({
+    mutationFn: sendSlackAvailabilityNotification,
+    onSuccess: (response: SlackAvailabilityResponse) => {
+      let message = 'Comunicación enviada a Slack.';
+      if (response.notified) {
+        message = `Comunicación enviada a Slack${response.channelId ? ` (${response.channelId})` : ''}.`;
+      } else if (response.skipped) {
+        const reason = response.reason;
+        if (reason === 'no_absences') {
+          message = 'No hay ausencias para notificar en Slack.';
+        } else if (reason === 'no_users') {
+          message = 'No hay personas disponibles para notificar en Slack.';
+        } else if (reason === 'outside_schedule') {
+          message = 'El envío está fuera del horario programado.';
+        }
+      }
+      setFeedback({ variant: 'success', message });
+    },
+    onError: () => {
+      setFeedback({ variant: 'danger', message: 'No se pudo enviar la comunicación a Slack.' });
+    },
+  });
+
   const requests = requestsQuery.data ?? [];
 
   const handleUserToggle = (userId: string, checked: boolean) => {
@@ -264,6 +291,11 @@ export default function UsersVacationsPage() {
   const handleBulkSubmit = () => {
     if (!bulkDates.length || !bulkType || selectedUsers.length === 0) return;
     void bulkMutation.mutate({ dates: bulkDates, type: bulkType, userIds: selectedUsers });
+  };
+
+  const handleSendSlackNotification = () => {
+    const channelId = slackChannelId.trim() || DEFAULT_SLACK_CHANNEL_ID;
+    slackNotificationMutation.mutate({ channelId, force: true });
   };
 
   const roles = useMemo(() => {
@@ -344,6 +376,40 @@ export default function UsersVacationsPage() {
       </div>
 
       {feedback ? <Alert variant={feedback.variant}>{feedback.message}</Alert> : null}
+
+      <Card>
+        <Card.Header>
+          <div className="fw-semibold">Comunicación de disponibilidad en Slack</div>
+          <div className="text-muted small">
+            Envía manualmente el resumen de vacaciones y teletrabajo del equipo.
+          </div>
+        </Card.Header>
+        <Card.Body>
+          <Row className="g-3 align-items-end">
+            <Col md={8}>
+              <Form.Label>Id del canal de Slack</Form.Label>
+              <Form.Control
+                type="text"
+                value={slackChannelId}
+                onChange={(event) => setSlackChannelId(event.target.value)}
+                placeholder={DEFAULT_SLACK_CHANNEL_ID}
+              />
+              <div className="text-muted small mt-2">
+                Se utilizará este canal para enviar el mensaje de disponibilidad del equipo.
+              </div>
+            </Col>
+            <Col md={4}>
+              <Button
+                className="w-100"
+                onClick={handleSendSlackNotification}
+                disabled={slackNotificationMutation.isPending}
+              >
+                {slackNotificationMutation.isPending ? 'Enviando…' : 'Enviar'}
+              </Button>
+            </Col>
+          </Row>
+        </Card.Body>
+      </Card>
 
       <Card className="mb-4">
         <Card.Header className="d-flex justify-content-between align-items-start flex-wrap gap-2">

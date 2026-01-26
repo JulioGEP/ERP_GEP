@@ -171,7 +171,21 @@ async function postSlackMessage(token: string, channelId: string, text: string):
   }
 }
 
-export const handler: Handler = async () => {
+type SlackAvailabilityRequest = {
+  channelId?: string;
+  force?: boolean;
+};
+
+function parseSlackAvailabilityRequest(rawBody?: string | null): SlackAvailabilityRequest {
+  if (!rawBody) return {};
+  try {
+    return JSON.parse(rawBody) as SlackAvailabilityRequest;
+  } catch {
+    return {};
+  }
+}
+
+export const handler: Handler = async (event) => {
   ensureMadridTimezone();
   const token = process.env.SLACK_TOKEN?.trim();
 
@@ -184,8 +198,16 @@ export const handler: Handler = async () => {
     };
   }
 
+  const request = parseSlackAvailabilityRequest(event?.body);
+  const force = Boolean(request.force || event?.queryStringParameters?.force === 'true');
+  const requestedChannelId =
+    request.channelId?.trim() ||
+    event?.queryStringParameters?.channelId?.trim() ||
+    event?.queryStringParameters?.channel?.trim() ||
+    '';
+
   const nowParts = getMadridParts(new Date());
-  if (nowParts.hour !== 7) {
+  if (!force && nowParts.hour !== 7) {
     return {
       statusCode: 200,
       headers: COMMON_HEADERS,
@@ -276,13 +298,13 @@ export const handler: Handler = async () => {
     buildDaySection('Mañana', tomorrowEntries),
   ].join('\n');
 
-  const channelId = await resolveChannelId(token);
+  const channelId = requestedChannelId || (await resolveChannelId(token));
   await ensureChannelMembership(token, channelId);
   await postSlackMessage(token, channelId, message);
 
   return {
     statusCode: 200,
     headers: COMMON_HEADERS,
-    body: JSON.stringify({ ok: true, notified: true }),
+    body: JSON.stringify({ ok: true, notified: true, channelId }),
   };
 };

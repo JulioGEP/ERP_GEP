@@ -73,6 +73,14 @@ export type VacationRequestItem = {
   createdAt: string;
 };
 
+export type SlackAvailabilityResponse = {
+  ok?: boolean;
+  notified?: boolean;
+  skipped?: boolean;
+  reason?: string;
+  channelId?: string;
+};
+
 export async function fetchUserVacations(userId: string, year?: number): Promise<UserVacationsResponse> {
   const searchParams = new URLSearchParams({ userId });
   if (year) searchParams.set('year', String(year));
@@ -138,4 +146,11 @@ export async function deleteVacationRequest(id: string): Promise<{ message: stri
 
 export async function acceptVacationRequest(id: string): Promise<{ message: string; appliedDates: string[] }> {
   return patchJson<{ message: string; appliedDates: string[] }>('/vacation-requests', { id });
+}
+
+export async function sendSlackAvailabilityNotification(payload: {
+  channelId?: string;
+  force?: boolean;
+}): Promise<SlackAvailabilityResponse> {
+  return postJson<SlackAvailabilityResponse>('/slack-daily-availability', payload);
 }
