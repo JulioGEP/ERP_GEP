@@ -28,6 +28,7 @@ import {
   type UserVacationDay,
   type VacationRequestItem,
 } from '../../api/userVacations';
+import { fetchSlackChannels, sendSlackMessage, type SlackChannel } from '../../api/slack';
 import { type UserSummary } from '../../api/users';
 import {
   VACATION_TYPE_COLORS,
@@ -74,6 +75,11 @@ export default function UsersVacationsPage() {
   const [vacationUser, setVacationUser] = useState<UserSummary | null>(null);
   const bulkUserFieldRef = useRef<HTMLDivElement | null>(null);
   const bulkUserPointerInteractingRef = useRef(false);
+  const [slackChannelId, setSlackChannelId] = useState('');
+  const [slackMessage, setSlackMessage] = useState('');
+  const [slackFeedback, setSlackFeedback] = useState<{ variant: 'success' | 'danger'; message: string } | null>(
+    null,
+  );
 
   const summaryQuery = useQuery({
     queryKey: ['vacations-summary', year],
@@ -83,6 +89,11 @@ export default function UsersVacationsPage() {
   const requestsQuery = useQuery<VacationRequestItem[]>({
     queryKey: ['vacation-requests'],
     queryFn: fetchVacationRequests,
+  });
+
+  const slackChannelsQuery = useQuery({
+    queryKey: ['slack-channels'],
+    queryFn: fetchSlackChannels,
   });
 
   const renderVacationTypeLabel = (type: VacationType) => {
@@ -123,6 +134,11 @@ export default function UsersVacationsPage() {
 
     setSelectedUsers(users.map((user) => user.userId));
   }, [selectionManuallyChanged, selectedUsers.length, users]);
+
+  useEffect(() => {
+    if (slackChannelId || !slackChannelsQuery.data?.channels.length) return;
+    setSlackChannelId(slackChannelsQuery.data.channels[0].id);
+  }, [slackChannelId, slackChannelsQuery.data?.channels]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -211,6 +227,18 @@ export default function UsersVacationsPage() {
     onSettled: () => setRequestActionId(null),
   });
 
+  const slackSendMutation = useMutation({
+    mutationFn: (payload: { channelId: string; text: string }) => sendSlackMessage(payload),
+    onSuccess: () => {
+      setSlackFeedback({ variant: 'success', message: 'Mensaje enviado correctamente a Slack.' });
+      setSlackMessage('');
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'No se pudo enviar el mensaje a Slack.';
+      setSlackFeedback({ variant: 'danger', message });
+    },
+  });
+
   const requests = requestsQuery.data ?? [];
 
   const handleUserToggle = (userId: string, checked: boolean) => {
@@ -284,6 +312,13 @@ export default function UsersVacationsPage() {
     .length;
   const summaryYear = summaryQuery.data?.year ?? year;
   const generatedAt = summaryQuery.data?.generatedAt ?? null;
+
+  const slackChannels = slackChannelsQuery.data?.channels ?? [];
+  const handleSlackSubmit = () => {
+    const trimmed = slackMessage.trim();
+    if (!trimmed || !slackChannelId) return;
+    void slackSendMutation.mutate({ channelId: slackChannelId, text: trimmed });
+  };
 
   const handleOpenVacationModal = (user: VacationSummaryUser) => {
     const [firstName, ...rest] = user.fullName.split(' ');
@@ -433,6 +468,63 @@ export default function UsersVacationsPage() {
               <div className="p-3 text-muted">No hay peticiones pendientes.</div>
             )
           ) : null}
+        </Card.Body>
+      </Card>
+
+      <Card>
+        <Card.Header>
+          <div className="fw-semibold">Mensajes de Slack</div>
+          <div className="text-muted small">
+            Envía avisos rápidos desde la cuenta erp@gepgroup.es.
+          </div>
+        </Card.Header>
+        <Card.Body>
+          {slackFeedback ? <Alert variant={slackFeedback.variant}>{slackFeedback.message}</Alert> : null}
+          {slackChannelsQuery.isError ? (
+            <Alert variant="danger" className="mb-3">
+              No se pudieron cargar los canales de Slack.
+            </Alert>
+          ) : null}
+          <Row className="g-3 align-items-end">
+            <Col md={4}>
+              <Form.Label>Canal</Form.Label>
+              <Form.Select
+                value={slackChannelId}
+                onChange={(event) => setSlackChannelId(event.target.value)}
+                disabled={slackChannelsQuery.isLoading || !slackChannels.length}
+              >
+                {slackChannelsQuery.isLoading ? (
+                  <option>Cargando canales…</option>
+                ) : null}
+                {!slackChannelsQuery.isLoading && !slackChannels.length ? (
+                  <option>Sin canales disponibles</option>
+                ) : null}
+                {slackChannels.map((channel: SlackChannel) => (
+                  <option key={channel.id} value={channel.id}>
+                    {channel.isPrivate ? '🔒' : '#'} {channel.name}
+                  </option>
+                ))}
+              </Form.Select>
+            </Col>
+            <Col md={6}>
+              <Form.Label>Mensaje</Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={3}
+                placeholder="Escribe el mensaje que quieres enviar..."
+                value={slackMessage}
+                onChange={(event) => setSlackMessage(event.target.value)}
+              />
+            </Col>
+            <Col md={2} className="d-grid">
+              <Button
+                onClick={handleSlackSubmit}
+                disabled={!slackChannelId || !slackMessage.trim() || slackSendMutation.isPending}
+              >
+                {slackSendMutation.isPending ? 'Enviando…' : 'Enviar'}
+              </Button>
+            </Col>
+          </Row>
         </Card.Body>
       </Card>
 
