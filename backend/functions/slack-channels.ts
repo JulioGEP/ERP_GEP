@@ -26,7 +26,14 @@ export const handler = createHttpHandler<any>(async (request) => {
     return errorResponse('CONFIG_ERROR', 'Slack no está configurado', 500);
   }
 
-  const channels = await listSlackChannels(slackToken, SLACK_AVAILABILITY_USER_EMAIL);
+  let channels;
+  try {
+    channels = await listSlackChannels(slackToken, SLACK_AVAILABILITY_USER_EMAIL);
+  } catch (error) {
+    const message = error instanceof Error && error.message ? error.message : 'Error desconocido';
+    console.error('[slack] Failed to load channels', error);
+    return errorResponse('SLACK_ERROR', `No se pudieron cargar los canales de Slack: ${message}`, 502);
+  }
 
   return successResponse({
     channels: channels.map((channel) => ({
