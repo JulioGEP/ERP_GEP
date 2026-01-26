@@ -6,6 +6,7 @@ const SLACK_API_BASE = 'https://slack.com/api';
 type SlackApiResponse = {
   ok?: boolean;
   error?: string;
+  needed?: string;
   [key: string]: unknown;
 };
 
@@ -21,6 +22,12 @@ type SlackMessageResponse = {
     text?: string;
     ts?: string;
   };
+};
+
+type SlackChannelsResult = {
+  channels: SlackChannel[];
+  warning?: string;
+  neededScopes?: string[];
 };
 
 function jsonResponse(statusCode: number, body: Record<string, unknown>) {
@@ -50,9 +57,11 @@ async function slackRequest(
   return { response, data };
 }
 
-async function fetchSlackChannels(token: string) {
+async function fetchSlackChannels(token: string): Promise<SlackChannelsResult> {
   const channels: SlackChannel[] = [];
   let cursor: string | undefined;
+  let warning: string | undefined;
+  let neededScopes: string[] | undefined;
 
   do {
     const params = new URLSearchParams({
@@ -65,6 +74,18 @@ async function fetchSlackChannels(token: string) {
     const { response, data } = await slackRequest(token, `conversations.list?${params.toString()}`);
 
     if (!response.ok || !data.ok) {
+      if (data.error === 'missing_scope') {
+        const needed = typeof data.needed === 'string' ? data.needed : '';
+        neededScopes = needed
+          .split(',')
+          .map((scope) => scope.trim())
+          .filter(Boolean);
+        warning =
+          neededScopes.length > 0
+            ? `Faltan permisos de Slack para listar canales. Añade estos scopes al token: ${neededScopes.join(', ')}.`
+            : 'Faltan permisos de Slack para listar canales.';
+        break;
+      }
       const message = data.error ? `Slack error: ${data.error}` : 'No se pudieron listar los canales de Slack.';
       throw new Error(message);
     }
@@ -75,7 +96,7 @@ async function fetchSlackChannels(token: string) {
     if (cursor && !cursor.trim().length) cursor = undefined;
   } while (cursor);
 
-  return channels;
+  return { channels, warning, neededScopes };
 }
 
 async function sendSlackMessage(
@@ -115,7 +136,7 @@ export const handler: Handler = async (event) => {
 
   try {
     if (event.httpMethod === 'GET') {
-      const channels = await fetchSlackChannels(token);
+      const { channels, warning, neededScopes } = await fetchSlackChannels(token);
       return jsonResponse(200, {
         ok: true,
         channels: channels.map((channel) => ({
@@ -123,6 +144,8 @@ export const handler: Handler = async (event) => {
           name: channel.name_normalized ?? channel.name,
           isPrivate: Boolean(channel.is_private),
         })),
+        warning: warning ?? null,
+        neededScopes: neededScopes ?? null,
       });
     }
 
