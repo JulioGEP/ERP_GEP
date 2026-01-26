@@ -440,23 +440,25 @@ export default function UsersVacationsPage() {
                           </td>
                           <td>{request.notes?.length ? request.notes : '—'}</td>
                           <td>{new Date(request.createdAt).toLocaleString('es-ES')}</td>
-                          <td className="text-end d-flex justify-content-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline-success"
-                              disabled={disabled}
-                              onClick={() => acceptRequestMutation.mutate(request.id)}
-                            >
-                              {accepting ? 'Aceptando…' : 'Aceptar'}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline-danger"
-                              disabled={disabled}
-                              onClick={() => deleteRequestMutation.mutate(request.id)}
-                            >
-                              {deleting ? 'Eliminando…' : 'Eliminar'}
-                            </Button>
+                          <td className="text-end">
+                            <div className="d-flex justify-content-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline-success"
+                                disabled={disabled}
+                                onClick={() => acceptRequestMutation.mutate(request.id)}
+                              >
+                                {accepting ? 'Aceptando…' : 'Aceptar'}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-danger"
+                                disabled={disabled}
+                                onClick={() => deleteRequestMutation.mutate(request.id)}
+                              >
+                                {deleting ? 'Eliminando…' : 'Eliminar'}
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       );
