@@ -95,6 +95,12 @@ export default function UsersVacationsPage() {
     queryKey: ['slack-channels'],
     queryFn: fetchSlackChannels,
   });
+  const slackWarning = slackChannelsQuery.data?.warning ?? null;
+  const slackErrorMessage = slackChannelsQuery.isError
+    ? slackChannelsQuery.error instanceof Error
+      ? slackChannelsQuery.error.message
+      : 'No se pudieron cargar los canales de Slack.'
+    : null;
 
   const renderVacationTypeLabel = (type: VacationType) => {
     const label = VACATION_TYPE_LABELS[type];
@@ -482,31 +488,42 @@ export default function UsersVacationsPage() {
         </Card.Header>
         <Card.Body>
           {slackFeedback ? <Alert variant={slackFeedback.variant}>{slackFeedback.message}</Alert> : null}
-          {slackChannelsQuery.isError ? (
+          {slackErrorMessage ? (
             <Alert variant="danger" className="mb-3">
-              No se pudieron cargar los canales de Slack.
+              {slackErrorMessage}
+            </Alert>
+          ) : null}
+          {slackWarning ? (
+            <Alert variant="warning" className="mb-3">
+              {slackWarning}
             </Alert>
           ) : null}
           <Row className="g-3 align-items-end">
             <Col md={4}>
-              <Form.Label>Canal</Form.Label>
-              <Form.Select
-                value={slackChannelId}
-                onChange={(event) => setSlackChannelId(event.target.value)}
-                disabled={slackChannelsQuery.isLoading || !slackChannels.length}
-              >
-                {slackChannelsQuery.isLoading ? (
-                  <option>Cargando canales…</option>
-                ) : null}
-                {!slackChannelsQuery.isLoading && !slackChannels.length ? (
-                  <option>Sin canales disponibles</option>
-                ) : null}
-                {slackChannels.map((channel: SlackChannel) => (
-                  <option key={channel.id} value={channel.id}>
-                    {channel.isPrivate ? '🔒' : '#'} {channel.name}
-                  </option>
-                ))}
-              </Form.Select>
+              <Form.Label>{slackChannels.length ? 'Canal' : 'Canal (ID o #nombre)'}</Form.Label>
+              {slackChannels.length ? (
+                <Form.Select
+                  value={slackChannelId}
+                  onChange={(event) => setSlackChannelId(event.target.value)}
+                  disabled={slackChannelsQuery.isLoading}
+                >
+                  {slackChannelsQuery.isLoading ? (
+                    <option>Cargando canales…</option>
+                  ) : null}
+                  {slackChannels.map((channel: SlackChannel) => (
+                    <option key={channel.id} value={channel.id}>
+                      {channel.isPrivate ? '🔒' : '#'} {channel.name}
+                    </option>
+                  ))}
+                </Form.Select>
+              ) : (
+                <Form.Control
+                  value={slackChannelId}
+                  onChange={(event) => setSlackChannelId(event.target.value)}
+                  placeholder="Ej. #general o C0123456789"
+                  disabled={slackChannelsQuery.isLoading}
+                />
+              )}
             </Col>
             <Col md={6}>
               <Form.Label>Mensaje</Form.Label>

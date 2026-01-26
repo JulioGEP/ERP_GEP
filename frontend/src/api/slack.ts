@@ -13,6 +13,8 @@ export type SlackMessagePayload = {
 
 export type SlackChannelsResponse = {
   channels: SlackChannel[];
+  warning?: string | null;
+  neededScopes?: string[] | null;
 };
 
 export type SlackSendMessageResponse = {
