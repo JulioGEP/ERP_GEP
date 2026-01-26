@@ -23,9 +23,6 @@ import {
   applyBulkVacationDay,
   fetchVacationRequests,
   fetchVacationsSummary,
-  fetchSlackChannels,
-  sendSlackAvailability,
-  type SlackChannel,
   type VacationSummaryUser,
   type VacationType,
   type UserVacationDay,
@@ -58,8 +55,6 @@ function formatLocaleDateLabel(dateIso: string): string {
   return new Date(`${dateIso}T00:00:00Z`).toLocaleDateString('es-ES', { timeZone: 'UTC' });
 }
 
-const DEFAULT_SLACK_CHANNEL = 'C063C7QRHK4';
-
 export default function UsersVacationsPage() {
   const queryClient = useQueryClient();
   const currentYear = new Date().getFullYear();
@@ -77,10 +72,6 @@ export default function UsersVacationsPage() {
   const [bulkUserFilter, setBulkUserFilter] = useState('');
   const [bulkUserListOpen, setBulkUserListOpen] = useState(false);
   const [vacationUser, setVacationUser] = useState<UserSummary | null>(null);
-  const [slackChannelId, setSlackChannelId] = useState(DEFAULT_SLACK_CHANNEL);
-  const [slackFeedback, setSlackFeedback] = useState<{ variant: 'success' | 'danger'; message: string } | null>(
-    null,
-  );
   const bulkUserFieldRef = useRef<HTMLDivElement | null>(null);
   const bulkUserPointerInteractingRef = useRef(false);
 
@@ -92,11 +83,6 @@ export default function UsersVacationsPage() {
   const requestsQuery = useQuery<VacationRequestItem[]>({
     queryKey: ['vacation-requests'],
     queryFn: fetchVacationRequests,
-  });
-
-  const slackChannelsQuery = useQuery<SlackChannel[]>({
-    queryKey: ['slack-channels'],
-    queryFn: fetchSlackChannels,
   });
 
   const renderVacationTypeLabel = (type: VacationType) => {
@@ -148,14 +134,6 @@ export default function UsersVacationsPage() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  useEffect(() => {
-    if (!slackChannelsQuery.data?.length) return;
-    const availableIds = new Set(slackChannelsQuery.data.map((channel) => channel.id));
-    if (slackChannelId && availableIds.has(slackChannelId)) return;
-    const fallback = slackChannelsQuery.data.find((channel) => channel.id === DEFAULT_SLACK_CHANNEL);
-    setSlackChannelId(fallback?.id ?? slackChannelsQuery.data[0]?.id ?? '');
-  }, [slackChannelsQuery.data, slackChannelId]);
 
   const bulkMutation = useMutation({
     mutationFn: applyBulkVacationDay,
@@ -233,19 +211,7 @@ export default function UsersVacationsPage() {
     onSettled: () => setRequestActionId(null),
   });
 
-  const slackSendMutation = useMutation({
-    mutationFn: (channelId: string) => sendSlackAvailability({ channelId, force: true }),
-    onMutate: () => setSlackFeedback(null),
-    onSuccess: (payload) => {
-      setSlackFeedback({ variant: 'success', message: payload.message });
-    },
-    onError: () => {
-      setSlackFeedback({ variant: 'danger', message: 'No se pudo enviar el mensaje a Slack.' });
-    },
-  });
-
   const requests = requestsQuery.data ?? [];
-  const slackChannels = slackChannelsQuery.data ?? [];
 
   const handleUserToggle = (userId: string, checked: boolean) => {
     setSelectionManuallyChanged(true);
@@ -774,54 +740,6 @@ export default function UsersVacationsPage() {
             </Button>
           </div>
           <div className="text-muted small mt-2">Se ignorarán automáticamente los usuarios inactivos.</div>
-        </Card.Body>
-      </Card>
-
-      <Card>
-        <Card.Header>
-          <div className="fw-semibold">Notificación de disponibilidad en Slack</div>
-          <div className="text-muted small">
-            Envía manualmente el resumen diario al canal deseado.
-          </div>
-        </Card.Header>
-        <Card.Body>
-          {slackFeedback ? <Alert variant={slackFeedback.variant}>{slackFeedback.message}</Alert> : null}
-          <Row className="g-3 align-items-end">
-            <Col md={8}>
-              <Form.Label>Canal de Slack</Form.Label>
-              <Form.Select
-                value={slackChannelId}
-                onChange={(event) => setSlackChannelId(event.target.value)}
-                disabled={slackChannelsQuery.isLoading || slackChannelsQuery.isError}
-              >
-                <option value="">Selecciona un canal</option>
-                {slackChannels.map((channel) => (
-                  <option key={channel.id} value={channel.id}>
-                    #{channel.name} {channel.isPrivate ? '(privado)' : ''}
-                  </option>
-                ))}
-              </Form.Select>
-              {slackChannelsQuery.isLoading ? (
-                <div className="text-muted small mt-2">Cargando canales…</div>
-              ) : null}
-              {slackChannelsQuery.isError ? (
-                <Alert variant="danger" className="mt-2">
-                  No se pudieron cargar los canales de Slack.
-                </Alert>
-              ) : null}
-            </Col>
-            <Col md={4} className="d-flex justify-content-end">
-              <Button
-                onClick={() => slackSendMutation.mutate(slackChannelId)}
-                disabled={!slackChannelId || slackSendMutation.isPending}
-              >
-                {slackSendMutation.isPending ? 'Enviando…' : 'Enviar a Slack'}
-              </Button>
-            </Col>
-          </Row>
-          <div className="text-muted small mt-2">
-            Se enviará la disponibilidad de hoy y mañana con el usuario erp@geproup.es.
-          </div>
         </Card.Body>
       </Card>
     </div>

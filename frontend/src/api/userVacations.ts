@@ -139,21 +139,3 @@ export async function deleteVacationRequest(id: string): Promise<{ message: stri
 export async function acceptVacationRequest(id: string): Promise<{ message: string; appliedDates: string[] }> {
   return patchJson<{ message: string; appliedDates: string[] }>('/vacation-requests', { id });
 }
-
-export type SlackChannel = {
-  id: string;
-  name: string;
-  isPrivate: boolean;
-};
-
-export async function fetchSlackChannels(): Promise<SlackChannel[]> {
-  const response = await getJson<{ channels: SlackChannel[] }>('/slack-channels');
-  return response.channels ?? [];
-}
-
-export async function sendSlackAvailability(payload: {
-  channelId: string;
-  force?: boolean;
-}): Promise<{ sent: boolean; message: string; channelId: string }> {
-  return postJson<{ sent: boolean; message: string; channelId: string }>('/slack-availability', payload);
-}
