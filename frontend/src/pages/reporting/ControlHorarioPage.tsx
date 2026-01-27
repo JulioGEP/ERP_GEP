@@ -133,10 +133,10 @@ export default function ControlHorarioPage() {
 
     exportToExcel({
       rows: [headerRow, ...rows],
-      fileName: `control_horario_${new Date().toISOString().slice(0, 10)}.xlsx`,
-      sheetName: 'Control Horario',
+      fileName: `control_horas_formadores_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      sheetName: 'Control horas formadores',
       auditEvent: {
-        action: 'reporting.control_horario.export',
+        action: 'reporting.control_horas_formadores.export',
         details: {
           rowCount: rows.length,
         },
@@ -193,7 +193,7 @@ export default function ControlHorarioPage() {
     <section className="py-3">
       <Card className="shadow-sm">
         <Card.Header as="h1" className="h4 mb-0">
-          Control Horario
+          Control horas formadores
         </Card.Header>
         <Card.Body>
           <p className="text-muted">
