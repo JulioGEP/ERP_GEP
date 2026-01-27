@@ -598,7 +598,7 @@ export default function AuthenticatedApp() {
       if (!isFixedTrainer) {
         trainerItems.push({
           key: 'Trainer/Availability',
-          label: 'Mi disponibilidad',
+          label: 'Disponibilidad',
           path: '/usuarios/trainer/disponibilidad',
         });
       }
