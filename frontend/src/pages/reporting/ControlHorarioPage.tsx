@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Card, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { isApiError } from '../../api/client';
@@ -85,6 +85,8 @@ export default function ControlHorarioPage() {
   const [modalState, setModalState] = useState<ModalState | null>(null);
   const [checkInTime, setCheckInTime] = useState('');
   const [checkOutTime, setCheckOutTime] = useState('');
+  const readSelectValue = (event: ChangeEvent<HTMLSelectElement> | null): string =>
+    event?.currentTarget?.value ?? '';
 
   const queryClient = useQueryClient();
 
@@ -318,7 +320,7 @@ export default function ControlHorarioPage() {
                 <Form.Select
                   value={filters.month}
                   onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, month: Number(event.currentTarget.value) }))
+                    setFilters((prev) => ({ ...prev, month: Number(readSelectValue(event)) }))
                   }
                 >
                   {monthOptions.map((option) => (
@@ -333,7 +335,7 @@ export default function ControlHorarioPage() {
                 <Form.Select
                   value={filters.year}
                   onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, year: Number(event.currentTarget.value) }))
+                    setFilters((prev) => ({ ...prev, year: Number(readSelectValue(event)) }))
                   }
                 >
                   {yearOptions.map((year) => (
@@ -347,7 +349,9 @@ export default function ControlHorarioPage() {
                 <Form.Label>Usuario</Form.Label>
                 <Form.Select
                   value={filters.userId}
-                  onChange={(event) => setFilters((prev) => ({ ...prev, userId: event.currentTarget.value }))}
+                  onChange={(event) =>
+                    setFilters((prev) => ({ ...prev, userId: readSelectValue(event) }))
+                  }
                 >
                   <option value="">Todos</option>
                   {people.map((person) => (
@@ -364,7 +368,7 @@ export default function ControlHorarioPage() {
                   onChange={(event) =>
                     setFilters((prev) => ({
                       ...prev,
-                      roleFilter: event.currentTarget.value as 'all' | 'trainer' | 'user',
+                      roleFilter: readSelectValue(event) as 'all' | 'trainer' | 'user',
                     }))
                   }
                 >
