@@ -231,6 +231,12 @@ export default function ControlHorarioPage() {
     content = <Alert variant="danger">{message}</Alert>;
   } else if (!people.length) {
     content = <Alert variant="info">No hay usuarios disponibles para el control horario.</Alert>;
+  } else if (!filteredPeople.length) {
+    content = (
+      <Alert variant="info">
+        No hay resultados para los filtros seleccionados. Ajusta la búsqueda para ver fichajes.
+      </Alert>
+    );
   } else {
     content = (
       <div className="table-responsive">
