@@ -1,4 +1,4 @@
-import { getJson, putJson } from '../../api/client';
+import { getJson, postJson, putJson } from '../../api/client';
 
 function sanitizeText(value: unknown): string | null {
   if (typeof value !== 'string') {
@@ -122,16 +122,29 @@ export async function fetchTrainerSelfHours(
   return getJson<TrainerSelfHoursResponse>(url);
 }
 
-export type ControlHorarioRecord = {
+export type ReportingControlHorarioPerson = {
   id: string;
-  sessionName: string | null;
-  organizationName: string | null;
-  trainerFullName: string;
-  plannedStart: string | null;
-  plannedEnd: string | null;
-  clockIn: string | null;
-  clockOut: string | null;
-  isVariant: boolean;
+  name: string;
+  email: string | null;
+  role: string;
+  isFixedTrainer: boolean;
+};
+
+export type ReportingControlHorarioEntry = {
+  id: string;
+  userId: string;
+  date: string;
+  checkIn: string | null;
+  checkOut: string | null;
+};
+
+export type ReportingControlHorarioResponse = {
+  range: {
+    start: string;
+    end: string;
+  };
+  people: ReportingControlHorarioPerson[];
+  entries: ReportingControlHorarioEntry[];
 };
 
 export type AuditLogEntry = {
@@ -147,41 +160,108 @@ export type AuditLogEntry = {
   after: unknown | null;
 };
 
-function sanitizeControlHorarioRecord(entry: unknown): ControlHorarioRecord | null {
+function sanitizeReportingPerson(entry: unknown): ReportingControlHorarioPerson | null {
   if (!entry || typeof entry !== 'object') {
     return null;
   }
-
   const raw = entry as Record<string, unknown>;
   const id = sanitizeText(raw.id);
-  const trainerFullName =
-    sanitizeText(raw.trainerFullName ?? raw.trainer_full_name) ??
-    sanitizeText(raw.trainerName ?? raw.trainer_name) ??
-    sanitizeText(raw.trainerId ?? raw.trainer_id);
-
-  if (!id || !trainerFullName) {
-    return null;
-  }
-
+  const name = sanitizeText(raw.name);
+  if (!id || !name) return null;
   return {
     id,
-    sessionName: sanitizeText(raw.sessionName ?? raw.session_name),
-    organizationName: sanitizeText(raw.organizationName ?? raw.organization_name),
-    trainerFullName,
-    plannedStart: sanitizeDate(raw.plannedStart ?? raw.planned_start),
-    plannedEnd: sanitizeDate(raw.plannedEnd ?? raw.planned_end),
-    clockIn: sanitizeDate(raw.clockIn ?? raw.clock_in),
-    clockOut: sanitizeDate(raw.clockOut ?? raw.clock_out),
-    isVariant: Boolean(raw.isVariant ?? raw.is_variant),
-  } satisfies ControlHorarioRecord;
+    name,
+    email: sanitizeText(raw.email),
+    role: sanitizeText(raw.role) ?? 'Desconocido',
+    isFixedTrainer: Boolean(raw.isFixedTrainer ?? raw.is_fixed_trainer),
+  };
 }
 
-export async function fetchControlHorarioRecords(): Promise<ControlHorarioRecord[]> {
-  const data = await getJson<{ records?: unknown }>(`/reporting-control-horario`);
-  const entries = Array.isArray(data?.records) ? data.records : [];
-  return entries
-    .map(sanitizeControlHorarioRecord)
-    .filter((record): record is ControlHorarioRecord => record !== null);
+function sanitizeReportingEntry(entry: unknown): ReportingControlHorarioEntry | null {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+  const raw = entry as Record<string, unknown>;
+  const id = sanitizeText(raw.id);
+  const userId = sanitizeText(raw.userId ?? raw.user_id);
+  const date = sanitizeText(raw.date);
+  if (!id || !userId || !date) {
+    return null;
+  }
+  return {
+    id,
+    userId,
+    date,
+    checkIn: sanitizeDate(raw.checkIn ?? raw.check_in),
+    checkOut: sanitizeDate(raw.checkOut ?? raw.check_out),
+  };
+}
+
+export type ReportingControlHorarioFilters = {
+  startDate?: string;
+  endDate?: string;
+};
+
+export async function fetchReportingControlHorario(
+  filters: ReportingControlHorarioFilters = {},
+): Promise<ReportingControlHorarioResponse> {
+  const params = new URLSearchParams();
+  if (filters.startDate) {
+    params.set('startDate', filters.startDate);
+  }
+  if (filters.endDate) {
+    params.set('endDate', filters.endDate);
+  }
+  const query = params.toString();
+  const url = query.length ? `/reporting-control-horario?${query}` : '/reporting-control-horario';
+  const data = await getJson<{ range?: unknown; people?: unknown; entries?: unknown }>(url);
+  const people = Array.isArray(data?.people)
+    ? data.people.map(sanitizeReportingPerson).filter((item): item is ReportingControlHorarioPerson => item !== null)
+    : [];
+  const entries = Array.isArray(data?.entries)
+    ? data.entries.map(sanitizeReportingEntry).filter((item): item is ReportingControlHorarioEntry => item !== null)
+    : [];
+  const range = (data?.range ?? {}) as { start?: string; end?: string };
+  return {
+    range: {
+      start: sanitizeText(range.start) ?? '',
+      end: sanitizeText(range.end) ?? '',
+    },
+    people,
+    entries,
+  };
+}
+
+export type ReportingControlHorarioUpsertPayload = {
+  id?: string;
+  userId?: string;
+  date?: string;
+  checkInTime: string;
+  checkOutTime?: string | null;
+};
+
+export async function createReportingControlHorarioEntry(
+  payload: ReportingControlHorarioUpsertPayload,
+): Promise<ReportingControlHorarioEntry> {
+  const data = await postJson<{ entry?: unknown }>(`/reporting-control-horario`, payload);
+  const entry = sanitizeReportingEntry(data?.entry);
+  if (!entry) {
+    throw new Error('Respuesta inválida del servidor.');
+  }
+  return entry;
+}
+
+export async function updateReportingControlHorarioEntry(
+  payload: ReportingControlHorarioUpsertPayload,
+): Promise<ReportingControlHorarioEntry> {
+  const data = await putJson<{ entry?: unknown }>(`/reporting-control-horario`, payload, {
+    method: 'PUT',
+  });
+  const entry = sanitizeReportingEntry(data?.entry);
+  if (!entry) {
+    throw new Error('Respuesta inválida del servidor.');
+  }
+  return entry;
 }
 
 function sanitizeAuditLogEntry(entry: unknown): AuditLogEntry | null {

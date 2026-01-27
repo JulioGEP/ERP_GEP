@@ -1,147 +1,154 @@
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Card, Spinner, Table } from 'react-bootstrap';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Alert, Button, Card, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { isApiError } from '../../api/client';
-import { fetchControlHorarioRecords, type ControlHorarioRecord } from '../../features/reporting/api';
-import { exportToExcel } from '../../shared/export/exportToExcel';
+import {
+  createReportingControlHorarioEntry,
+  fetchReportingControlHorario,
+  updateReportingControlHorarioEntry,
+  type ReportingControlHorarioEntry,
+  type ReportingControlHorarioPerson,
+} from '../../features/reporting/api';
 
-function parseDate(value: string | null): Date | null {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
+function formatDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
-type DiffInMinutesOptions = {
-  invertSign?: boolean;
+function getCurrentMonthRange(): { startDate: string; endDate: string } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  return {
+    startDate: formatDateKey(start),
+    endDate: formatDateKey(now),
+  };
+}
+
+function buildDateRange(start: string, end: string): string[] {
+  const dates: string[] = [];
+  const current = new Date(`${start}T00:00:00`);
+  const endDate = new Date(`${end}T00:00:00`);
+  while (current <= endDate) {
+    dates.push(formatDateKey(current));
+    current.setDate(current.getDate() + 1);
+  }
+  return dates;
+}
+
+function diffMinutes(start: string, end: string): number {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return 0;
+  return Math.max(0, Math.floor((endDate.getTime() - startDate.getTime()) / 60000));
+}
+
+function formatDuration(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function toTimeInputValue(value: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+type ModalState = {
+  person: ReportingControlHorarioPerson;
+  date: string;
+  entry: ReportingControlHorarioEntry | null;
 };
 
-function diffInMinutes(
-  reference: string | null,
-  actual: string | null,
-  { invertSign = false }: DiffInMinutesOptions = {},
-): number | null {
-  const referenceDate = parseDate(reference);
-  const actualDate = parseDate(actual);
-  if (!referenceDate || !actualDate) return null;
-  const diffMilliseconds = actualDate.getTime() - referenceDate.getTime();
-  const diffMinutes = Math.round(diffMilliseconds / (1000 * 60));
-  return invertSign ? -diffMinutes : diffMinutes;
-}
-
 export default function ControlHorarioPage() {
-  const dateTimeFormatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat('es-ES', {
-        dateStyle: 'short',
-        timeStyle: 'short',
-      }),
-    [],
-  );
+  const [filters, setFilters] = useState(getCurrentMonthRange);
+  const [modalState, setModalState] = useState<ModalState | null>(null);
+  const [checkInTime, setCheckInTime] = useState('');
+  const [checkOutTime, setCheckOutTime] = useState('');
 
-  const dateFormatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat('es-ES', {
-        dateStyle: 'short',
-      }),
-    [],
-  );
-
-  const differenceFormatter = useMemo(
-    () =>
-      new Intl.NumberFormat('es-ES', {
-        signDisplay: 'always',
-        maximumFractionDigits: 0,
-      }),
-    [],
-  );
+  const queryClient = useQueryClient();
 
   const recordsQuery = useQuery({
-    queryKey: ['reporting', 'control-horario'],
-    queryFn: fetchControlHorarioRecords,
-    staleTime: 5 * 60 * 1000,
+    queryKey: ['reporting-control-horario', filters.startDate, filters.endDate],
+    queryFn: () => fetchReportingControlHorario({ startDate: filters.startDate, endDate: filters.endDate }),
+    staleTime: 2 * 60 * 1000,
   });
 
-  const records = recordsQuery.data ?? [];
-  const hasRecords = records.length > 0;
-
-  const endedWithoutClockRecords = useMemo(() => {
-    const now = Date.now();
-
-    return records.filter((record) => {
-      const plannedEnd = parseDate(record.plannedEnd);
-      if (!plannedEnd) {
-        return false;
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!modalState) {
+        throw new Error('Faltan datos para guardar el fichaje.');
       }
+      if (modalState.entry?.id) {
+        return updateReportingControlHorarioEntry({
+          id: modalState.entry.id,
+          checkInTime,
+          checkOutTime: checkOutTime || null,
+        });
+      }
+      return createReportingControlHorarioEntry({
+        userId: modalState.person.id,
+        date: modalState.date,
+        checkInTime,
+        checkOutTime: checkOutTime || null,
+      });
+    },
+    onSuccess: () => {
+      setModalState(null);
+      setCheckInTime('');
+      setCheckOutTime('');
+      queryClient.invalidateQueries({ queryKey: ['reporting-control-horario'] });
+    },
+  });
 
-      const hasEnded = plannedEnd.getTime() <= now;
-      const hasClocked = record.clockIn !== null || record.clockOut !== null;
+  const people = recordsQuery.data?.people ?? [];
+  const entries = recordsQuery.data?.entries ?? [];
+  const dates = useMemo(() => buildDateRange(filters.startDate, filters.endDate), [filters]);
 
-      return hasEnded && !hasClocked;
+  const entriesByUserDate = useMemo(() => {
+    const map = new Map<string, ReportingControlHorarioEntry[]>();
+    entries.forEach((entry) => {
+      const key = `${entry.userId}-${entry.date}`;
+      const list = map.get(key) ?? [];
+      list.push(entry);
+      map.set(key, list);
     });
-  }, [records]);
+    return map;
+  }, [entries]);
 
-  const canDownload = !recordsQuery.isLoading && !recordsQuery.isError && hasRecords;
-
-  const handleDownload = () => {
-    if (!canDownload) {
-      return;
-    }
-
-    const headerRow = [
-      'Nombre de la sesión',
-      'Nombre de la organización',
-      'Formador',
-      'Inicio planificado',
-      'Fin planificado',
-      'Entrada (marcaje)',
-      'Salida (marcaje)',
-      'Diferencia inicio (minutos)',
-      'Diferencia fin (minutos)',
-    ] as const;
-
-    const rows = records.map((record) => {
-      const plannedStart = record.plannedStart
-        ? (record.isVariant
-            ? dateFormatter.format(new Date(record.plannedStart))
-            : dateTimeFormatter.format(new Date(record.plannedStart)))
-        : '';
-      const plannedEnd = record.plannedEnd
-        ? (record.isVariant
-            ? dateFormatter.format(new Date(record.plannedEnd))
-            : dateTimeFormatter.format(new Date(record.plannedEnd)))
-        : '';
-      const clockIn = record.clockIn ? dateTimeFormatter.format(new Date(record.clockIn)) : '';
-      const clockOut = record.clockOut ? dateTimeFormatter.format(new Date(record.clockOut)) : '';
-
-      const startDiff = record.isVariant
-        ? null
-        : diffInMinutes(record.plannedStart, record.clockIn, { invertSign: true });
-      const endDiff = record.isVariant ? null : diffInMinutes(record.plannedEnd, record.clockOut);
-
-      return [
-        record.sessionName ?? '',
-        record.organizationName ?? '',
-        record.trainerFullName ?? '',
-        plannedStart,
-        plannedEnd,
-        clockIn,
-        clockOut,
-        startDiff ?? '',
-        endDiff ?? '',
-      ];
+  const rows = useMemo(() => {
+    const output: Array<{ person: ReportingControlHorarioPerson; date: string; entries: ReportingControlHorarioEntry[] }> = [];
+    people.forEach((person) => {
+      dates.forEach((date) => {
+        const key = `${person.id}-${date}`;
+        output.push({
+          person,
+          date,
+          entries: entriesByUserDate.get(key) ?? [],
+        });
+      });
     });
+    return output;
+  }, [dates, entriesByUserDate, people]);
 
-    exportToExcel({
-      rows: [headerRow, ...rows],
-      fileName: `control_horas_formadores_${new Date().toISOString().slice(0, 10)}.xlsx`,
-      sheetName: 'Control horas formadores',
-      auditEvent: {
-        action: 'reporting.control_horas_formadores.export',
-        details: {
-          rowCount: rows.length,
-        },
-      },
-    });
+  const dateFormatter = useMemo(
+    () => new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium' }),
+    [],
+  );
+  const timeFormatter = useMemo(
+    () => new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit' }),
+    [],
+  );
+
+  const handleOpenModal = (person: ReportingControlHorarioPerson, date: string, entry?: ReportingControlHorarioEntry) => {
+    setModalState({ person, date, entry: entry ?? null });
+    setCheckInTime(toTimeInputValue(entry?.checkIn ?? null));
+    setCheckOutTime(toTimeInputValue(entry?.checkOut ?? null));
   };
 
   let content: JSX.Element;
@@ -158,34 +165,69 @@ export default function ControlHorarioPage() {
       ? error.message
       : 'No se pudo cargar la información del control horario.';
     content = <Alert variant="danger">{message}</Alert>;
-  } else if (!hasRecords) {
-    content = <Alert variant="info">No hay registros de control horario disponibles.</Alert>;
+  } else if (!people.length) {
+    content = <Alert variant="info">No hay usuarios disponibles para el control horario.</Alert>;
   } else {
     content = (
-      <>
-        <RecordsTable
-          records={records}
-          dateTimeFormatter={dateTimeFormatter}
-          dateFormatter={dateFormatter}
-          differenceFormatter={differenceFormatter}
-        />
-
-        <div className="mt-4">
-          <h2 className="h5 mb-3">Sesiones finalizadas sin fichaje</h2>
-          {endedWithoutClockRecords.length > 0 ? (
-            <RecordsTable
-              records={endedWithoutClockRecords}
-              dateTimeFormatter={dateTimeFormatter}
-              dateFormatter={dateFormatter}
-              differenceFormatter={differenceFormatter}
-            />
-          ) : (
-            <Alert variant="light" className="mb-0">
-              No hay sesiones finalizadas sin registro de fichaje.
-            </Alert>
-          )}
-        </div>
-      </>
+      <div className="table-responsive">
+        <Table striped bordered hover className="align-middle">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Fecha</th>
+              <th>Fichajes</th>
+              <th style={{ width: '12%' }}>Total</th>
+              <th style={{ width: '16%' }}>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const totalMinutes = row.entries.reduce((acc, entry) => {
+                if (!entry.checkIn || !entry.checkOut) return acc;
+                return acc + diffMinutes(entry.checkIn, entry.checkOut);
+              }, 0);
+              return (
+                <tr key={`${row.person.id}-${row.date}`}>
+                  <td>
+                    <div className="fw-semibold">{row.person.name}</div>
+                    <div className="text-muted small">{row.person.role}</div>
+                  </td>
+                  <td>{dateFormatter.format(new Date(`${row.date}T00:00:00`))}</td>
+                  <td>
+                    {row.entries.length ? (
+                      <div className="d-flex flex-column gap-2">
+                        {row.entries.map((entry) => (
+                          <div key={entry.id} className="d-flex align-items-center gap-2">
+                            <span>
+                              {entry.checkIn ? timeFormatter.format(new Date(entry.checkIn)) : '—'} →{' '}
+                              {entry.checkOut ? timeFormatter.format(new Date(entry.checkOut)) : '—'}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="outline-secondary"
+                              onClick={() => handleOpenModal(row.person, row.date, entry)}
+                            >
+                              Editar
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-muted">Sin fichajes</span>
+                    )}
+                  </td>
+                  <td>{totalMinutes ? formatDuration(totalMinutes) : '—'}</td>
+                  <td>
+                    <Button size="sm" variant="outline-primary" onClick={() => handleOpenModal(row.person, row.date)}>
+                      Añadir fichaje
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </Table>
+      </div>
     );
   }
 
@@ -193,115 +235,88 @@ export default function ControlHorarioPage() {
     <section className="py-3">
       <Card className="shadow-sm">
         <Card.Header as="h1" className="h4 mb-0">
-          Control horas formadores
+          Control horario
         </Card.Header>
         <Card.Body>
           <p className="text-muted">
-            Seguimiento de los marcajes realizados por los formadores en cada sesión planificada.
+            Resumen de fichajes de usuarios del ERP y formadores con contrato fijo.
           </p>
-          <div className="d-flex justify-content-end mb-3">
-            <Button type="button" onClick={handleDownload} disabled={!canDownload}>
-              Descargar
-            </Button>
-          </div>
+          <Form className="mb-3">
+            <div className="d-flex gap-3 flex-wrap">
+              <Form.Group controlId="control-horario-start">
+                <Form.Label>Fecha de inicio</Form.Label>
+                <Form.Control
+                  type="date"
+                  value={filters.startDate}
+                  max={filters.endDate}
+                  onChange={(event) => setFilters((prev) => ({ ...prev, startDate: event.currentTarget.value }))}
+                />
+              </Form.Group>
+              <Form.Group controlId="control-horario-end">
+                <Form.Label>Fecha de fin</Form.Label>
+                <Form.Control
+                  type="date"
+                  value={filters.endDate}
+                  min={filters.startDate}
+                  onChange={(event) => setFilters((prev) => ({ ...prev, endDate: event.currentTarget.value }))}
+                />
+              </Form.Group>
+            </div>
+          </Form>
           {content}
         </Card.Body>
       </Card>
+
+      <Modal show={Boolean(modalState)} onHide={() => setModalState(null)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{modalState?.entry ? 'Editar fichaje' : 'Añadir fichaje'}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form className="d-grid gap-3">
+            <Form.Group>
+              <Form.Label>Usuario</Form.Label>
+              <Form.Control value={modalState?.person.name ?? ''} disabled />
+            </Form.Group>
+            <Form.Group>
+              <Form.Label>Fecha</Form.Label>
+              <Form.Control value={modalState?.date ?? ''} disabled />
+            </Form.Group>
+            <Form.Group>
+              <Form.Label>Hora de entrada</Form.Label>
+              <Form.Control
+                type="time"
+                value={checkInTime}
+                onChange={(event) => setCheckInTime(event.currentTarget.value)}
+              />
+            </Form.Group>
+            <Form.Group>
+              <Form.Label>Hora de salida</Form.Label>
+              <Form.Control
+                type="time"
+                value={checkOutTime}
+                onChange={(event) => setCheckOutTime(event.currentTarget.value)}
+              />
+            </Form.Group>
+          </Form>
+          {mutation.isError ? (
+            <Alert variant="danger" className="mt-3 mb-0">
+              {isApiError(mutation.error) ? mutation.error.message : 'No se pudo guardar el fichaje.'}
+            </Alert>
+          ) : null}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setModalState(null)} disabled={mutation.isPending}>
+            Cancelar
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending || !checkInTime}
+          >
+            {mutation.isPending ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </section>
-  );
-}
-
-type RecordsTableProps = {
-  records: ControlHorarioRecord[];
-  dateTimeFormatter: Intl.DateTimeFormat;
-  dateFormatter: Intl.DateTimeFormat;
-  differenceFormatter: Intl.NumberFormat;
-};
-
-function RecordsTable({ records, dateTimeFormatter, dateFormatter, differenceFormatter }: RecordsTableProps) {
-  return (
-    <div className="table-responsive">
-      <Table striped bordered hover>
-        <thead>
-          <tr>
-            <th>Nombre de la sesión</th>
-            <th>Nombre de la organización</th>
-            <th>Nombre / Apellidos de formador</th>
-            <th>Horarios de inicio y fin de la sesión</th>
-            <th>Horario de marcaje de la formación</th>
-            <th>Diferencias (minutos)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {records.map((record) => {
-            const sessionName = record.sessionName ?? '—';
-            const organizationName = record.organizationName ?? '—';
-            const trainerFullName = record.trainerFullName ?? '—';
-            const plannedStart = record.plannedStart
-              ? record.isVariant
-                ? dateFormatter.format(new Date(record.plannedStart))
-                : dateTimeFormatter.format(new Date(record.plannedStart))
-              : '—';
-            const plannedEnd = record.plannedEnd
-              ? record.isVariant
-                ? dateFormatter.format(new Date(record.plannedEnd))
-                : dateTimeFormatter.format(new Date(record.plannedEnd))
-              : '—';
-            const clockIn = record.clockIn
-              ? dateTimeFormatter.format(new Date(record.clockIn))
-              : '—';
-            const clockOut = record.clockOut
-              ? dateTimeFormatter.format(new Date(record.clockOut))
-              : '—';
-
-            const startDiff = record.isVariant
-              ? null
-              : diffInMinutes(record.plannedStart, record.clockIn, { invertSign: true });
-            const endDiff = record.isVariant
-              ? null
-              : diffInMinutes(record.plannedEnd, record.clockOut);
-
-            const differenceSummary = (() => {
-              if (record.isVariant) {
-                return '—';
-              }
-              const parts: string[] = [];
-              if (startDiff !== null) {
-                parts.push(`Inicio: ${differenceFormatter.format(startDiff)} min`);
-              }
-              if (endDiff !== null) {
-                parts.push(`Fin: ${differenceFormatter.format(endDiff)} min`);
-              }
-              return parts.length ? parts.join(' · ') : '—';
-            })();
-
-            return (
-              <tr key={record.id}>
-                <td className="align-middle">{sessionName}</td>
-                <td className="align-middle">{organizationName}</td>
-                <td className="align-middle">{trainerFullName}</td>
-                <td className="align-middle">
-                  <div>
-                    <span className="fw-semibold">Inicio:</span> {plannedStart}
-                  </div>
-                  <div>
-                    <span className="fw-semibold">Fin:</span> {plannedEnd}
-                  </div>
-                </td>
-                <td className="align-middle">
-                  <div>
-                    <span className="fw-semibold">Entrada:</span> {clockIn}
-                  </div>
-                  <div>
-                    <span className="fw-semibold">Salida:</span> {clockOut}
-                  </div>
-                </td>
-                <td className="align-middle">{differenceSummary}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </Table>
-    </div>
   );
 }

@@ -12,6 +12,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Admin: ['ALL'],
   Comercial: [
     '/dashboard',
+    '/control_horario',
     '/perfil',
     '/presupuestos/sinformador',
     '/presupuestos/*',
@@ -20,6 +21,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   ],
   Administracion: [
     '/dashboard',
+    '/control_horario',
     '/perfil',
     '/presupuestos/sinformador',
     '/presupuestos/*',
@@ -32,6 +34,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   ],
   Logistica: [
     '/dashboard',
+    '/control_horario',
     '/perfil',
     '/presupuestos/sinformador',
     '/presupuestos/*',
@@ -43,6 +46,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   ],
   People: [
     '/dashboard',
+    '/control_horario',
     '/perfil',
     '/presupuestos/sinformador',
     '/presupuestos/*',
@@ -52,7 +56,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/recursos/confirmaciones',
     '/usuarios/vacaciones',
   ],
-  Formador: ['/usuarios/trainer/*', '/perfil', '/perfil/control_horas'],
+  Formador: ['/usuarios/trainer/*', '/perfil', '/perfil/control_horas', '/control_horario'],
 };
 
 export function normalizeRoleKey(value: string | null | undefined): string | null {
@@ -130,6 +134,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/usuarios/trainer/sesiones',
   '/usuarios/trainer/disponibilidad',
   '/dashboard',
+  '/control_horario',
   '/presupuestos/sinformador',
   '/recursos/formadores_bomberos',
   '/recursos/unidades_moviles',
