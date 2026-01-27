@@ -181,6 +181,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     label: 'Reporting',
     children: [
       {
+        key: 'Reporting/ControlHorasFormadores',
+        label: 'Control horas formadores',
+        path: '/reporting/control_horas_formadores',
+      },
+      {
         key: 'Reporting/ControlHorario',
         label: 'Control horario',
         path: '/reporting/control_horario',
