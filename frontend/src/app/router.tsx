@@ -673,10 +673,10 @@ export function AppRouter({
         />
 
         <Route
-          path="/reporting/control_horario"
+          path="/reporting/control_horas_formadores"
           element={
             <GuardedRoute
-              path="/reporting/control_horario"
+              path="/reporting/control_horas_formadores"
               roles={['Admin']}
               element={<ControlHorarioPage />}
             />
