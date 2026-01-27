@@ -17,12 +17,27 @@ function formatDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function getCurrentMonthRange(): { startDate: string; endDate: string } {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+function getMonthRange(year: number, month: number): { startDate: string; endDate: string } {
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 0);
   return {
     startDate: formatDateKey(start),
-    endDate: formatDateKey(now),
+    endDate: formatDateKey(end),
+  };
+}
+
+function getInitialFilters(): {
+  month: number;
+  year: number;
+  userId: string;
+  roleFilter: 'all' | 'trainer' | 'user';
+} {
+  const now = new Date();
+  return {
+    month: now.getMonth() + 1,
+    year: now.getFullYear(),
+    userId: '',
+    roleFilter: 'all',
   };
 }
 
@@ -66,16 +81,19 @@ type ModalState = {
 };
 
 export default function ControlHorarioPage() {
-  const [filters, setFilters] = useState(getCurrentMonthRange);
+  const [filters, setFilters] = useState(getInitialFilters);
   const [modalState, setModalState] = useState<ModalState | null>(null);
   const [checkInTime, setCheckInTime] = useState('');
   const [checkOutTime, setCheckOutTime] = useState('');
 
   const queryClient = useQueryClient();
 
+  const dateRange = useMemo(() => getMonthRange(filters.year, filters.month), [filters.month, filters.year]);
+
   const recordsQuery = useQuery({
-    queryKey: ['reporting-control-horario', filters.startDate, filters.endDate],
-    queryFn: () => fetchReportingControlHorario({ startDate: filters.startDate, endDate: filters.endDate }),
+    queryKey: ['reporting-control-horario', dateRange.startDate, dateRange.endDate],
+    queryFn: () =>
+      fetchReportingControlHorario({ startDate: dateRange.startDate, endDate: dateRange.endDate }),
     staleTime: 2 * 60 * 1000,
   });
 
@@ -108,22 +126,46 @@ export default function ControlHorarioPage() {
 
   const people = recordsQuery.data?.people ?? [];
   const entries = recordsQuery.data?.entries ?? [];
-  const dates = useMemo(() => buildDateRange(filters.startDate, filters.endDate), [filters]);
+
+  const filteredPeople = useMemo(() => {
+    return people.filter((person) => {
+      if (filters.userId && person.id !== filters.userId) {
+        return false;
+      }
+      if (filters.roleFilter === 'trainer') {
+        return person.role === 'Formador';
+      }
+      if (filters.roleFilter === 'user') {
+        return person.role !== 'Formador';
+      }
+      return true;
+    });
+  }, [filters.roleFilter, filters.userId, people]);
+
+  const filteredEntries = useMemo(() => {
+    if (!filteredPeople.length) {
+      return [];
+    }
+    const validIds = new Set(filteredPeople.map((person) => person.id));
+    return entries.filter((entry) => validIds.has(entry.userId));
+  }, [entries, filteredPeople]);
+
+  const dates = useMemo(() => buildDateRange(dateRange.startDate, dateRange.endDate), [dateRange]);
 
   const entriesByUserDate = useMemo(() => {
     const map = new Map<string, ReportingControlHorarioEntry[]>();
-    entries.forEach((entry) => {
+    filteredEntries.forEach((entry) => {
       const key = `${entry.userId}-${entry.date}`;
       const list = map.get(key) ?? [];
       list.push(entry);
       map.set(key, list);
     });
     return map;
-  }, [entries]);
+  }, [filteredEntries]);
 
   const rows = useMemo(() => {
     const output: Array<{ person: ReportingControlHorarioPerson; date: string; entries: ReportingControlHorarioEntry[] }> = [];
-    people.forEach((person) => {
+    filteredPeople.forEach((person) => {
       dates.forEach((date) => {
         const key = `${person.id}-${date}`;
         output.push({
@@ -134,7 +176,29 @@ export default function ControlHorarioPage() {
       });
     });
     return output;
-  }, [dates, entriesByUserDate, people]);
+  }, [dates, entriesByUserDate, filteredPeople]);
+
+  const monthOptions = useMemo(
+    () => [
+      { value: 1, label: 'Enero' },
+      { value: 2, label: 'Febrero' },
+      { value: 3, label: 'Marzo' },
+      { value: 4, label: 'Abril' },
+      { value: 5, label: 'Mayo' },
+      { value: 6, label: 'Junio' },
+      { value: 7, label: 'Julio' },
+      { value: 8, label: 'Agosto' },
+      { value: 9, label: 'Septiembre' },
+      { value: 10, label: 'Octubre' },
+      { value: 11, label: 'Noviembre' },
+      { value: 12, label: 'Diciembre' },
+    ],
+    [],
+  );
+  const yearOptions = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    return Array.from({ length: 5 }, (_, index) => currentYear - 2 + index);
+  }, []);
 
   const dateFormatter = useMemo(
     () => new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium' }),
@@ -243,23 +307,65 @@ export default function ControlHorarioPage() {
           </p>
           <Form className="mb-3">
             <div className="d-flex gap-3 flex-wrap">
-              <Form.Group controlId="control-horario-start">
-                <Form.Label>Fecha de inicio</Form.Label>
-                <Form.Control
-                  type="date"
-                  value={filters.startDate}
-                  max={filters.endDate}
-                  onChange={(event) => setFilters((prev) => ({ ...prev, startDate: event.currentTarget.value }))}
-                />
+              <Form.Group controlId="control-horario-month">
+                <Form.Label>Mes</Form.Label>
+                <Form.Select
+                  value={filters.month}
+                  onChange={(event) =>
+                    setFilters((prev) => ({ ...prev, month: Number(event.currentTarget.value) }))
+                  }
+                >
+                  {monthOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Form.Select>
               </Form.Group>
-              <Form.Group controlId="control-horario-end">
-                <Form.Label>Fecha de fin</Form.Label>
-                <Form.Control
-                  type="date"
-                  value={filters.endDate}
-                  min={filters.startDate}
-                  onChange={(event) => setFilters((prev) => ({ ...prev, endDate: event.currentTarget.value }))}
-                />
+              <Form.Group controlId="control-horario-year">
+                <Form.Label>Año</Form.Label>
+                <Form.Select
+                  value={filters.year}
+                  onChange={(event) =>
+                    setFilters((prev) => ({ ...prev, year: Number(event.currentTarget.value) }))
+                  }
+                >
+                  {yearOptions.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+              <Form.Group controlId="control-horario-user">
+                <Form.Label>Usuario</Form.Label>
+                <Form.Select
+                  value={filters.userId}
+                  onChange={(event) => setFilters((prev) => ({ ...prev, userId: event.currentTarget.value }))}
+                >
+                  <option value="">Todos</option>
+                  {people.map((person) => (
+                    <option key={person.id} value={person.id}>
+                      {person.name}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+              <Form.Group controlId="control-horario-role">
+                <Form.Label>Tipo</Form.Label>
+                <Form.Select
+                  value={filters.roleFilter}
+                  onChange={(event) =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      roleFilter: event.currentTarget.value as 'all' | 'trainer' | 'user',
+                    }))
+                  }
+                >
+                  <option value="all">Todos</option>
+                  <option value="user">Usuarios</option>
+                  <option value="trainer">Formadores</option>
+                </Form.Select>
               </Form.Group>
             </div>
           </Form>
