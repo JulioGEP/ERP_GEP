@@ -311,9 +311,10 @@ export default function ControlHorarioPage() {
                 <Form.Label>Mes</Form.Label>
                 <Form.Select
                   value={filters.month}
-                  onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, month: Number(event.currentTarget.value) }))
-                  }
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setFilters((prev) => ({ ...prev, month: Number(value) }));
+                  }}
                 >
                   {monthOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -326,9 +327,10 @@ export default function ControlHorarioPage() {
                 <Form.Label>Año</Form.Label>
                 <Form.Select
                   value={filters.year}
-                  onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, year: Number(event.currentTarget.value) }))
-                  }
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setFilters((prev) => ({ ...prev, year: Number(value) }));
+                  }}
                 >
                   {yearOptions.map((year) => (
                     <option key={year} value={year}>
@@ -341,9 +343,10 @@ export default function ControlHorarioPage() {
                 <Form.Label>Usuario</Form.Label>
                 <Form.Select
                   value={filters.userId}
-                  onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, userId: event.currentTarget.value }))
-                  }
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setFilters((prev) => ({ ...prev, userId: value }));
+                  }}
                 >
                   <option value="">Todos</option>
                   {people.map((person) => (
@@ -357,12 +360,13 @@ export default function ControlHorarioPage() {
                 <Form.Label>Tipo</Form.Label>
                 <Form.Select
                   value={filters.roleFilter}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const value = event.currentTarget.value as 'all' | 'trainer' | 'user';
                     setFilters((prev) => ({
                       ...prev,
-                      roleFilter: event.currentTarget.value as 'all' | 'trainer' | 'user',
-                    }))
-                  }
+                      roleFilter: value,
+                    }));
+                  }}
                 >
                   <option value="all">Todos</option>
                   <option value="user">Usuarios</option>
