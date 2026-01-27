@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Card, Form, Modal, Spinner, Table } from 'react-bootstrap';
+import { useNavigate } from 'react-router-dom';
 import { isApiError } from '../../api/client';
 import {
   createReportingControlHorarioEntry,
@@ -85,6 +86,7 @@ type ModalState = {
 };
 
 export default function ControlHorarioPage() {
+  const navigate = useNavigate();
   const [filters, setFilters] = useState(getInitialFilters);
   const [modalState, setModalState] = useState<ModalState | null>(null);
   const [checkInTime, setCheckInTime] = useState('');
@@ -256,6 +258,12 @@ export default function ControlHorarioPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleFixedTrainerClick = (person: ReportingControlHorarioPerson) => {
+    const params = new URLSearchParams();
+    params.set('trainerId', person.id);
+    navigate(`/usuarios/costes_extra?${params.toString()}`);
+  };
+
   let content: JSX.Element;
 
   if (recordsQuery.isLoading) {
@@ -294,7 +302,19 @@ export default function ControlHorarioPage() {
               return (
                 <tr key={`${row.person.id}-${row.date}`}>
                   <td>
-                    <div className="fw-semibold">{row.person.name}</div>
+                    <div className="fw-semibold">
+                      {row.person.isFixedTrainer ? (
+                        <Button
+                          variant="link"
+                          className="p-0 align-baseline fw-semibold"
+                          onClick={() => handleFixedTrainerClick(row.person)}
+                        >
+                          {row.person.name}
+                        </Button>
+                      ) : (
+                        row.person.name
+                      )}
+                    </div>
                     <div className="text-muted small">{row.person.role}</div>
                   </td>
                   <td>{dateFormatter.format(new Date(`${row.date}T00:00:00`))}</td>
