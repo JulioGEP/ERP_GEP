@@ -74,6 +74,10 @@ function toTimeInputValue(value: string | null): string {
   return `${hours}:${minutes}`;
 }
 
+function escapeCsvValue(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
 type ModalState = {
   person: ReportingControlHorarioPerson;
   date: string;
@@ -213,6 +217,43 @@ export default function ControlHorarioPage() {
     setModalState({ person, date, entry: entry ?? null });
     setCheckInTime(toTimeInputValue(entry?.checkIn ?? null));
     setCheckOutTime(toTimeInputValue(entry?.checkOut ?? null));
+  };
+
+  const handleDownload = () => {
+    if (!rows.length) return;
+    const headers = ['Usuario', 'Rol', 'Fecha', 'Fichajes', 'Total'];
+    const lines = rows.map((row) => {
+      const totalMinutes = row.entries.reduce((acc, entry) => {
+        if (!entry.checkIn || !entry.checkOut) return acc;
+        return acc + diffMinutes(entry.checkIn, entry.checkOut);
+      }, 0);
+      const entriesLabel = row.entries.length
+        ? row.entries
+            .map((entry) => {
+              const checkIn = entry.checkIn ? timeFormatter.format(new Date(entry.checkIn)) : '—';
+              const checkOut = entry.checkOut ? timeFormatter.format(new Date(entry.checkOut)) : '—';
+              return `${checkIn} → ${checkOut}`;
+            })
+            .join(' | ')
+        : 'Sin fichajes';
+      return [
+        escapeCsvValue(row.person.name),
+        escapeCsvValue(row.person.role),
+        escapeCsvValue(dateFormatter.format(new Date(`${row.date}T00:00:00`))),
+        escapeCsvValue(entriesLabel),
+        escapeCsvValue(totalMinutes ? formatDuration(totalMinutes) : '—'),
+      ].join(',');
+    });
+    const csv = [headers.map(escapeCsvValue).join(','), ...lines].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `control-horario-${dateRange.startDate}-${dateRange.endDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   let content: JSX.Element;
@@ -373,6 +414,11 @@ export default function ControlHorarioPage() {
                   <option value="trainer">Formadores</option>
                 </Form.Select>
               </Form.Group>
+              <div className="ms-auto align-self-end">
+                <Button variant="success" onClick={handleDownload} disabled={!rows.length}>
+                  Descargar
+                </Button>
+              </div>
             </div>
           </Form>
           {content}
