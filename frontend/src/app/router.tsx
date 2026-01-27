@@ -97,6 +97,7 @@ const TrainerReportsRecursoPreventivoEbroPage = lazy(
 const UsersVacationsPage = lazy(() => import('../pages/usuarios/UsersVacationsPage'));
 const ProfilePage = lazy(() => import('../pages/perfil/ProfilePage'));
 const ControlHorasPage = lazy(() => import('../pages/perfil/ControlHorasPage'));
+const ControlHorarioUserPage = lazy(() => import('../pages/controlHorario/ControlHorarioPage'));
 const ForbiddenPage = lazy(() => import('../pages/system/ForbiddenPage'));
 const HorasFormadoresPage = lazy(() => import('../pages/reporting/HorasFormadoresPage'));
 const ControlHorarioPage = lazy(() => import('../pages/reporting/ControlHorarioPage'));
@@ -673,17 +674,25 @@ export function AppRouter({
         />
 
         <Route
-          path="/reporting/control_horas_formadores"
+          path="/reporting/control_horario"
           element={
             <GuardedRoute
-              path="/reporting/control_horas_formadores"
+              path="/reporting/control_horario"
               roles={['Admin']}
               element={<ControlHorarioPage />}
             />
           }
         />
+        <Route
+          path="/reporting/control_horas_formadores"
+          element={<Navigate to="/reporting/control_horario" replace />}
+        />
 
         <Route path="/perfil" element={<GuardedRoute path="/perfil" element={<ProfilePage />} />} />
+        <Route
+          path="/control_horario"
+          element={<GuardedRoute path="/control_horario" element={<ControlHorarioGuard />} />}
+        />
         <Route
           path="/perfil/control_horas"
           element={
@@ -761,6 +770,35 @@ function ControlHorasGuard() {
   }
 
   return <ControlHorasPage />;
+}
+
+function ControlHorarioGuard() {
+  const { user } = useAuth();
+  const trainerId = user?.trainerId ?? null;
+  const isFormador = user?.role?.trim().toLowerCase() === 'formador';
+
+  const trainerDetailsQuery = useQuery({
+    queryKey: ['trainer-details', 'control-horario', trainerId],
+    queryFn: async () => {
+      if (!trainerId) return null;
+      const trainers = await fetchTrainers();
+      return trainers.find((trainer) => trainer.trainer_id === trainerId) ?? null;
+    },
+    enabled: isFormador && Boolean(trainerId),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  if (isFormador) {
+    if (trainerDetailsQuery.isLoading) {
+      return <div className="text-muted">Cargando información del formador…</div>;
+    }
+
+    if (!trainerDetailsQuery.data?.contrato_fijo) {
+      return <ForbiddenPage />;
+    }
+  }
+
+  return <ControlHorarioUserPage />;
 }
 
 function HomeRedirect({ defaultRedirectPath, knownPaths, activePathStorageKey }: HomeRedirectProps) {

@@ -4,6 +4,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Admin: ['ALL'],
   Comercial: [
     '/dashboard',
+    '/control_horario',
     '/presupuestos/todos',
     '/presupuestos/*',
     '/calendario/*',
@@ -12,6 +13,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   ],
   Administracion: [
     '/dashboard',
+    '/control_horario',
     '/presupuestos/todos',
     '/presupuestos/*',
     '/calendario/*',
@@ -25,6 +27,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   ],
   Logistica: [
     '/dashboard',
+    '/control_horario',
     '/presupuestos/todos',
     '/presupuestos/*',
     '/calendario/*',
@@ -36,6 +39,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   ],
   People: [
     '/dashboard',
+    '/control_horario',
     '/presupuestos/todos',
     '/presupuestos/*',
     '/calendario/*',
@@ -44,7 +48,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/perfil',
     '/recursos/confirmaciones',
   ],
-  Formador: ['/usuarios/trainer/*', '/perfil', '/perfil/control_horas'],
+  Formador: ['/usuarios/trainer/*', '/perfil', '/perfil/control_horas', '/control_horario'],
 };
 
 export const DEFAULT_ROUTE_ORDER = [
@@ -58,6 +62,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/usuarios/trainer/informes/simulacro',
   '/usuarios/trainer/informes/recurso_preventivo_ebro',
   '/dashboard',
+  '/control_horario',
   '/presupuestos/todos',
   '/recursos/formadores_bomberos',
   '/recursos/unidades_moviles',
@@ -78,6 +83,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/informes/simulacro',
   '/informes/recurso_preventivo_ebro',
   '/reporting/logs',
+  '/reporting/control_horario',
   '/usuarios/costes_extra',
   '/usuarios/nominas_formadores_externos',
   '/perfil/control_horas',

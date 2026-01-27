@@ -182,8 +182,8 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     children: [
       {
         key: 'Reporting/ControlHorario',
-        label: 'Control horas formadores',
-        path: '/reporting/control_horas_formadores',
+        label: 'Control horario',
+        path: '/reporting/control_horario',
       },
       {
         key: 'Reporting/Comparativa',
@@ -579,6 +579,8 @@ export default function AuthenticatedApp() {
   });
 
   const isFixedTrainer = trainerDetailsQuery.data?.contrato_fijo === true;
+  const isFormador = normalizedRole === 'formador';
+  const canAccessControlHorario = hasPermission('/control_horario') && (!isFormador || isFixedTrainer);
 
   const navigationCatalog = useMemo(() => {
     const items: NavItem[] = [...BASE_NAVIGATION_ITEMS];
@@ -659,8 +661,11 @@ export default function AuthenticatedApp() {
     if (hasPermission('/perfil/control_horas') && !isFixedTrainer) {
       paths.add('/perfil/control_horas');
     }
+    if (canAccessControlHorario) {
+      paths.add('/control_horario');
+    }
     return paths;
-  }, [hasPermission, isFixedTrainer, navigationCatalog, permissions]);
+  }, [canAccessControlHorario, hasPermission, isFixedTrainer, navigationCatalog, permissions]);
 
   const fallbackPath = useMemo(() => {
     const firstAllowed = allowedPaths.values().next().value as string | undefined;
@@ -1658,7 +1663,6 @@ export default function AuthenticatedApp() {
     highlightSessionId: highlightedCalendarSessionId,
   };
 
-  const isFormador = user?.role?.trim().toLowerCase() === 'formador';
   const handleOffcanvasClose = useCallback(() => {
     setIsNavbarOffcanvasOpen(false);
   }, []);
@@ -1745,6 +1749,11 @@ export default function AuthenticatedApp() {
                     id="nav-user"
                     className="w-100 w-xl-auto"
                   >
+                    {canAccessControlHorario ? (
+                      <NavDropdown.Item as={NavLink} to="/control_horario" onClick={handleOffcanvasClose}>
+                        Control horario
+                      </NavDropdown.Item>
+                    ) : null}
                     {isFormador && hasPermission('/perfil/control_horas') && !isFixedTrainer ? (
                       <NavDropdown.Item as={NavLink} to="/perfil/control_horas" onClick={handleOffcanvasClose}>
                         Control de horas

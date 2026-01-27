@@ -54,6 +54,23 @@ model users {
   vacation_days     user_vacation_days[]
   vacation_balances user_vacation_balances[]
   vacation_requests vacation_requests[]
+  time_logs        user_time_logs[]
+}
+
+model user_time_logs {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String   @db.Uuid
+  log_date      DateTime @db.Date
+  check_in_utc  DateTime? @db.Timestamptz(6)
+  check_out_utc DateTime? @db.Timestamptz(6)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, log_date], map: "idx_user_time_logs_user_date")
+  @@index([log_date], map: "idx_user_time_logs_date")
+  @@map("user_time_logs")
 }
 
 model user_payrolls {
