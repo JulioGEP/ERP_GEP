@@ -81,6 +81,12 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
+# Legacy reporting route
+[[redirects]]
+  from = "/reporting/control_horas_formadores"
+  to = "/reporting/control_horario"
+  status = 301
+
 # SPA fallback (debe ir el último)
 [[redirects]]
   from = "/*"
