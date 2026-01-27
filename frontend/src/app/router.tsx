@@ -685,7 +685,13 @@ export function AppRouter({
         />
         <Route
           path="/reporting/control_horas_formadores"
-          element={<Navigate to="/reporting/control_horario" replace />}
+          element={
+            <GuardedRoute
+              path="/reporting/control_horas_formadores"
+              roles={['Admin']}
+              element={<HorasFormadoresPage />}
+            />
+          }
         />
 
         <Route path="/perfil" element={<GuardedRoute path="/perfil" element={<ProfilePage />} />} />
