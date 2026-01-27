@@ -66,6 +66,16 @@ function formatDuration(totalMinutes: number): string {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
+function getTotalMinutesClassName(totalMinutes: number): string | undefined {
+  if (totalMinutes >= 8 * 60 + 15) {
+    return 'text-danger';
+  }
+  if (totalMinutes <= 5 * 60) {
+    return 'text-warning';
+  }
+  return 'text-success';
+}
+
 function toTimeInputValue(value: string | null): string {
   if (!value) return '';
   const date = new Date(value);
@@ -299,6 +309,7 @@ export default function ControlHorarioPage() {
                 if (!entry.checkIn || !entry.checkOut) return acc;
                 return acc + diffMinutes(entry.checkIn, entry.checkOut);
               }, 0);
+              const totalClassName = totalMinutes ? getTotalMinutesClassName(totalMinutes) : undefined;
               return (
                 <tr key={`${row.person.id}-${row.date}`}>
                   <td>
@@ -341,7 +352,7 @@ export default function ControlHorarioPage() {
                       <span className="text-muted">Sin fichajes</span>
                     )}
                   </td>
-                  <td>{totalMinutes ? formatDuration(totalMinutes) : '—'}</td>
+                  <td className={totalClassName}>{totalMinutes ? formatDuration(totalMinutes) : '—'}</td>
                   <td>
                     <Button size="sm" variant="outline-primary" onClick={() => handleOpenModal(row.person, row.date)}>
                       Añadir fichaje
