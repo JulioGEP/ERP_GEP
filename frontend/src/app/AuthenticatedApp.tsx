@@ -631,6 +631,7 @@ export default function AuthenticatedApp() {
     () => controlHorarioEntries.find((entry) => entry.checkIn && !entry.checkOut) ?? null,
     [controlHorarioEntries],
   );
+  const controlHorarioHasEntries = controlHorarioEntries.length > 0;
   const controlHorarioTotalMinutes = useMemo(() => {
     let total = 0;
     controlHorarioEntries.forEach((entry) => {
@@ -644,6 +645,7 @@ export default function AuthenticatedApp() {
     return total;
   }, [controlHorarioEntries, controlHorarioOpenEntry, controlHorarioNow]);
   const controlHorarioRunning = Boolean(controlHorarioOpenEntry);
+  const controlHorarioStarted = controlHorarioHasEntries && !controlHorarioRunning;
 
   const navigationCatalog = useMemo(() => {
     const items: NavItem[] = [...BASE_NAVIGATION_ITEMS];
@@ -1809,7 +1811,7 @@ export default function AuthenticatedApp() {
                       onClick={handleOffcanvasClose}
                     >
                       <span className="control-horario-status-icon" aria-hidden="true">
-                        {controlHorarioRunning ? '⏱️' : '⏸️'}
+                        {controlHorarioRunning ? '⏱️' : controlHorarioStarted ? '🕒' : '⏸️'}
                       </span>
                       {controlHorarioRunning ? (
                         <span className="control-horario-status-time">
@@ -1819,6 +1821,8 @@ export default function AuthenticatedApp() {
                       <span className="visually-hidden">
                         {controlHorarioRunning
                           ? `Horas en curso: ${formatDuration(controlHorarioTotalMinutes)}`
+                          : controlHorarioStarted
+                          ? 'Día iniciado sin contador activo'
                           : 'Control horario apagado'}
                       </span>
                     </Nav.Link>
