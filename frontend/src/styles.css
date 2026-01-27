@@ -1814,3 +1814,26 @@ option.session-option-unavailable {
   margin: 0;
   color: #8a2430;
 }
+
+.control-horario-status {
+  font-weight: 600;
+  color: #1f2933;
+}
+
+.control-horario-status:hover,
+.control-horario-status:focus {
+  color: #0d6efd;
+}
+
+.control-horario-status-icon {
+  font-size: 1.1rem;
+}
+
+.control-horario-status-time {
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #e7f1ff;
+  color: #0b5ed7;
+}

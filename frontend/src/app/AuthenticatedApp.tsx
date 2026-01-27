@@ -70,10 +70,12 @@ import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext'; // ⬅️ ruta corregida
 import { TOAST_EVENT, type ToastEventDetail } from '../utils/toast';
 import type { MaterialOrder, MaterialOrdersResponse } from '../types/materialOrder';
+import { fetchControlHorario, type ControlHorarioEntry } from '../features/controlHorario/api';
 
 const ACTIVE_PATH_STORAGE_KEY = 'erp-gep-active-path';
 const NAVBAR_OFFCANVAS_ID = 'app-navbar-offcanvas';
 const NAVBAR_OFFCANVAS_LABEL_ID = 'app-navbar-offcanvas-label';
+const CONTROL_HORARIO_URL = 'https://erpgep.netlify.app/control_horario';
 
 type NavChild = {
   key: string;
@@ -388,6 +390,25 @@ function sanitizeStringArray(values: unknown[]): string[] {
   return output;
 }
 
+function formatDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function diffMinutes(start: string, end: Date): number {
+  const startDate = new Date(start);
+  if (Number.isNaN(startDate.getTime())) return 0;
+  return Math.max(0, Math.floor((end.getTime() - startDate.getTime()) / 60000));
+}
+
+function formatDuration(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
 type CalendarVariantTrainerRecord = CalendarVariantEvent['variant']['trainers'][number];
 type CalendarVariantUnitRecord =
   | CalendarVariantEvent['variant']['unidades'][number]
@@ -586,6 +607,43 @@ export default function AuthenticatedApp() {
   const isFixedTrainer = trainerDetailsQuery.data?.contrato_fijo === true;
   const isFormador = normalizedRole === 'formador';
   const canAccessControlHorario = hasPermission('/control_horario') && (!isFormador || isFixedTrainer);
+  const [controlHorarioNow, setControlHorarioNow] = useState(() => new Date());
+  const controlHorarioDateKey = useMemo(() => formatDateKey(controlHorarioNow), [controlHorarioNow]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setControlHorarioNow(new Date()), 60000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const controlHorarioQuery = useQuery({
+    queryKey: ['control-horario-navbar', controlHorarioDateKey],
+    queryFn: () =>
+      fetchControlHorario({
+        startDate: controlHorarioDateKey,
+        endDate: controlHorarioDateKey,
+      }),
+    enabled: canAccessControlHorario,
+    staleTime: 30 * 1000,
+  });
+
+  const controlHorarioEntries: ControlHorarioEntry[] = controlHorarioQuery.data?.entries ?? [];
+  const controlHorarioOpenEntry = useMemo(
+    () => controlHorarioEntries.find((entry) => entry.checkIn && !entry.checkOut) ?? null,
+    [controlHorarioEntries],
+  );
+  const controlHorarioTotalMinutes = useMemo(() => {
+    let total = 0;
+    controlHorarioEntries.forEach((entry) => {
+      if (entry.checkIn && entry.checkOut) {
+        total += diffMinutes(entry.checkIn, new Date(entry.checkOut));
+      }
+    });
+    if (controlHorarioOpenEntry?.checkIn) {
+      total += diffMinutes(controlHorarioOpenEntry.checkIn, controlHorarioNow);
+    }
+    return total;
+  }, [controlHorarioEntries, controlHorarioOpenEntry, controlHorarioNow]);
+  const controlHorarioRunning = Boolean(controlHorarioOpenEntry);
 
   const navigationCatalog = useMemo(() => {
     const items: NavItem[] = [...BASE_NAVIGATION_ITEMS];
@@ -1742,6 +1800,29 @@ export default function AuthenticatedApp() {
                       </Nav.Link>
                     </Nav.Item>
                   ) : null,
+                )}
+                {canAccessControlHorario && (
+                  <Nav.Item className="w-100 w-xl-auto">
+                    <Nav.Link
+                      href={CONTROL_HORARIO_URL}
+                      className="control-horario-status w-100 w-xl-auto d-flex align-items-center gap-2"
+                      onClick={handleOffcanvasClose}
+                    >
+                      <span className="control-horario-status-icon" aria-hidden="true">
+                        {controlHorarioRunning ? '⏱️' : '⏸️'}
+                      </span>
+                      {controlHorarioRunning ? (
+                        <span className="control-horario-status-time">
+                          {formatDuration(controlHorarioTotalMinutes)}
+                        </span>
+                      ) : null}
+                      <span className="visually-hidden">
+                        {controlHorarioRunning
+                          ? `Horas en curso: ${formatDuration(controlHorarioTotalMinutes)}`
+                          : 'Control horario apagado'}
+                      </span>
+                    </Nav.Link>
+                  </Nav.Item>
                 )}
                 {user && (
                   <NavDropdown
