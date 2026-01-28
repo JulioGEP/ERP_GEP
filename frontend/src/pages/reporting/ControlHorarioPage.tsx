@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Card, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
@@ -64,6 +64,18 @@ function formatDuration(totalMinutes: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function getIsoWeekInfo(date: Date): { week: number; year: number } {
+  const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNr = (target.getUTCDay() + 6) % 7;
+  target.setUTCDate(target.getUTCDate() - dayNr + 3);
+  const isoYear = target.getUTCFullYear();
+  const firstThursday = new Date(Date.UTC(isoYear, 0, 4));
+  const week =
+    1 +
+    Math.round(((target.getTime() - firstThursday.getTime()) / 86400000 - 3) / 7);
+  return { week, year: isoYear };
 }
 
 function getTotalMinutesClassName(totalMinutes: number): string | undefined {
@@ -181,8 +193,8 @@ export default function ControlHorarioPage() {
 
   const rows = useMemo(() => {
     const output: Array<{ person: ReportingControlHorarioPerson; date: string; entries: ReportingControlHorarioEntry[] }> = [];
-    filteredPeople.forEach((person) => {
-      dates.forEach((date) => {
+    dates.forEach((date) => {
+      filteredPeople.forEach((person) => {
         const key = `${person.id}-${date}`;
         output.push({
           person,
@@ -193,6 +205,54 @@ export default function ControlHorarioPage() {
     });
     return output;
   }, [dates, entriesByUserDate, filteredPeople]);
+
+  const rowsWithTotals = useMemo(
+    () =>
+      rows.map((row) => {
+        const totalMinutes = row.entries.reduce((acc, entry) => {
+          if (!entry.checkIn || !entry.checkOut) return acc;
+          return acc + diffMinutes(entry.checkIn, entry.checkOut);
+        }, 0);
+        return {
+          ...row,
+          totalMinutes,
+        };
+      }),
+    [rows],
+  );
+
+  const weekGroups = useMemo(() => {
+    const groups: Array<{
+      key: string;
+      label: string;
+      rows: typeof rowsWithTotals;
+      totalMinutes: number;
+    }> = [];
+    const groupMap = new Map<string, typeof groups[number]>();
+    rowsWithTotals.forEach((row) => {
+      const { week, year } = getIsoWeekInfo(new Date(`${row.date}T00:00:00`));
+      const key = `${year}-W${String(week).padStart(2, '0')}`;
+      let group = groupMap.get(key);
+      if (!group) {
+        group = {
+          key,
+          label: `Semana ${week} (${year})`,
+          rows: [],
+          totalMinutes: 0,
+        };
+        groupMap.set(key, group);
+        groups.push(group);
+      }
+      group.rows.push(row);
+      group.totalMinutes += row.totalMinutes;
+    });
+    return groups;
+  }, [rowsWithTotals]);
+
+  const monthlyTotalMinutes = useMemo(
+    () => rowsWithTotals.reduce((acc, row) => acc + row.totalMinutes, 0),
+    [rowsWithTotals],
+  );
 
   const monthOptions = useMemo(
     () => [
@@ -304,63 +364,79 @@ export default function ControlHorarioPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => {
-              const totalMinutes = row.entries.reduce((acc, entry) => {
-                if (!entry.checkIn || !entry.checkOut) return acc;
-                return acc + diffMinutes(entry.checkIn, entry.checkOut);
-              }, 0);
-              const totalClassName = totalMinutes ? getTotalMinutesClassName(totalMinutes) : undefined;
-              return (
-                <tr key={`${row.person.id}-${row.date}`}>
-                  <td>
-                    <div className="fw-semibold">
-                      {row.person.isFixedTrainer ? (
-                        <Button
-                          variant="link"
-                          className="p-0 align-baseline fw-semibold"
-                          onClick={() => handleFixedTrainerClick(row.person)}
-                        >
-                          {row.person.name}
-                        </Button>
-                      ) : (
-                        row.person.name
-                      )}
-                    </div>
-                    <div className="text-muted small">{row.person.role}</div>
-                  </td>
-                  <td>{dateFormatter.format(new Date(`${row.date}T00:00:00`))}</td>
-                  <td>
-                    {row.entries.length ? (
-                      <div className="d-flex flex-column gap-2">
-                        {row.entries.map((entry) => (
-                          <div key={entry.id} className="d-flex align-items-center gap-2">
-                            <span>
-                              {entry.checkIn ? timeFormatter.format(new Date(entry.checkIn)) : '—'} →{' '}
-                              {entry.checkOut ? timeFormatter.format(new Date(entry.checkOut)) : '—'}
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="outline-secondary"
-                              onClick={() => handleOpenModal(row.person, row.date, entry)}
-                            >
-                              Editar
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-muted">Sin fichajes</span>
-                    )}
-                  </td>
-                  <td className={totalClassName}>{totalMinutes ? formatDuration(totalMinutes) : '—'}</td>
-                  <td>
-                    <Button size="sm" variant="outline-primary" onClick={() => handleOpenModal(row.person, row.date)}>
-                      Añadir fichaje
-                    </Button>
+            {weekGroups.map((group) => (
+              <Fragment key={group.key}>
+                <tr className="table-light">
+                  <td colSpan={5} className="fw-semibold">
+                    {group.label}
                   </td>
                 </tr>
-              );
-            })}
+                {group.rows.map((row) => {
+                  const totalClassName = row.totalMinutes ? getTotalMinutesClassName(row.totalMinutes) : undefined;
+                  return (
+                    <tr key={`${row.person.id}-${row.date}`}>
+                      <td>
+                        <div className="fw-semibold">
+                          {row.person.isFixedTrainer ? (
+                            <Button
+                              variant="link"
+                              className="p-0 align-baseline fw-semibold"
+                              onClick={() => handleFixedTrainerClick(row.person)}
+                            >
+                              {row.person.name}
+                            </Button>
+                          ) : (
+                            row.person.name
+                          )}
+                        </div>
+                        <div className="text-muted small">{row.person.role}</div>
+                      </td>
+                      <td>{dateFormatter.format(new Date(`${row.date}T00:00:00`))}</td>
+                      <td>
+                        {row.entries.length ? (
+                          <div className="d-flex flex-column gap-2">
+                            {row.entries.map((entry) => (
+                              <div key={entry.id} className="d-flex align-items-center gap-2">
+                                <span>
+                                  {entry.checkIn ? timeFormatter.format(new Date(entry.checkIn)) : '—'} →{' '}
+                                  {entry.checkOut ? timeFormatter.format(new Date(entry.checkOut)) : '—'}
+                                </span>
+                                <Button
+                                  size="sm"
+                                  variant="outline-secondary"
+                                  onClick={() => handleOpenModal(row.person, row.date, entry)}
+                                >
+                                  Editar
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-muted">Sin fichajes</span>
+                        )}
+                      </td>
+                      <td className={totalClassName}>
+                        {row.totalMinutes ? formatDuration(row.totalMinutes) : '—'}
+                      </td>
+                      <td>
+                        <Button size="sm" variant="outline-primary" onClick={() => handleOpenModal(row.person, row.date)}>
+                          Añadir fichaje
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr className="table-secondary">
+                  <td colSpan={3} className="fw-semibold">
+                    Total semana
+                  </td>
+                  <td className="fw-semibold">
+                    {group.totalMinutes ? formatDuration(group.totalMinutes) : '—'}
+                  </td>
+                  <td />
+                </tr>
+              </Fragment>
+            ))}
           </tbody>
         </Table>
       </div>
@@ -445,7 +521,11 @@ export default function ControlHorarioPage() {
                   <option value="trainer">Formadores</option>
                 </Form.Select>
               </Form.Group>
-              <div className="ms-auto align-self-end">
+              <div className="ms-auto align-self-end d-flex align-items-center gap-3">
+                <div className="text-end">
+                  <div className="text-muted small">Total mensual</div>
+                  <div className="fw-semibold">{monthlyTotalMinutes ? formatDuration(monthlyTotalMinutes) : '—'}</div>
+                </div>
                 <Button variant="success" onClick={handleDownload} disabled={!rows.length}>
                   Descargar
                 </Button>
