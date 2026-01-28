@@ -1750,6 +1750,28 @@ export default function AuthenticatedApp() {
           >
             <img src={logo} height={64} alt="GEP Group" />
           </Navbar.Brand>
+          {canAccessControlHorario && (
+            <a
+              href={CONTROL_HORARIO_URL}
+              className="control-horario-status d-flex align-items-center gap-2 text-decoration-none d-xl-none"
+            >
+              <span className="control-horario-status-icon" aria-hidden="true">
+                {controlHorarioRunning ? '⏱️' : controlHorarioStarted ? '🕒' : '⏸️'}
+              </span>
+              {controlHorarioRunning ? (
+                <span className="control-horario-status-time">
+                  {formatDuration(controlHorarioTotalMinutes)}
+                </span>
+              ) : null}
+              <span className="visually-hidden">
+                {controlHorarioRunning
+                  ? `Horas en curso: ${formatDuration(controlHorarioTotalMinutes)}`
+                  : controlHorarioStarted
+                  ? 'Día iniciado sin contador activo'
+                  : 'Control horario apagado'}
+              </span>
+            </a>
+          )}
           <Navbar.Toggle aria-controls={NAVBAR_OFFCANVAS_ID} onClick={handleOffcanvasToggle} />
           <Navbar.Offcanvas
             id={NAVBAR_OFFCANVAS_ID}
@@ -1804,7 +1826,7 @@ export default function AuthenticatedApp() {
                   ) : null,
                 )}
                 {canAccessControlHorario && (
-                  <Nav.Item className="w-100 w-xl-auto">
+                  <Nav.Item className="d-none d-xl-flex w-100 w-xl-auto">
                     <Nav.Link
                       href={CONTROL_HORARIO_URL}
                       className="control-horario-status w-100 w-xl-auto d-flex align-items-center gap-2"
