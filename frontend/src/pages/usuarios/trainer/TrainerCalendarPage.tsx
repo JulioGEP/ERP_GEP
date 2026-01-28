@@ -9,6 +9,12 @@ import { fetchTrainers } from '../../../features/recursos/api';
 
 const MADRID_TIMEZONE = 'Europe/Madrid';
 const SPECIAL_TRAINER_EMAILS = new Set(['laura@gepgroup.es', 'ramon@gepgroup.es']);
+const EXTRA_VISIBLE_TRAINER_EMAILS = new Set([
+  'tomasvilaanto@gmail.com',
+  'parapachigr@hotmail.com',
+  'mest1@hotmail.es',
+  'garromero.23@gmail.com',
+]);
 const SPECIAL_ROOM_NAME = 'gep arganda';
 const SPECIAL_VARIANT_SEDE = 'madrid';
 
@@ -66,7 +72,8 @@ export default function TrainerCalendarPage({
     const trainers = trainersQuery.data ?? [];
     trainers.forEach((trainer) => {
       const email = trainer.email?.trim().toLowerCase();
-      if (email && SPECIAL_TRAINER_EMAILS.has(email)) {
+      if (!email) return;
+      if (SPECIAL_TRAINER_EMAILS.has(email) || EXTRA_VISIBLE_TRAINER_EMAILS.has(email)) {
         ids.add(trainer.trainer_id);
       }
     });
