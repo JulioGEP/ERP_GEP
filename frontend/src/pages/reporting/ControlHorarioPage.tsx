@@ -30,14 +30,14 @@ function getMonthRange(year: number, month: number): { startDate: string; endDat
 function getInitialFilters(): {
   month: number;
   year: number;
-  userId: string;
+  userIds: string[];
   roleFilter: 'all' | 'trainer' | 'user';
 } {
   const now = new Date();
   return {
     month: now.getMonth() + 1,
     year: now.getFullYear(),
-    userId: '',
+    userIds: [],
     roleFilter: 'all',
   };
 }
@@ -157,7 +157,7 @@ export default function ControlHorarioPage() {
 
   const filteredPeople = useMemo(() => {
     return people.filter((person) => {
-      if (filters.userId && person.id !== filters.userId) {
+      if (filters.userIds.length && !filters.userIds.includes(person.id)) {
         return false;
       }
       if (filters.roleFilter === 'trainer') {
@@ -168,7 +168,7 @@ export default function ControlHorarioPage() {
       }
       return true;
     });
-  }, [filters.roleFilter, filters.userId, people]);
+  }, [filters.roleFilter, filters.userIds, people]);
 
   const filteredEntries = useMemo(() => {
     if (!filteredPeople.length) {
@@ -488,21 +488,22 @@ export default function ControlHorarioPage() {
                 </Form.Select>
               </Form.Group>
               <Form.Group controlId="control-horario-user">
-                <Form.Label>Usuario</Form.Label>
+                <Form.Label>Usuarios</Form.Label>
                 <Form.Select
-                  value={filters.userId}
+                  multiple
+                  value={filters.userIds}
                   onChange={(event) => {
-                    const value = event.currentTarget.value;
-                    setFilters((prev) => ({ ...prev, userId: value }));
+                    const value = Array.from(event.currentTarget.selectedOptions, (option) => option.value);
+                    setFilters((prev) => ({ ...prev, userIds: value }));
                   }}
                 >
-                  <option value="">Todos</option>
                   {people.map((person) => (
                     <option key={person.id} value={person.id}>
                       {person.name}
                     </option>
                   ))}
                 </Form.Select>
+                <Form.Text className="text-muted">Si no seleccionas usuarios, se muestran todos.</Form.Text>
               </Form.Group>
               <Form.Group controlId="control-horario-role">
                 <Form.Label>Tipo</Form.Label>
