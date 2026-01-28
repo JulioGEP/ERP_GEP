@@ -489,20 +489,29 @@ export default function ControlHorarioPage() {
               </Form.Group>
               <Form.Group controlId="control-horario-user">
                 <Form.Label>Usuarios</Form.Label>
-                <Form.Select
-                  multiple
-                  value={filters.userIds}
-                  onChange={(event) => {
-                    const value = Array.from(event.currentTarget.selectedOptions, (option) => option.value);
-                    setFilters((prev) => ({ ...prev, userIds: value }));
-                  }}
-                >
-                  {people.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.name}
-                    </option>
-                  ))}
-                </Form.Select>
+                <div className="border rounded p-2" style={{ maxHeight: '240px', overflowY: 'auto', minWidth: '220px' }}>
+                  {people.map((person) => {
+                    const isChecked = filters.userIds.includes(person.id);
+                    return (
+                      <Form.Check
+                        key={person.id}
+                        id={`control-horario-user-${person.id}`}
+                        type="checkbox"
+                        label={person.name}
+                        checked={isChecked}
+                        onChange={(event) => {
+                          const { checked } = event.currentTarget;
+                          setFilters((prev) => {
+                            const userIds = checked
+                              ? Array.from(new Set([...prev.userIds, person.id]))
+                              : prev.userIds.filter((userId) => userId !== person.id);
+                            return { ...prev, userIds };
+                          });
+                        }}
+                      />
+                    );
+                  })}
+                </div>
                 <Form.Text className="text-muted">Si no seleccionas usuarios, se muestran todos.</Form.Text>
               </Form.Group>
               <Form.Group controlId="control-horario-role">
