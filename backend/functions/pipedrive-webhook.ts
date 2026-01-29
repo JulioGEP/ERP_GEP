@@ -1,9 +1,10 @@
 import { Prisma } from '@prisma/client';
 import type { Handler, HandlerResponse } from '@netlify/functions';
-import { extractProductCatalogAttributes, getProduct } from './_shared/pipedrive';
+import { extractProductCatalogAttributes, getPerson, getProduct } from './_shared/pipedrive';
 import { COMMON_HEADERS } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
 import { deleteDealFromDatabase, importDealFromPipedrive } from './deals';
+import { buildMailchimpPersonInput } from './_shared/pipedrive-mailchimp';
 
 const EXPECTED_TOKEN = process.env.PIPEDRIVE_WEBHOOK_TOKEN;
 
@@ -351,6 +352,8 @@ export const handler: Handler = async (event) => {
     | 'product_deleted'
     | 'product_updated'
     | 'product_created'
+    | 'person_created'
+    | 'person_updated'
     | 'skipped' = 'skipped';
   const filteredHeaders = filterHeaders(normalizedHeaders);
 
@@ -395,6 +398,25 @@ export const handler: Handler = async (event) => {
         if (updated) {
           processedDealId = productId;
           processedAction = created ? 'product_created' : 'product_updated';
+        }
+      }
+    }
+
+    if (entity === 'person' && (action === 'create' || action === 'change' || action === 'update')) {
+      const personId = resolveEntityId(body) ?? normalizeDealId((body as any)?.data?.id);
+      if (personId) {
+        const person = await getPerson(personId);
+        const mapped = await buildMailchimpPersonInput(person, new Map());
+        if (mapped) {
+          const { person_id, ...payload } = mapped;
+          const now = new Date();
+          await prisma.pipedrive_mailchimp_persons.upsert({
+            where: { person_id },
+            update: { ...payload, updated_at: now },
+            create: { person_id, ...payload, created_at: now, updated_at: now },
+          });
+          processedDealId = person_id;
+          processedAction = action === 'create' ? 'person_created' : 'person_updated';
         }
       }
     }

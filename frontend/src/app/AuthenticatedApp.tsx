@@ -63,6 +63,7 @@ import type { TemplatesCertificadosPageProps } from '../pages/recursos/Templates
 import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
 import type { ProductsHoldedPageProps } from '../pages/recursos/ProductsHoldedPage';
 import type { StockPageProps } from '../pages/recursos/StockPage';
+import type { MailchimpPageProps } from '../pages/recursos/MailchimpPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
 import type { ConfirmacionesPageProps } from '../pages/recursos/ConfirmacionesPage';
@@ -139,6 +140,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/Formaciones', label: 'Formaciones', path: '/recursos/formaciones' },
       { key: 'Recursos/ProductsHolded', label: 'Products Holded', path: '/recursos/products_holded' },
       { key: 'Recursos/Stock', label: 'Stock', path: '/recursos/stock' },
+      { key: 'Recursos/Mailchimp', label: 'Mailchimp', path: '/recursos/mailchimp' },
       { key: 'Recursos/ImportarSesion', label: 'Importar sesiones', path: '/recursos/importar_sesion' },
       { key: 'Recursos/ImportarEnBucle', label: 'Importar en bucle', path: '/recursos/importar_en_bucle' },
       { key: 'Recursos/Proveedores', label: 'Proveedores', path: '/recursos/proveedores' },
@@ -1703,6 +1705,10 @@ export default function AuthenticatedApp() {
     onNotify: pushToast,
   };
 
+  const mailchimpPageProps: MailchimpPageProps = {
+    onNotify: pushToast,
+  };
+
   const templatesCertificadosPageProps: TemplatesCertificadosPageProps = {
     onNotify: pushToast,
   };
@@ -1935,6 +1941,7 @@ export default function AuthenticatedApp() {
             unidadesMovilesPageProps={unidadesMovilesPageProps}
             salasPageProps={salasPageProps}
             proveedoresPageProps={proveedoresPageProps}
+            mailchimpPageProps={mailchimpPageProps}
             templatesCertificadosPageProps={templatesCertificadosPageProps}
             productosPageProps={productosPageProps}
             productsHoldedPageProps={productsHoldedPageProps}
