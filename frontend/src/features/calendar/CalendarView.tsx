@@ -633,13 +633,34 @@ type VariantTrainer = CalendarVariantEvent['variant']['trainers'][number];
 type VariantUnit = CalendarVariantEvent['variant']['unidades'][number];
 
 function getVariantTrainerResources(variant: CalendarVariantEvent): VariantTrainer[] {
+  const resources: VariantTrainer[] = [];
+  const seen = new Set<string>();
+
+  const addTrainer = (trainer: VariantTrainer | null | undefined) => {
+    if (!trainer) return;
+    const id = safeString(trainer.trainer_id);
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    resources.push(trainer);
+  };
+
   if (variant.variant.trainers && variant.variant.trainers.length) {
-    return variant.variant.trainers;
+    variant.variant.trainers.forEach(addTrainer);
   }
-  if (variant.variant.trainer) {
-    return [variant.variant.trainer];
-  }
-  return [];
+
+  addTrainer(variant.variant.trainer ?? null);
+
+  const addTrainerId = (trainerId: string | null | undefined) => {
+    const id = safeString(trainerId);
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    resources.push({ trainer_id: id, name: null, apellido: null, dni: null });
+  };
+
+  addTrainerId(variant.variant.trainer_id);
+  variant.variant.trainer_ids?.forEach(addTrainerId);
+
+  return resources;
 }
 
 function formatVariantTrainerNames(trainers: VariantTrainer[]): string {
