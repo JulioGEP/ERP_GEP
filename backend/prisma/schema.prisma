@@ -477,6 +477,7 @@ model pipedrive_mailchimp_persons {
   email          String?
   label_ids      Json?
   org_id         String?
+  org_name       String?
   org_address    String?
   size_employees String?
   segment        String?
