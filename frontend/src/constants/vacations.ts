@@ -36,7 +36,7 @@ export const VACATION_TYPE_INFO: Record<
   },
   F: { label: 'Fallecimiento', fullLabel: 'Fallecimiento de un familiar', color: '#0ea5e9' },
   R: { label: 'Traslado', fullLabel: 'Traslado del domicilio habitual', color: '#0f766e' },
-  P: { label: 'Exámenes', fullLabel: 'Exámenes prenatales', color: '#a855f7' },
+  P: { label: 'Visita Médica o Exámenes', fullLabel: 'Visita Médica o Exámenes', color: '#a855f7' },
   I: { label: 'Incapacidad', fullLabel: 'Incapacidad temporal', color: '#475569' },
   N: { label: 'Festivos nacionales', fullLabel: 'Festivos nacionales', color: '#facc15' },
   C: { label: 'Fiesta autonómica', fullLabel: 'Fiesta autonómica', color: '#14b8a6' },

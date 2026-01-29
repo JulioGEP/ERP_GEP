@@ -20,7 +20,7 @@ const VACATION_TAG_LABELS: Record<
   H: 'Accidente, enfermedad, hospitalización o intervención de un familiar',
   F: 'Fallecimiento de un familiar',
   R: 'Traslado del domicilio habitual',
-  P: 'Exámenes prenatales',
+  P: 'Visita Médica o Exámenes',
   I: 'Incapacidad temporal',
   N: 'Festivos nacionales',
   C: 'Fiesta autonómica',
