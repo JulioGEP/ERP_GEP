@@ -236,6 +236,21 @@ function normalizeText(value: unknown): string | null {
   return text.length ? text : null;
 }
 
+function normalizePipelineLabel(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const label = String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  return label.length ? label : null;
+}
+
+function isFormacionAbiertaPipeline(value: unknown): boolean {
+  return normalizePipelineLabel(value) === 'formacion abierta';
+}
+
 function normalizeCategory(value: string | null | undefined) {
   if (!value) return null;
   return value.trim();
@@ -283,6 +298,25 @@ async function deleteProductFromDatabase(prisma: ReturnType<typeof getPrisma>, p
   });
 
   return { deleted: deletion.count > 0 } as const;
+}
+
+async function refreshFormacionAbiertaDeal(
+  prisma: ReturnType<typeof getPrisma>,
+  dealId: string,
+): Promise<boolean> {
+  const stored = await prisma.deals.findUnique({
+    where: { deal_id: dealId },
+    select: { pipeline_label: true, pipeline_id: true },
+  });
+  const pipeline = stored?.pipeline_label ?? stored?.pipeline_id ?? null;
+
+  if (!isFormacionAbiertaPipeline(pipeline)) {
+    return false;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  await importDealFromPipedrive(dealId);
+  return true;
 }
 
 export const handler: Handler = async (event) => {
@@ -390,6 +424,7 @@ export const handler: Handler = async (event) => {
       });
 
       await importDealFromPipedrive(dealId);
+      await refreshFormacionAbiertaDeal(prisma, dealId);
 
       processedDealId = dealId;
       processedAction = existedBefore ? 'updated' : 'created';
