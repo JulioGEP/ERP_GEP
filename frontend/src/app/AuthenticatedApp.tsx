@@ -397,6 +397,13 @@ function formatDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function safeDateKey(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return formatDateKey(date);
+}
+
 function diffMinutes(start: string, end: Date): number {
   const startDate = new Date(start);
   if (Number.isNaN(startDate.getTime())) return 0;
@@ -609,6 +616,11 @@ export default function AuthenticatedApp() {
   const canAccessControlHorario = hasPermission('/control_horario') && (!isFormador || isFixedTrainer);
   const [controlHorarioNow, setControlHorarioNow] = useState(() => new Date());
   const controlHorarioDateKey = useMemo(() => formatDateKey(controlHorarioNow), [controlHorarioNow]);
+  const controlHorarioPreviousDateKey = useMemo(() => {
+    const previousDate = new Date(controlHorarioNow);
+    previousDate.setDate(previousDate.getDate() - 1);
+    return formatDateKey(previousDate);
+  }, [controlHorarioNow]);
 
   useEffect(() => {
     const id = window.setInterval(() => setControlHorarioNow(new Date()), 60000);
@@ -616,10 +628,10 @@ export default function AuthenticatedApp() {
   }, []);
 
   const controlHorarioQuery = useQuery({
-    queryKey: ['control-horario-navbar', controlHorarioDateKey],
+    queryKey: ['control-horario-navbar', controlHorarioPreviousDateKey, controlHorarioDateKey],
     queryFn: () =>
       fetchControlHorario({
-        startDate: controlHorarioDateKey,
+        startDate: controlHorarioPreviousDateKey,
         endDate: controlHorarioDateKey,
       }),
     enabled: canAccessControlHorario,
@@ -631,19 +643,31 @@ export default function AuthenticatedApp() {
     () => controlHorarioEntries.find((entry) => entry.checkIn && !entry.checkOut) ?? null,
     [controlHorarioEntries],
   );
-  const controlHorarioHasEntries = controlHorarioEntries.length > 0;
+  const controlHorarioHasEntries = useMemo(
+    () =>
+      controlHorarioEntries.some((entry) => {
+        const checkInKey = safeDateKey(entry.checkIn);
+        const checkOutKey = safeDateKey(entry.checkOut);
+        return checkInKey === controlHorarioDateKey || checkOutKey === controlHorarioDateKey;
+      }),
+    [controlHorarioEntries, controlHorarioDateKey],
+  );
   const controlHorarioTotalMinutes = useMemo(() => {
     let total = 0;
     controlHorarioEntries.forEach((entry) => {
       if (entry.checkIn && entry.checkOut) {
-        total += diffMinutes(entry.checkIn, new Date(entry.checkOut));
+        const checkInKey = safeDateKey(entry.checkIn);
+        const checkOutKey = safeDateKey(entry.checkOut);
+        if (checkInKey === controlHorarioDateKey || checkOutKey === controlHorarioDateKey) {
+          total += diffMinutes(entry.checkIn, new Date(entry.checkOut));
+        }
       }
     });
     if (controlHorarioOpenEntry?.checkIn) {
       total += diffMinutes(controlHorarioOpenEntry.checkIn, controlHorarioNow);
     }
     return total;
-  }, [controlHorarioEntries, controlHorarioOpenEntry, controlHorarioNow]);
+  }, [controlHorarioDateKey, controlHorarioEntries, controlHorarioOpenEntry, controlHorarioNow]);
   const controlHorarioRunning = Boolean(controlHorarioOpenEntry);
   const controlHorarioStarted = controlHorarioHasEntries && !controlHorarioRunning;
 
