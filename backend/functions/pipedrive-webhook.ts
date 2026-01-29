@@ -241,30 +241,6 @@ function normalizeCategory(value: string | null | undefined) {
   return value.trim();
 }
 
-function normalizePipelineLabel(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  const label = String(value)
-    .normalize('NFC')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return label.length ? label : null;
-}
-
-function normalizePipelineComparison(value: unknown): string | null {
-  const label = normalizePipelineLabel(value);
-  if (!label) return null;
-  return label
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-}
-
-function isFormacionAbiertaPipelineLabel(value: unknown): boolean {
-  const normalized = normalizePipelineComparison(value);
-  if (!normalized) return false;
-  return normalized === 'formacion abierta';
-}
-
 async function updateProductFromPipedrive(prisma: ReturnType<typeof getPrisma>, productId: string) {
   const existingProduct = await prisma.products.findUnique({
     where: { id_pipe: productId },
@@ -417,15 +393,6 @@ export const handler: Handler = async (event) => {
 
       processedDealId = dealId;
       processedAction = existedBefore ? 'updated' : 'created';
-
-      const importedDeal = await prisma.deals.findUnique({
-        where: { deal_id: dealId },
-        select: { pipeline_label: true },
-      });
-
-      if (isFormacionAbiertaPipelineLabel(importedDeal?.pipeline_label)) {
-        await importDealFromPipedrive(dealId);
-      }
     }
   } catch (processError) {
     console.error('[pipedrive-webhook] Failed processing deal webhook', {
