@@ -68,6 +68,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/recursos/unidades_moviles',
   '/recursos/salas',
   '/recursos/confirmaciones',
+  '/recursos/mailchimp',
   '/certificados',
   '/certificados_emitidos',
   '/certificados/templates_certificados',

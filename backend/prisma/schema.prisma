@@ -471,6 +471,26 @@ model persons {
   @@index([org_id], map: "idx_persons_org_id")
 }
 
+model pipedrive_mailchimp_persons {
+  person_id      String   @id
+  name           String
+  email          String?
+  label_ids      Json?
+  org_id         String?
+  org_address    String?
+  size_employees String?
+  segment        String?
+  employee_count Int?
+  annual_revenue Decimal? @db.Decimal(14, 2)
+  formacion      String?
+  servicio       String?
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([org_id], map: "idx_pipedrive_mailchimp_persons_org_id")
+  @@map("pipedrive_mailchimp_persons")
+}
+
 model plantillas {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name       String   @unique

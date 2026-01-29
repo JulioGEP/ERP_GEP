@@ -176,6 +176,11 @@ type ProductListPage = {
   additional_data?: { pagination?: PaginationInfo };
 };
 
+type PersonListPage = {
+  data: any[];
+  additional_data?: { pagination?: PaginationInfo };
+};
+
 export async function listAllProducts() {
   const pageSize = 500;
 
@@ -186,6 +191,29 @@ export async function listAllProducts() {
   while (hasMore) {
     const query = qs({ start, limit: pageSize });
     const json = (await pdRaw(`/products?${query}`)) as ProductListPage;
+    const data = Array.isArray(json?.data) ? json.data : [];
+    items.push(...data);
+
+    const pagination = json?.additional_data?.pagination;
+    hasMore = Boolean(pagination?.more_items_in_collection && pagination?.next_start != null);
+    if (hasMore && pagination?.next_start != null) {
+      start = Number(pagination.next_start);
+    }
+  }
+
+  return items;
+}
+
+export async function listAllPersons() {
+  const pageSize = 500;
+
+  const items: any[] = [];
+  let start = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const query = qs({ start, limit: pageSize });
+    const json = (await pdRaw(`/persons?${query}`)) as PersonListPage;
     const data = Array.isArray(json?.data) ? json.data : [];
     items.push(...data);
 
