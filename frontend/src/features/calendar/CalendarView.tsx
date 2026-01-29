@@ -1061,9 +1061,20 @@ export function CalendarView({
     staleTime: 5 * 60 * 1000,
   });
 
+  const variantTrainerId = normalizedTrainerId ?? undefined;
   const variantsQuery = useQuery<CalendarVariantsResponse, ApiError>({
-    queryKey: ['calendarVariants', fetchRange?.start ?? null, fetchRange?.end ?? null],
-    queryFn: () => fetchCalendarVariants({ start: fetchRange!.start, end: fetchRange!.end }),
+    queryKey: [
+      'calendarVariants',
+      fetchRange?.start ?? null,
+      fetchRange?.end ?? null,
+      variantTrainerId ?? null,
+    ],
+    queryFn: () =>
+      fetchCalendarVariants({
+        start: fetchRange!.start,
+        end: fetchRange!.end,
+        trainerId: variantTrainerId,
+      }),
     enabled: includeVariants && !!fetchRange,
     staleTime: 5 * 60 * 1000,
   });
@@ -1088,7 +1099,7 @@ export function CalendarView({
     if (mode === 'trainers') {
       output = output.filter((variant) => getVariantTrainerResources(variant).length > 0);
     }
-    if (normalizedTrainerId) {
+    if (normalizedTrainerId && !variantTrainerId) {
       output = output.filter((variant) =>
         getVariantTrainerResources(variant).some(
           (trainer) => safeString(trainer.trainer_id) === normalizedTrainerId,
@@ -1099,7 +1110,7 @@ export function CalendarView({
       output = output.filter((variant) => variantFilter(variant));
     }
     return output;
-  }, [includeVariants, mode, rawVariants, normalizedTrainerId, variantFilter]);
+  }, [includeVariants, mode, rawVariants, normalizedTrainerId, variantTrainerId, variantFilter]);
 
   const productOptionsQuery = useQuery({
     queryKey: ['calendar-filter-products'],
