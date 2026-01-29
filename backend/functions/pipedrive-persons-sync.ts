@@ -14,7 +14,7 @@ export const handler: Handler = async (event) => {
   try {
     const prisma = getPrisma();
     const rawPersons = await listAllPersons();
-    const orgCache = new Map<string, string | null>();
+    const orgCache = { organizations: new Map<string, any | null>() };
     const mapped: Awaited<ReturnType<typeof buildMailchimpPersonInput>>[] = [];
 
     for (const raw of rawPersons) {

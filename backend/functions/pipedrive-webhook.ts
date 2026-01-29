@@ -406,7 +406,7 @@ export const handler: Handler = async (event) => {
       const personId = resolveEntityId(body) ?? normalizeDealId((body as any)?.data?.id);
       if (personId) {
         const person = await getPerson(personId);
-        const mapped = await buildMailchimpPersonInput(person, new Map());
+        const mapped = await buildMailchimpPersonInput(person, { organizations: new Map() });
         if (mapped) {
           const { person_id, ...payload } = mapped;
           const now = new Date();
