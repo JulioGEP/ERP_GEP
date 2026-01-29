@@ -132,6 +132,13 @@ function parseHHMM(value: string | null | undefined): TimeParts | null {
   return { hour, minute };
 }
 
+function isMissingRelationError(error: unknown, relation: string): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message || '';
+  const pattern = new RegExp(`\\b${relation}\\b`, 'i');
+  return pattern.test(message);
+}
+
 function buildDateTime(date: Date, time: TimeParts | null, fallback: TimeParts): Date {
   const parts = time ?? fallback;
   const year = date.getUTCFullYear();
@@ -421,6 +428,8 @@ export const handler = async (event: any) => {
     // Acepta start/end, from_utc/to_utc, o from/to. Si solo viene inicio, usa mismo día como fin.
     const startRaw = getFirstParam(qs, ['start', 'from_utc', 'from']) ?? null;
     const endRaw = getFirstParam(qs, ['end', 'to_utc', 'to']) ?? startRaw; // fallback: mismo día
+    const trainerIdRaw = getFirstParam(qs, ['trainerId', 'trainer_id', 'trainer']) ?? null;
+    const trainerId = toTrimmed(trainerIdRaw);
 
     const startDate = parseDateFlex(startRaw);
     const endDate = parseDateFlex(endRaw);
@@ -437,6 +446,37 @@ export const handler = async (event: any) => {
     }
 
     const prisma = getPrisma();
+    let legacyVariantIds: string[] = [];
+    if (trainerId) {
+      try {
+        const rows = (await prisma.$queryRaw<{ variant_id: string }[]>`
+          SELECT variant_id::text AS variant_id
+          FROM variant_trainer_links
+          WHERE trainer_id = ${trainerId}
+        `) as Array<{ variant_id: string }>;
+
+        legacyVariantIds = rows
+          .map((row) => row.variant_id)
+          .filter((value): value is string => Boolean(value));
+      } catch (error) {
+        if (!isMissingRelationError(error, 'variant_trainer_links')) {
+          throw error;
+        }
+      }
+    }
+
+    const trainerFilters: Prisma.variantsWhereInput[] = [];
+    if (trainerId) {
+      trainerFilters.push({ trainer_id: trainerId });
+      trainerFilters.push({
+        trainer_invites: {
+          some: { trainer_id: trainerId, status: { in: ['PENDING', 'CONFIRMED'] } },
+        },
+      });
+      if (legacyVariantIds.length) {
+        trainerFilters.push({ id: { in: legacyVariantIds } });
+      }
+    }
 
     const buildQuery = (includeResources: boolean) =>
       prisma.variants.findMany({
@@ -446,6 +486,7 @@ export const handler = async (event: any) => {
             gte: range.start,
             lte: range.end,
           },
+          ...(trainerFilters.length ? { OR: trainerFilters } : {}),
         },
         orderBy: [{ date: 'asc' }, { name: 'asc' }],
         select: (includeResources ? variantSelectionWithResources : variantSelectionBase) as any,
