@@ -29,14 +29,6 @@
     "node_modules/.prisma/client/libquery_engine-rhel-openssl-3.0.x.so.node"
   ]
 
-[[scheduled]]
-  function = "daily-availability-slack"
-  cron = "0 * * * *"
-
-[[scheduled]]
-  function = "control-horario-slack-reminder"
-  cron = "*/15 * * * *"
-
 # --------- Redirects ---------
 
 # Health
