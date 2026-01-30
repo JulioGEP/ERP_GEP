@@ -2695,6 +2695,11 @@ function SessionEditor({
               onChange={(event) =>
                 onChange((current) => ({ ...current, nombre_cache: event.target.value }))
               }
+              onBlur={() => {
+                if (status.dirty && !status.saving) {
+                  void Promise.resolve(onSave({ notifyOnSuccess: false })).catch(() => undefined);
+                }
+              }}
               title={buildFieldTooltip(form.nombre_cache)}
             />
           </Form.Group>
