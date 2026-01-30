@@ -1,16 +1,12 @@
 import { Prisma } from '@prisma/client';
-import { findFieldDef, getOrganization, getOrganizationFields, getPersonLabels, optionLabelOf } from './pipedrive';
+import { getOrganization } from './pipedrive';
 
 const SIZE_EMPLOYEES_FIELD = 'd114c1adf4f424881f6784faf685f1e1aec7cdf4';
 const SEGMENT_FIELD = 'c675b8535afadbd89b154a3b8eb68124a3409368';
 const FORMACION_FIELD = 'c99554c188c3f63ad9bc8b2cf7b50cbd145455ab';
 const SERVICIO_FIELD = '1d78d202448ee549a86e0881ec06f3ff7842c5ea';
 
-type OrgCache = {
-  organizations: Map<string, any | null>;
-  orgFieldDefs?: any[] | null;
-  personLabels?: Map<string, string>;
-};
+type OrgCache = Map<string, string | null>;
 
 export type MailchimpPersonInput = {
   person_id: string;
@@ -18,7 +14,6 @@ export type MailchimpPersonInput = {
   email: string | null;
   label_ids: Prisma.InputJsonValue | null;
   org_id: string | null;
-  org_name: string | null;
   org_address: string | null;
   size_employees: string | null;
   segment: string | null;
@@ -86,50 +81,12 @@ function extractOrgAddress(value: unknown): string | null {
   return normalizeText((value as any).address ?? (value as any).address_formatted);
 }
 
-function extractOrgName(value: unknown): string | null {
-  if (!value || typeof value !== 'object') return null;
-  return normalizeText((value as any).name ?? (value as any).org_name);
-}
-
-async function resolveOrganization(orgId: string, cache: OrgCache): Promise<any | null> {
-  if (cache.organizations.has(orgId)) return cache.organizations.get(orgId) ?? null;
+async function resolveOrgAddress(orgId: string, cache: OrgCache): Promise<string | null> {
+  if (cache.has(orgId)) return cache.get(orgId) ?? null;
   const org = await getOrganization(orgId).catch(() => null);
-  cache.organizations.set(orgId, org ?? null);
-  return org ?? null;
-}
-
-async function resolveOrgFieldDefs(cache: OrgCache): Promise<any[] | null> {
-  if (cache.orgFieldDefs !== undefined) return cache.orgFieldDefs ?? null;
-  const defs = await getOrganizationFields().catch(() => null);
-  cache.orgFieldDefs = Array.isArray(defs) ? defs : null;
-  return cache.orgFieldDefs ?? null;
-}
-
-async function resolvePersonLabelMap(cache: OrgCache): Promise<Map<string, string>> {
-  if (cache.personLabels) return cache.personLabels;
-  const labels = await getPersonLabels().catch(() => []);
-  const list = Array.isArray(labels) ? labels : [];
-  const map = new Map<string, string>();
-  for (const label of list) {
-    const id = normalizeText((label as any)?.id ?? (label as any)?.value);
-    const name = normalizeText((label as any)?.name ?? (label as any)?.label);
-    if (id && name) map.set(id, name);
-  }
-  cache.personLabels = map;
-  return map;
-}
-
-function resolveOrgTextField(
-  org: any | null,
-  fallback: unknown,
-  fieldKey: string,
-  fieldDefs: any[] | null,
-): string | null {
-  const value = org?.[fieldKey] ?? fallback;
-  if (value == null) return null;
-  const fieldDef = fieldDefs ? findFieldDef(fieldDefs, fieldKey) : null;
-  const optionLabel = fieldDef ? optionLabelOf(fieldDef, value) : undefined;
-  return normalizeText(optionLabel ?? value);
+  const address = normalizeText(org?.address ?? (org as any)?.address_formatted);
+  cache.set(orgId, address ?? null);
+  return address ?? null;
 }
 
 export async function buildMailchimpPersonInput(
@@ -145,35 +102,24 @@ export async function buildMailchimpPersonInput(
     personId;
   const email = pickFirstEmail(raw?.email);
   const labelIds = normalizeLabelIds(raw?.label_ids);
-  const labelMap = labelIds.length ? await resolvePersonLabelMap(cache) : null;
-  const labelNames = labelIds
-    .map((label) => (labelMap?.get(label) ? labelMap?.get(label) : label))
-    .filter((label): label is string => Boolean(label));
   const orgId = extractOrgId(raw?.org_id);
-  const orgFromPayload = orgId ? await resolveOrganization(orgId, cache) : null;
-  const orgFieldDefs = await resolveOrgFieldDefs(cache);
   const orgAddressFromPayload = extractOrgAddress(raw?.org_id);
-  const orgNameFromPayload = extractOrgName(raw?.org_id);
   const orgAddress = orgId
-    ? orgAddressFromPayload ??
-      normalizeText(orgFromPayload?.address ?? (orgFromPayload as any)?.address_formatted)
+    ? orgAddressFromPayload ?? (await resolveOrgAddress(orgId, cache))
     : orgAddressFromPayload;
-  const orgName =
-    orgNameFromPayload ?? normalizeText(orgFromPayload?.name ?? (orgFromPayload as any)?.org_name);
 
   return {
     person_id: personId,
     name,
     email,
-    label_ids: labelNames.length ? labelNames : null,
+    label_ids: labelIds.length ? labelIds : null,
     org_id: orgId,
-    org_name: orgName,
     org_address: orgAddress,
-    size_employees: resolveOrgTextField(orgFromPayload, raw?.[SIZE_EMPLOYEES_FIELD], SIZE_EMPLOYEES_FIELD, orgFieldDefs),
-    segment: resolveOrgTextField(orgFromPayload, raw?.[SEGMENT_FIELD], SEGMENT_FIELD, orgFieldDefs),
-    employee_count: normalizeInteger(orgFromPayload?.employee_count ?? raw?.employee_count),
-    annual_revenue: normalizeNumber(orgFromPayload?.annual_revenue ?? raw?.annual_revenue),
-    formacion: resolveOrgTextField(orgFromPayload, raw?.[FORMACION_FIELD], FORMACION_FIELD, orgFieldDefs),
-    servicio: resolveOrgTextField(orgFromPayload, raw?.[SERVICIO_FIELD], SERVICIO_FIELD, orgFieldDefs),
+    size_employees: normalizeText(raw?.[SIZE_EMPLOYEES_FIELD]),
+    segment: normalizeText(raw?.[SEGMENT_FIELD]),
+    employee_count: normalizeInteger(raw?.employee_count),
+    annual_revenue: normalizeNumber(raw?.annual_revenue),
+    formacion: normalizeText(raw?.[FORMACION_FIELD]),
+    servicio: normalizeText(raw?.[SERVICIO_FIELD]),
   };
 }

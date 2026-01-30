@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS pipedrive_mailchimp_persons (
   email TEXT,
   label_ids JSONB,
   org_id TEXT,
-  org_name TEXT,
   org_address TEXT,
   size_employees TEXT,
   segment TEXT,

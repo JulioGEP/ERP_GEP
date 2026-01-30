@@ -4,7 +4,6 @@ export type MailchimpPerson = {
   email: string | null;
   label_ids: string[];
   org_id: string | null;
-  org_name: string | null;
   org_address: string | null;
   size_employees: string | null;
   segment: string | null;

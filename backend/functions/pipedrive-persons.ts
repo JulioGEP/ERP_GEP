@@ -38,7 +38,6 @@ export const handler: Handler = async (event) => {
         email: row.email ?? null,
         label_ids: normalizeLabelIds(row.label_ids),
         org_id: row.org_id ?? null,
-        org_name: row.org_name ?? null,
         org_address: row.org_address ?? null,
         size_employees: row.size_employees ?? null,
         segment: row.segment ?? null,
