@@ -1,5 +1,5 @@
-import { useCallback, useMemo } from 'react';
-import { Alert, Badge, Button, Spinner, Table } from 'react-bootstrap';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert, Badge, Button, Modal, Spinner, Table } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../../api/client';
 import type { MailchimpPerson } from '../../types/mailchimpPerson';
@@ -130,6 +130,8 @@ export function MailchimpPersonsView({ onNotify }: MailchimpPersonsViewProps) {
     () => 'Listado de personas en Pipedrive para sincronizar con Mailchimp.',
     [],
   );
+  const [selectedPerson, setSelectedPerson] = useState<MailchimpPerson | null>(null);
+  const closeModal = () => setSelectedPerson(null);
 
   return (
     <div className="d-grid gap-4">
@@ -187,77 +189,32 @@ export function MailchimpPersonsView({ onNotify }: MailchimpPersonsViewProps) {
                   sortState={sortState}
                   onSort={requestSort}
                 />
-                <SortableHeader
-                  columnKey="org_address"
-                  label={<span className="fw-semibold">Dirección</span>}
-                  sortState={sortState}
-                  onSort={requestSort}
-                />
-                <SortableHeader
-                  columnKey="size_employees"
-                  label={<span className="fw-semibold">Tamaño empleados</span>}
-                  sortState={sortState}
-                  onSort={requestSort}
-                />
-                <SortableHeader
-                  columnKey="segment"
-                  label={<span className="fw-semibold">Segmento</span>}
-                  sortState={sortState}
-                  onSort={requestSort}
-                />
-                <SortableHeader
-                  columnKey="employee_count"
-                  label={<span className="fw-semibold">Empleados</span>}
-                  sortState={sortState}
-                  onSort={requestSort}
-                />
-                <SortableHeader
-                  columnKey="annual_revenue"
-                  label={<span className="fw-semibold">Ingresos</span>}
-                  sortState={sortState}
-                  onSort={requestSort}
-                />
-                <SortableHeader
-                  columnKey="formacion"
-                  label={<span className="fw-semibold">Formación</span>}
-                  sortState={sortState}
-                  onSort={requestSort}
-                />
-                <SortableHeader
-                  columnKey="servicio"
-                  label={<span className="fw-semibold">Servicio</span>}
-                  sortState={sortState}
-                  onSort={requestSort}
-                />
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-4 text-muted">
+                  <td colSpan={5} className="text-center py-4 text-muted">
                     Cargando personas...
                   </td>
                 </tr>
               ) : pageItems.length ? (
                 pageItems.map((person) => (
-                  <tr key={person.person_id}>
+                  <tr
+                    key={person.person_id}
+                    className="cursor-pointer"
+                    onClick={() => setSelectedPerson(person)}
+                  >
                     <td className="fw-semibold text-nowrap">{person.person_id}</td>
                     <td>{person.name}</td>
                     <td>{person.email ?? '—'}</td>
                     <td>{renderLabelIds(person.label_ids)}</td>
                     <td>{person.org_id ?? '—'}</td>
-                    <td>{person.org_address ?? '—'}</td>
-                    <td>{person.size_employees ?? '—'}</td>
-                    <td>{person.segment ?? '—'}</td>
-                    <td>{formatNumber(person.employee_count)}</td>
-                    <td>{formatNumber(person.annual_revenue, { maximumFractionDigits: 2 })}</td>
-                    <td>{person.formacion ?? '—'}</td>
-                    <td>{person.servicio ?? '—'}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={12} className="text-center py-4 text-muted">
+                  <td colSpan={5} className="text-center py-4 text-muted">
                     No hay personas registradas.
                   </td>
                 </tr>
@@ -273,6 +230,73 @@ export function MailchimpPersonsView({ onNotify }: MailchimpPersonsViewProps) {
           onPageChange={goToPage}
         />
       </div>
+
+      <Modal show={Boolean(selectedPerson)} onHide={closeModal} size="lg" centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Detalle de persona</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {selectedPerson ? (
+            <Table bordered size="sm" className="mb-0">
+              <tbody>
+                <tr>
+                  <th className="text-nowrap">ID</th>
+                  <td>{selectedPerson.person_id}</td>
+                </tr>
+                <tr>
+                  <th className="text-nowrap">Nombre</th>
+                  <td>{selectedPerson.name}</td>
+                </tr>
+                <tr>
+                  <th className="text-nowrap">Correo</th>
+                  <td>{selectedPerson.email ?? '—'}</td>
+                </tr>
+                <tr>
+                  <th className="text-nowrap">Etiqueta</th>
+                  <td>{renderLabelIds(selectedPerson.label_ids)}</td>
+                </tr>
+                <tr>
+                  <th className="text-nowrap">Organización</th>
+                  <td>{selectedPerson.org_id ?? '—'}</td>
+                </tr>
+                <tr>
+                  <th className="text-nowrap">Dirección</th>
+                  <td>{selectedPerson.org_address ?? '—'}</td>
+                </tr>
+                <tr>
+                  <th className="text-nowrap">Tamaño empleados</th>
+                  <td>{selectedPerson.size_employees ?? '—'}</td>
+                </tr>
+                <tr>
+                  <th className="text-nowrap">Segmento</th>
+                  <td>{selectedPerson.segment ?? '—'}</td>
+                </tr>
+                <tr>
+                  <th className="text-nowrap">Empleados</th>
+                  <td>{formatNumber(selectedPerson.employee_count)}</td>
+                </tr>
+                <tr>
+                  <th className="text-nowrap">Ingresos</th>
+                  <td>{formatNumber(selectedPerson.annual_revenue, { maximumFractionDigits: 2 })}</td>
+                </tr>
+                <tr>
+                  <th className="text-nowrap">Formación</th>
+                  <td>{selectedPerson.formacion ?? '—'}</td>
+                </tr>
+                <tr>
+                  <th className="text-nowrap">Servicio</th>
+                  <td>{selectedPerson.servicio ?? '—'}</td>
+                </tr>
+              </tbody>
+            </Table>
+          ) : null}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={closeModal}>
+            Cerrar
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }
