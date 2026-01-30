@@ -94,8 +94,8 @@ export function MailchimpPersonsView({ onNotify }: MailchimpPersonsViewProps) {
         return person.email ?? '';
       case 'label_ids':
         return person.label_ids.join(', ');
-      case 'org_name':
-        return person.org_name ?? '';
+      case 'org_id':
+        return person.org_id ?? '';
       case 'org_address':
         return person.org_address ?? '';
       case 'size_employees':
@@ -182,7 +182,7 @@ export function MailchimpPersonsView({ onNotify }: MailchimpPersonsViewProps) {
                   onSort={requestSort}
                 />
                 <SortableHeader
-                  columnKey="org_name"
+                  columnKey="org_id"
                   label={<span className="fw-semibold">Organización</span>}
                   sortState={sortState}
                   onSort={requestSort}
@@ -245,7 +245,7 @@ export function MailchimpPersonsView({ onNotify }: MailchimpPersonsViewProps) {
                     <td>{person.name}</td>
                     <td>{person.email ?? '—'}</td>
                     <td>{renderLabelIds(person.label_ids)}</td>
-                    <td>{person.org_name ?? person.org_id ?? '—'}</td>
+                    <td>{person.org_id ?? '—'}</td>
                     <td>{person.org_address ?? '—'}</td>
                     <td>{person.size_employees ?? '—'}</td>
                     <td>{person.segment ?? '—'}</td>
