@@ -41,6 +41,8 @@ export async function reindexSessionNames(
   baseName: string,
 ) {
   const base = baseName.trim().length ? baseName.trim() : 'Sesión';
+  const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const autoNamePattern = new RegExp(`^${escapedBase} #\\d+$`);
   const sesiones: { id: string; nombre_cache: string | null }[] = await tx.sesiones.findMany({
     where: { deal_product_id: dealProductId },
     orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
@@ -50,7 +52,9 @@ export async function reindexSessionNames(
   const updates: Array<ReturnType<typeof tx.sesiones.update>> = [];
   sesiones.forEach((session: { id: string; nombre_cache: string | null }, index: number) => {
     const expected = `${base} #${index + 1}`;
-    if (session.nombre_cache === expected) return;
+    const currentName = session.nombre_cache?.trim() ?? '';
+    const isAutoName = !currentName || autoNamePattern.test(currentName);
+    if (!isAutoName || currentName === expected) return;
     updates.push(
       tx.sesiones.update({
         where: { id: session.id },
