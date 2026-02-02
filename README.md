@@ -77,6 +77,7 @@ Este monorepo reúne el panel interno de GEP (frontend React) y el backend de fu
 - **Calendario y recursos**: helpers en `_shared/sessions.ts`, `variant-resources.ts` y `variant-defaults.ts` componen sesiones, recursos y variaciones antes de exponerlas.
 - **Seguridad**: rate limiting en API pública (`public-session-students.ts`), validación de dominio permitido para autenticación y logging de auditoría (`audit-events.ts`, `_shared/audit-log`).
 - **Healthcheck**: `/api/health` redirige a `health.ts` para monitorización.
+- **Control horario**: el recordatorio automático por Slack para fichaje fuera de hora ya no está disponible.
 
 ## Frontend
 - **Entrada y layout**: `src/main.tsx` monta React Query y Router. `App.tsx` gestiona la navegación principal, los modales de presupuestos y la restauración de la última ruta en `localStorage`.
