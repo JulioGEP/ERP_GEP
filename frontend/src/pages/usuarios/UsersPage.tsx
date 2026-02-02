@@ -1109,7 +1109,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                   </Col>
                   <Col md={4}>
                     <Form.Group controlId="payroll-aportacion-detalle">
-                      <Form.Label>Detalle aportación SS e IRPF</Form.Label>
+                      <Form.Label>Detalle cotizaciones SS</Form.Label>
                       <Form.Control
                         type="text"
                         value={values.payroll.aportacionSsIrpfDetalle}
@@ -1122,7 +1122,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                   </Col>
                   <Col md={4}>
                     <Form.Group controlId="payroll-aportacion">
-                      <Form.Label>Aportación SS e IRPF</Form.Label>
+                      <Form.Label>Cotización SS</Form.Label>
                       <Form.Control
                         type="number"
                         step="0.01"
@@ -1150,7 +1150,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                   </Col>
                   <Col md={4}>
                     <Form.Group controlId="payroll-contingencias-detalle">
-                      <Form.Label>Detalle contingencias comunes</Form.Label>
+                      <Form.Label>Detalle Coste Empresa</Form.Label>
                       <Form.Control
                         type="text"
                         value={values.payroll.contingenciasComunesDetalle}
@@ -1163,7 +1163,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                   </Col>
                   <Col md={4}>
                     <Form.Group controlId="payroll-contingencias">
-                      <Form.Label>Contingencias comunes</Form.Label>
+                      <Form.Label>Coste Empresa</Form.Label>
                       <Form.Control
                         type="number"
                         step="0.01"

@@ -612,9 +612,9 @@ async function handleUpdate(
     { key: 'salario_bruto', inputKey: 'salarioBruto', label: 'Salario bruto' },
     { key: 'salario_bruto_total', inputKey: 'salarioBrutoTotal', label: 'Salario bruto total' },
     { key: 'retencion', inputKey: 'retencion', label: 'Retención' },
-    { key: 'aportacion_ss_irpf', inputKey: 'aportacionSsIrpf', label: 'Aportación SS e IRPF' },
+    { key: 'aportacion_ss_irpf', inputKey: 'aportacionSsIrpf', label: 'Cotización SS' },
     { key: 'salario_limpio', inputKey: 'salarioLimpio', label: 'Salario limpio' },
-    { key: 'contingencias_comunes', inputKey: 'contingenciasComunes', label: 'Contingencias comunes' },
+    { key: 'contingencias_comunes', inputKey: 'contingenciasComunes', label: 'Coste Empresa' },
     { key: 'total_empresa', inputKey: 'totalEmpresa', label: 'Total empresa' },
   ];
 
