@@ -362,7 +362,10 @@ async function handleDeleteRequest(
     return errorResponse('VALIDATION_ERROR', 'id es obligatorio', 400);
   }
 
-  const existing = await prisma.vacation_requests.findUnique({ where: { id } });
+  const existing = await prisma.vacation_requests.findUnique({
+    where: { id },
+    include: { user: { select: { first_name: true, last_name: true, email: true } } },
+  });
   if (!existing) {
     return errorResponse('NOT_FOUND', 'Petición no encontrada', 404);
   }
@@ -385,7 +388,10 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
     return errorResponse('VALIDATION_ERROR', 'id es obligatorio', 400);
   }
 
-  const existing = await prisma.vacation_requests.findUnique({ where: { id } });
+  const existing = await prisma.vacation_requests.findUnique({
+    where: { id },
+    include: { user: { select: { first_name: true, last_name: true, email: true } } },
+  });
   if (!existing) {
     return errorResponse('NOT_FOUND', 'Petición no encontrada', 404);
   }
@@ -433,6 +439,35 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
     ...availabilityOperations,
     prisma.vacation_requests.delete({ where: { id } }),
   ]);
+
+  if (existing.user?.email) {
+    const requestedBy = `${existing.user.first_name ?? ''} ${existing.user.last_name ?? ''}`.trim() || 'Usuario';
+    const humanStart = formatHumanDate(formatDateOnly(existing.start_date));
+    const humanEnd = formatHumanDate(formatDateOnly(existing.end_date));
+    const typeLabel = existing.tag ? VACATION_TAG_LABELS[existing.tag] ?? 'Vacaciones' : 'Vacaciones';
+    const notes = existing.notes ? String(existing.notes).trim() : '';
+
+    const html = `
+      <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height:1.5; max-width:640px">
+        <h2>Tu petición ha sido aceptada</h2>
+        <p>Hola ${requestedBy},</p>
+        <p>Tu petición se ha aceptado y ya está reflejada en el calendario.</p>
+        <p><strong>Fechas:</strong> ${humanStart} → ${humanEnd}</p>
+        <p><strong>Tipo:</strong> ${typeLabel}</p>
+        ${notes ? `<p><strong>Notas:</strong> ${notes}</p>` : ''}
+        <p style="margin-top:16px;color:#555">Enviado automáticamente desde ERP.</p>
+      </div>
+    `;
+
+    await sendEmail({
+      to: existing.user.email,
+      subject: 'Petición de vacaciones aceptada',
+      html,
+      text: `Tu petición ha sido aceptada.\nFechas: ${humanStart} -> ${humanEnd}\nTipo: ${typeLabel}${
+        notes ? `\nNotas: ${notes}` : ''
+      }`,
+    });
+  }
 
   return successResponse({ message: 'Petición aceptada y aplicada al calendario', appliedDates });
 }
