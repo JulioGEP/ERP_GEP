@@ -845,7 +845,7 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
               </Col>
               <Col md={4}>
                 <Form.Group controlId="payroll-aportacion-detalle">
-                  <Form.Label>Detalle aportación SS e IRPF</Form.Label>
+                  <Form.Label>Detalle cotizaciones SS</Form.Label>
                   <Form.Control
                     type="text"
                     value={fields.aportacionSsIrpfDetalle}
@@ -855,7 +855,7 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
               </Col>
               <Col md={4}>
                 <Form.Group controlId="payroll-aportacion">
-                  <Form.Label>Aportación SS e IRPF</Form.Label>
+                  <Form.Label>Cotización SS</Form.Label>
                   <Form.Control
                     type="number"
                     step="0.01"
@@ -879,7 +879,7 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
               </Col>
               <Col md={4}>
                 <Form.Group controlId="payroll-contingencias-detalle">
-                  <Form.Label>Detalle contingencias comunes</Form.Label>
+                  <Form.Label>Detalle Coste Empresa</Form.Label>
                   <Form.Control
                     type="text"
                     value={fields.contingenciasComunesDetalle}
@@ -889,7 +889,7 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
               </Col>
               <Col md={4}>
                 <Form.Group controlId="payroll-contingencias">
-                  <Form.Label>Contingencias comunes</Form.Label>
+                  <Form.Label>Coste Empresa</Form.Label>
                   <Form.Control
                     type="number"
                     step="0.01"
@@ -1145,7 +1145,7 @@ export default function NominasOficinaPage({
                                     <th>Usuario</th>
                                     <th>Salario bruto</th>
                                     <th>Total Extras</th>
-                                    <th>Aportación SS e IRPF</th>
+                                    <th>Cotización SS</th>
                                     <th>Salario limpio</th>
                                     <th style={{ width: '140px' }}>Estado</th>
                                     <th style={{ width: '220px' }} className="text-end">
