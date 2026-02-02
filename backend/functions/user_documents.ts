@@ -12,13 +12,18 @@ const ALLOWED_DOCUMENT_TYPES = new Map([
   ['personales', 'Personales'],
   ['certificados', 'Certificados'],
   ['gasto', 'Gasto'],
+  ['parking_peaje_kilometraje', 'Parking / Peaje / Kilometraje'],
+  ['dietas', 'Dietas'],
   ['otros', 'Otros'],
 ]);
+
+type PayrollExpenseColumn = 'otros_gastos' | 'kilometrajes' | 'dietas';
 
 type PayrollExpense = {
   amount: number;
   year: number;
   month: number;
+  column: PayrollExpenseColumn;
 };
 
 function parsePath(path: string | undefined | null) {
@@ -117,7 +122,20 @@ function mapDocument(row: any) {
   };
 }
 
-function parsePayrollExpense(value: any) {
+function resolveExpenseColumn(documentType: string | null) {
+  switch (documentType) {
+    case 'gasto':
+      return 'otros_gastos';
+    case 'parking_peaje_kilometraje':
+      return 'kilometrajes';
+    case 'dietas':
+      return 'dietas';
+    default:
+      return null;
+  }
+}
+
+function parsePayrollExpense(value: any, column: PayrollExpenseColumn) {
   if (!value || typeof value !== 'object') {
     return { expense: null, error: null } as { expense: PayrollExpense | null; error: any };
   }
@@ -157,6 +175,7 @@ function parsePayrollExpense(value: any) {
       amount: Number(amount.toFixed(2)),
       year: parsedDate.getUTCFullYear(),
       month: parsedDate.getUTCMonth() + 1,
+      column,
     },
     error: null,
   };
@@ -171,24 +190,29 @@ async function persistPayrollExpense(
     where: { user_id_year_month: { user_id: userId, year: expense.year, month: expense.month } },
   });
 
-  const currentAmount = existing?.otros_gastos ? Number(existing.otros_gastos) : 0;
+  const column = expense.column;
+  const currentAmount = existing?.[column as keyof typeof existing]
+    ? Number(existing?.[column as keyof typeof existing])
+    : 0;
   const totalAmount = Number((currentAmount + expense.amount).toFixed(2));
 
   if (existing) {
+    const updateData = { [column]: new Prisma.Decimal(totalAmount) } as Prisma.office_payrollsUpdateInput;
     await prisma.office_payrolls.update({
       where: { user_id_year_month: { user_id: userId, year: expense.year, month: expense.month } },
-      data: { otros_gastos: new Prisma.Decimal(totalAmount) },
+      data: updateData,
     });
     return;
   }
 
+  const createData = {
+    user_id: userId,
+    year: expense.year,
+    month: expense.month,
+    [column]: new Prisma.Decimal(totalAmount),
+  } as Prisma.office_payrollsCreateInput;
   await prisma.office_payrolls.create({
-    data: {
-      user_id: userId,
-      year: expense.year,
-      month: expense.month,
-      otros_gastos: new Prisma.Decimal(totalAmount),
-    },
+    data: createData,
   });
 }
 
@@ -262,8 +286,10 @@ export const handler = async (event: any) => {
     const mimeType = toStringOrNull(payload.mimeType ?? payload.mime_type);
     const fileDataBase64 = toStringOrNull(payload.fileData ?? payload.file_data);
     const documentType = resolveDocumentType(payload.documentType ?? payload.document_type);
-    const payrollExpenseResult =
-      documentType.key === 'gasto' ? parsePayrollExpense(payload.payrollExpense ?? payload.payroll_expense) : null;
+    const expenseColumn = resolveExpenseColumn(documentType.key);
+    const payrollExpenseResult = expenseColumn
+      ? parsePayrollExpense(payload.payrollExpense ?? payload.payroll_expense, expenseColumn)
+      : null;
 
     if (payrollExpenseResult?.error) {
       return payrollExpenseResult.error;

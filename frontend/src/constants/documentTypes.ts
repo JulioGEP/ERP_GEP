@@ -3,6 +3,8 @@ export const DOCUMENT_TYPES = [
   { value: 'personales', label: 'Personales' },
   { value: 'certificados', label: 'Certificados' },
   { value: 'gasto', label: 'Gasto' },
+  { value: 'parking_peaje_kilometraje', label: 'Parking / Peaje / Kilometraje' },
+  { value: 'dietas', label: 'Dietas' },
   { value: 'otros', label: 'Otros' },
 ] as const;
 

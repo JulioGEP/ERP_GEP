@@ -115,6 +115,11 @@ export default function ProfilePage() {
   const [vacationRequestsError, setVacationRequestsError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const EXPENSE_DOCUMENT_TYPES = useMemo(
+    () => new Set<TrainerDocumentTypeValue>(['gasto', 'parking_peaje_kilometraje', 'dietas']),
+    [],
+  );
+
   const profileQuery = useQuery<ProfileUser | undefined>({
     queryKey: ['profile', user?.id],
     queryFn: async () => {
@@ -164,7 +169,33 @@ export default function ProfilePage() {
   const isFixedTrainer = trainerDetailsQuery.data?.contrato_fijo === true;
 
   const requiresExpenseDetails =
-    selectedDocumentType === 'gasto' && (!trainerId || isFixedTrainer === true);
+    EXPENSE_DOCUMENT_TYPES.has(selectedDocumentType) && (!trainerId || isFixedTrainer === true);
+
+  const expenseModalCopy = useMemo(() => {
+    switch (selectedDocumentType) {
+      case 'dietas':
+        return {
+          title: 'Detalles de la dieta',
+          description:
+            'Indica el importe de la dieta y la fecha para asignarla a la nómina correspondiente.',
+          amountLabel: 'Importe de la dieta',
+        };
+      case 'parking_peaje_kilometraje':
+        return {
+          title: 'Detalles del parking, peaje o kilometraje',
+          description:
+            'Indica el importe del parking, peaje o kilometraje y la fecha para asignarlo a la nómina correspondiente.',
+          amountLabel: 'Importe del parking, peaje o kilometraje',
+        };
+      default:
+        return {
+          title: 'Detalles del gasto',
+          description:
+            'Indica el importe del gasto y la fecha para asignarlo a la nómina correspondiente.',
+          amountLabel: 'Importe',
+        };
+    }
+  }, [selectedDocumentType]);
 
   useEffect(() => {
     if (!requiresExpenseDetails) {
@@ -1119,15 +1150,13 @@ export default function ProfilePage() {
       centered
     >
       <Modal.Header closeButton>
-        <Modal.Title>Detalles del gasto</Modal.Title>
+        <Modal.Title>{expenseModalCopy.title}</Modal.Title>
       </Modal.Header>
       <Form onSubmit={handleExpenseSubmit}>
         <Modal.Body className="d-grid gap-3">
-          <p className="text-muted mb-0">
-            Indica el importe del gasto y la fecha para asignarlo a la nómina correspondiente.
-          </p>
+          <p className="text-muted mb-0">{expenseModalCopy.description}</p>
           <Form.Group>
-            <Form.Label>Importe</Form.Label>
+            <Form.Label>{expenseModalCopy.amountLabel}</Form.Label>
             <InputGroup>
               <InputGroup.Text>€</InputGroup.Text>
               <Form.Control
