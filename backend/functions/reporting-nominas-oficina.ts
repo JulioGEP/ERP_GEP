@@ -120,6 +120,54 @@ type OfficePayrollPayload = {
   salarioLimpio?: unknown;
 };
 
+function buildOfficePayrollCreateData(
+  user: {
+    id: string;
+    payroll: {
+      convenio?: string | null;
+      categoria?: string | null;
+      antiguedad?: Date | null;
+      horas_semana?: Prisma.Decimal | number | string | null;
+      base_retencion?: Prisma.Decimal | number | string | null;
+      base_retencion_detalle?: string | null;
+      salario_bruto?: Prisma.Decimal | number | string | null;
+      salario_bruto_total?: Prisma.Decimal | number | string | null;
+      retencion?: Prisma.Decimal | number | string | null;
+      aportacion_ss_irpf?: Prisma.Decimal | number | string | null;
+      aportacion_ss_irpf_detalle?: string | null;
+      salario_limpio?: Prisma.Decimal | number | string | null;
+      contingencias_comunes?: Prisma.Decimal | number | string | null;
+      contingencias_comunes_detalle?: string | null;
+      total_empresa?: Prisma.Decimal | number | string | null;
+    } | null;
+  },
+  year: number,
+  month: number,
+): Prisma.office_payrollsCreateInput {
+  const payroll = user.payroll;
+
+  return {
+    user_id: user.id,
+    year,
+    month,
+    convenio: payroll?.convenio ?? null,
+    categoria: payroll?.categoria ?? null,
+    antiguedad: payroll?.antiguedad ?? null,
+    horas_semana: payroll?.horas_semana ?? null,
+    base_retencion: payroll?.base_retencion ?? null,
+    base_retencion_detalle: payroll?.base_retencion_detalle ?? null,
+    salario_bruto: payroll?.salario_bruto ?? null,
+    salario_bruto_total: payroll?.salario_bruto_total ?? null,
+    retencion: payroll?.retencion ?? null,
+    aportacion_ss_irpf: payroll?.aportacion_ss_irpf ?? null,
+    aportacion_ss_irpf_detalle: payroll?.aportacion_ss_irpf_detalle ?? null,
+    salario_limpio: payroll?.salario_limpio ?? null,
+    contingencias_comunes: payroll?.contingencias_comunes ?? null,
+    contingencias_comunes_detalle: payroll?.contingencias_comunes_detalle ?? null,
+    total_empresa: payroll?.total_empresa ?? null,
+  };
+}
+
 function sanitizeText(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -341,6 +389,41 @@ async function handleGet(prisma = getPrisma(), request: any): Promise<ReturnType
       trainer: { select: { contrato_fijo: true } },
       office_payrolls: true,
     },
+  });
+
+  const currentYear = currentMonth.getUTCFullYear();
+  const currentMonthNumber = currentMonth.getUTCMonth() + 1;
+  const createdRecords = await Promise.all(
+    users.map(async (user) => {
+      const alreadyCreated = user.office_payrolls.some(
+        (record) => record.year === currentYear && record.month === currentMonthNumber,
+      );
+      if (alreadyCreated) return null;
+
+      const startDate: Date | null = (user.payroll?.antiguedad as Date | null | undefined) ?? user.created_at ?? null;
+      if (!startDate) return null;
+      const periodStart = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), 1));
+      if (periodStart > currentMonth) return null;
+
+      try {
+        const record = await prisma.office_payrolls.create({
+          data: buildOfficePayrollCreateData(user, currentYear, currentMonthNumber),
+        });
+        return { userId: user.id, record };
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          return null;
+        }
+        throw error;
+      }
+    }),
+  );
+
+  createdRecords.forEach((created) => {
+    if (!created) return;
+    const user = users.find((item) => item.id === created.userId);
+    if (!user) return;
+    user.office_payrolls.push(created.record);
   });
 
   const entries: OfficePayrollResponseItem[] = [];
