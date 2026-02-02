@@ -310,11 +310,6 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
             </div>
           )}
         </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowModal(false)}>
-            Cerrar
-          </Button>
-        </Modal.Footer>
       </Modal>
 
       <div className="table-responsive">
