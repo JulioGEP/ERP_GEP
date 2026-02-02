@@ -50,7 +50,19 @@ export const handler = createHttpHandler(async (request) => {
   });
 
   if (openEntry) {
-    return errorResponse('OPEN_ENTRY', 'Ya hay una jornada en curso.', 400);
+    const today = getTodayDateString();
+    const openEntryDate = openEntry.log_date.toISOString().slice(0, 10);
+
+    if (openEntryDate >= today) {
+      return errorResponse('OPEN_ENTRY', 'Ya hay una jornada en curso.', 400);
+    }
+
+    await prisma.user_time_logs.update({
+      where: { id: openEntry.id },
+      data: {
+        check_out_utc: new Date(`${openEntryDate}T23:59:59`),
+      },
+    });
   }
 
   const now = new Date();
