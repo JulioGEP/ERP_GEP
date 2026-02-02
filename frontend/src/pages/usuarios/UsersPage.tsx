@@ -389,6 +389,7 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
             ...userPayload,
             bankAccount: userPayload.bankAccount || null,
             address: userPayload.address || null,
+            payroll: payrollPayload,
           },
         });
       }
@@ -645,7 +646,7 @@ type UserFormModalProps = {
 export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: UserFormModalProps) {
   const queryClient = useQueryClient();
   const userId = initialValue?.id ?? null;
-  const payrollReadOnly = Boolean(initialValue);
+  const payrollReadOnly = false;
 
   const buildFormValuesFromUser = useCallback(
     (user?: UserSummary | null): UserFormValues => ({

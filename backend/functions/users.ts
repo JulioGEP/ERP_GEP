@@ -85,11 +85,6 @@ function serializePayroll(payroll: any | null | undefined): SerializedPayroll {
 }
 
 function serializeUser(user: any) {
-  const payrollSource =
-    Array.isArray(user.office_payrolls) && user.office_payrolls.length > 0
-      ? user.office_payrolls[0]
-      : user.payroll;
-
   return {
     id: user.id,
     firstName: user.first_name,
@@ -103,7 +98,7 @@ function serializeUser(user: any) {
     updatedAt: user.updated_at,
     trainerId: user.trainer?.trainer_id ?? null,
     trainerFixedContract: user.trainer?.contrato_fijo ?? null,
-    payroll: serializePayroll(payrollSource),
+    payroll: serializePayroll(user.payroll),
   };
 }
 
@@ -163,6 +158,132 @@ function parseDecimalField(
 
   const normalized = numeric.toFixed(scale);
   return { provided: true, value: new Prisma.Decimal(normalized) };
+}
+
+type PayrollMutationInput = {
+  update: Prisma.user_payrollsUpdateInput;
+  create: Omit<Prisma.user_payrollsUncheckedCreateInput, 'user_id'>;
+  fieldsProvided: number;
+};
+
+function parsePayrollInput(payrollInput: any): PayrollMutationInput | { error: ReturnType<typeof errorResponse> } {
+  const update: Prisma.user_payrollsUpdateInput = {};
+  const create: Omit<Prisma.user_payrollsUncheckedCreateInput, 'user_id'> = {};
+  let fieldsProvided = 0;
+
+  if ('convenio' in payrollInput) {
+    const convenio = sanitizeText(payrollInput.convenio);
+    update.convenio = convenio;
+    create.convenio = convenio;
+    fieldsProvided += 1;
+  }
+
+  if ('categoria' in payrollInput) {
+    const categoria = sanitizeText(payrollInput.categoria);
+    update.categoria = categoria;
+    create.categoria = categoria;
+    fieldsProvided += 1;
+  }
+
+  if ('antiguedad' in payrollInput) {
+    const antiguedad = parseDateOnly(payrollInput.antiguedad);
+    if (payrollInput.antiguedad && !antiguedad) {
+      return errorResponse('INVALID_INPUT', 'Fecha de antigüedad inválida', 400);
+    }
+    update.antiguedad = antiguedad;
+    create.antiguedad = antiguedad ?? undefined;
+    fieldsProvided += 1;
+  }
+
+  if ('baseRetencionDetalle' in payrollInput) {
+    const baseRetencionDetalle = sanitizeText(payrollInput.baseRetencionDetalle);
+    update.base_retencion_detalle = baseRetencionDetalle;
+    create.base_retencion_detalle = baseRetencionDetalle;
+    fieldsProvided += 1;
+  }
+
+  if ('aportacionSsIrpfDetalle' in payrollInput) {
+    const aportacionSsIrpfDetalle = sanitizeText(payrollInput.aportacionSsIrpfDetalle);
+    update.aportacion_ss_irpf_detalle = aportacionSsIrpfDetalle;
+    create.aportacion_ss_irpf_detalle = aportacionSsIrpfDetalle;
+    fieldsProvided += 1;
+  }
+
+  if ('contingenciasComunesDetalle' in payrollInput) {
+    const contingenciasComunesDetalle = sanitizeText(payrollInput.contingenciasComunesDetalle);
+    update.contingencias_comunes_detalle = contingenciasComunesDetalle;
+    create.contingencias_comunes_detalle = contingenciasComunesDetalle;
+    fieldsProvided += 1;
+  }
+
+  const decimalFields: Array<{
+    key: keyof Prisma.user_payrollsUpdateInput;
+    inputKey: string;
+    label: string;
+    scale?: number;
+  }> = [
+    { key: 'horas_semana', inputKey: 'horasSemana', label: 'Horas semana', scale: 2 },
+    { key: 'base_retencion', inputKey: 'baseRetencion', label: 'Base de retención' },
+    { key: 'salario_bruto', inputKey: 'salarioBruto', label: 'Salario bruto' },
+    { key: 'salario_bruto_total', inputKey: 'salarioBrutoTotal', label: 'Salario bruto total' },
+    { key: 'retencion', inputKey: 'retencion', label: 'Retención' },
+    { key: 'aportacion_ss_irpf', inputKey: 'aportacionSsIrpf', label: 'Cotización SS' },
+    { key: 'salario_limpio', inputKey: 'salarioLimpio', label: 'Salario limpio' },
+    { key: 'contingencias_comunes', inputKey: 'contingenciasComunes', label: 'Coste Empresa' },
+    { key: 'total_empresa', inputKey: 'totalEmpresa', label: 'Total empresa' },
+  ];
+
+  for (const field of decimalFields) {
+    if (field.inputKey in payrollInput) {
+      const parsed = parseDecimalField(payrollInput[field.inputKey], { scale: field.scale ?? 2 });
+      if (parsed.error) {
+        return errorResponse('INVALID_INPUT', `${field.label} inválido`, 400);
+      }
+      const value = parsed.value ?? null;
+
+      switch (field.key) {
+        case 'horas_semana':
+          update.horas_semana = value;
+          create.horas_semana = value as Prisma.Decimal | null;
+          break;
+        case 'base_retencion':
+          update.base_retencion = value;
+          create.base_retencion = value as Prisma.Decimal | null;
+          break;
+        case 'salario_bruto':
+          update.salario_bruto = value;
+          create.salario_bruto = value as Prisma.Decimal | null;
+          break;
+        case 'salario_bruto_total':
+          update.salario_bruto_total = value;
+          create.salario_bruto_total = value as Prisma.Decimal | null;
+          break;
+        case 'retencion':
+          update.retencion = value;
+          create.retencion = value as Prisma.Decimal | null;
+          break;
+        case 'aportacion_ss_irpf':
+          update.aportacion_ss_irpf = value;
+          create.aportacion_ss_irpf = value as Prisma.Decimal | null;
+          break;
+        case 'salario_limpio':
+          update.salario_limpio = value;
+          create.salario_limpio = value as Prisma.Decimal | null;
+          break;
+        case 'contingencias_comunes':
+          update.contingencias_comunes = value;
+          create.contingencias_comunes = value as Prisma.Decimal | null;
+          break;
+        case 'total_empresa':
+          update.total_empresa = value;
+          create.total_empresa = value as Prisma.Decimal | null;
+          break;
+      }
+      fieldsProvided += 1;
+    }
+  }
+
+  return { update, create, fieldsProvided };
 }
 
 function parseUserId(path: string): string | null {
@@ -424,6 +545,12 @@ async function handleCreate(
     return errorResponse('INVALID_ROLE', 'Rol inválido', 400);
   }
 
+  const payrollInput = (request.body ?? {}).payroll ?? {};
+  const payrollResult = parsePayrollInput(payrollInput);
+  if ('error' in payrollResult) {
+    return payrollResult.error;
+  }
+
   try {
     const now = new Date();
     const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
@@ -443,6 +570,15 @@ async function handleCreate(
           password_updated_at: now,
         },
       });
+
+      if (payrollResult.fieldsProvided > 0) {
+        await tx.user_payrolls.create({
+          data: {
+            user_id: user.id,
+            ...payrollResult.create,
+          },
+        });
+      }
 
       await syncTrainerForFormador(tx, {
         id: user.id,
@@ -494,9 +630,10 @@ async function handleUpdate(
   let activeProvided = false;
   let fieldsProvided = 0;
   const payrollInput = (request.body ?? {}).payroll ?? {};
-  const payrollUpdate: Prisma.user_payrollsUpdateInput = {};
-  const payrollCreate: Prisma.user_payrollsUncheckedCreateInput = { user_id: userId };
-  let payrollFieldsProvided = 0;
+  const payrollResult = parsePayrollInput(payrollInput);
+  if ('error' in payrollResult) {
+    return payrollResult.error;
+  }
 
   if ('firstName' in (request.body ?? {})) {
     const firstName = sanitizeName(request.body?.firstName);
@@ -556,119 +693,7 @@ async function handleUpdate(
     fieldsProvided += 1;
   }
 
-    if ('convenio' in payrollInput) {
-      const convenio = sanitizeText(payrollInput.convenio);
-      payrollUpdate.convenio = convenio;
-      payrollCreate.convenio = convenio;
-      payrollFieldsProvided += 1;
-    }
-
-    if ('categoria' in payrollInput) {
-      const categoria = sanitizeText(payrollInput.categoria);
-      payrollUpdate.categoria = categoria;
-      payrollCreate.categoria = categoria;
-      payrollFieldsProvided += 1;
-    }
-
-    if ('antiguedad' in payrollInput) {
-      const antiguedad = parseDateOnly(payrollInput.antiguedad);
-      if (payrollInput.antiguedad && !antiguedad) {
-        return errorResponse('INVALID_INPUT', 'Fecha de antigüedad inválida', 400);
-      }
-      payrollUpdate.antiguedad = antiguedad;
-      payrollCreate.antiguedad = antiguedad ?? undefined;
-      payrollFieldsProvided += 1;
-    }
-
-    if ('baseRetencionDetalle' in payrollInput) {
-      const baseRetencionDetalle = sanitizeText(payrollInput.baseRetencionDetalle);
-      payrollUpdate.base_retencion_detalle = baseRetencionDetalle;
-      payrollCreate.base_retencion_detalle = baseRetencionDetalle;
-      payrollFieldsProvided += 1;
-    }
-
-    if ('aportacionSsIrpfDetalle' in payrollInput) {
-      const aportacionSsIrpfDetalle = sanitizeText(payrollInput.aportacionSsIrpfDetalle);
-      payrollUpdate.aportacion_ss_irpf_detalle = aportacionSsIrpfDetalle;
-      payrollCreate.aportacion_ss_irpf_detalle = aportacionSsIrpfDetalle;
-      payrollFieldsProvided += 1;
-    }
-
-    if ('contingenciasComunesDetalle' in payrollInput) {
-      const contingenciasComunesDetalle = sanitizeText(payrollInput.contingenciasComunesDetalle);
-      payrollUpdate.contingencias_comunes_detalle = contingenciasComunesDetalle;
-      payrollCreate.contingencias_comunes_detalle = contingenciasComunesDetalle;
-      payrollFieldsProvided += 1;
-    }
-
-  const decimalFields: Array<{
-    key: keyof Prisma.user_payrollsUpdateInput;
-    inputKey: string;
-    label: string;
-    scale?: number;
-  }> = [
-    { key: 'horas_semana', inputKey: 'horasSemana', label: 'Horas semana', scale: 2 },
-    { key: 'base_retencion', inputKey: 'baseRetencion', label: 'Base de retención' },
-    { key: 'salario_bruto', inputKey: 'salarioBruto', label: 'Salario bruto' },
-    { key: 'salario_bruto_total', inputKey: 'salarioBrutoTotal', label: 'Salario bruto total' },
-    { key: 'retencion', inputKey: 'retencion', label: 'Retención' },
-    { key: 'aportacion_ss_irpf', inputKey: 'aportacionSsIrpf', label: 'Cotización SS' },
-    { key: 'salario_limpio', inputKey: 'salarioLimpio', label: 'Salario limpio' },
-    { key: 'contingencias_comunes', inputKey: 'contingenciasComunes', label: 'Coste Empresa' },
-    { key: 'total_empresa', inputKey: 'totalEmpresa', label: 'Total empresa' },
-  ];
-
-  for (const field of decimalFields) {
-    if (field.inputKey in payrollInput) {
-      const parsed = parseDecimalField(payrollInput[field.inputKey], { scale: field.scale ?? 2 });
-      if (parsed.error) {
-        return errorResponse('INVALID_INPUT', `${field.label} inválido`, 400);
-      }
-        const value = parsed.value ?? null;
-
-        switch (field.key) {
-          case 'horas_semana':
-            payrollUpdate.horas_semana = value;
-            payrollCreate.horas_semana = value as Prisma.Decimal | null;
-            break;
-          case 'base_retencion':
-            payrollUpdate.base_retencion = value;
-            payrollCreate.base_retencion = value as Prisma.Decimal | null;
-            break;
-          case 'salario_bruto':
-            payrollUpdate.salario_bruto = value;
-            payrollCreate.salario_bruto = value as Prisma.Decimal | null;
-            break;
-          case 'salario_bruto_total':
-            payrollUpdate.salario_bruto_total = value;
-            payrollCreate.salario_bruto_total = value as Prisma.Decimal | null;
-            break;
-          case 'retencion':
-            payrollUpdate.retencion = value;
-            payrollCreate.retencion = value as Prisma.Decimal | null;
-            break;
-          case 'aportacion_ss_irpf':
-            payrollUpdate.aportacion_ss_irpf = value;
-            payrollCreate.aportacion_ss_irpf = value as Prisma.Decimal | null;
-            break;
-          case 'salario_limpio':
-            payrollUpdate.salario_limpio = value;
-            payrollCreate.salario_limpio = value as Prisma.Decimal | null;
-            break;
-          case 'contingencias_comunes':
-            payrollUpdate.contingencias_comunes = value;
-            payrollCreate.contingencias_comunes = value as Prisma.Decimal | null;
-            break;
-          case 'total_empresa':
-            payrollUpdate.total_empresa = value;
-            payrollCreate.total_empresa = value as Prisma.Decimal | null;
-            break;
-        }
-        payrollFieldsProvided += 1;
-      }
-    }
-
-  if (fieldsProvided === 0 && payrollFieldsProvided === 0) {
+  if (fieldsProvided === 0 && payrollResult.fieldsProvided === 0) {
     return errorResponse('NO_UPDATES', 'No se enviaron cambios', 400);
   }
 
@@ -705,13 +730,13 @@ async function handleUpdate(
         active: user.active,
       });
 
-        if (payrollFieldsProvided > 0) {
-          await tx.user_payrolls.upsert({
-            where: { user_id: userId },
-            create: payrollCreate,
-            update: payrollUpdate,
-          });
-        }
+      if (payrollResult.fieldsProvided > 0) {
+        await tx.user_payrolls.upsert({
+          where: { user_id: userId },
+          create: { user_id: userId, ...payrollResult.create },
+          update: payrollResult.update,
+        });
+      }
 
       const refreshed = await tx.users.findUnique({
         where: { id: userId },
