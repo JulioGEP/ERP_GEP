@@ -941,6 +941,7 @@ export default function ProfilePage() {
               <p className="text-muted mb-0">
                 Todas las categorías salvo Teletrabajo descuentan días del balance de vacaciones disponible.
               </p>
+              <p className="text-muted mb-0">De todas las peticiones aprobadas recibirás un mail de respuesta.</p>
             </Form>
 
             <div className="mt-4 pt-3 border-top">
