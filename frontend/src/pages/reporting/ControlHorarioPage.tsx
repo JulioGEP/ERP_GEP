@@ -1,6 +1,6 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Card, Form, Modal, Spinner, Table } from 'react-bootstrap';
+import { Alert, Button, Card, Collapse, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { isApiError } from '../../api/client';
 import {
@@ -113,10 +113,27 @@ export default function ControlHorarioPage() {
   const [modalState, setModalState] = useState<ModalState | null>(null);
   const [checkInTime, setCheckInTime] = useState('');
   const [checkOutTime, setCheckOutTime] = useState('');
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const userDropdownRef = useRef<HTMLDivElement | null>(null);
 
   const queryClient = useQueryClient();
 
   const dateRange = useMemo(() => getMonthRange(filters.year, filters.month), [filters.month, filters.year]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!isUserDropdownOpen) return;
+      const target = event.target as Node | null;
+      if (userDropdownRef.current && target && !userDropdownRef.current.contains(target)) {
+        setIsUserDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [isUserDropdownOpen]);
 
   const recordsQuery = useQuery({
     queryKey: ['reporting-control-horario', dateRange.startDate, dateRange.endDate],
@@ -489,28 +506,50 @@ export default function ControlHorarioPage() {
               </Form.Group>
               <Form.Group controlId="control-horario-user">
                 <Form.Label>Usuarios</Form.Label>
-                <div className="border rounded p-2" style={{ maxHeight: '240px', overflowY: 'auto', minWidth: '220px' }}>
-                  {people.map((person) => {
-                    const isChecked = filters.userIds.includes(person.id);
-                    return (
-                      <Form.Check
-                        key={person.id}
-                        id={`control-horario-user-${person.id}`}
-                        type="checkbox"
-                        label={person.name}
-                        checked={isChecked}
-                        onChange={(event) => {
-                          const { checked } = event.currentTarget;
-                          setFilters((prev) => {
-                            const userIds = checked
-                              ? Array.from(new Set([...prev.userIds, person.id]))
-                              : prev.userIds.filter((userId) => userId !== person.id);
-                            return { ...prev, userIds };
-                          });
-                        }}
-                      />
-                    );
-                  })}
+                <div ref={userDropdownRef} className="position-relative" style={{ minWidth: '220px' }}>
+                  <Button
+                    variant="outline-secondary"
+                    className="w-100 d-flex align-items-center justify-content-between text-start"
+                    onClick={() => setIsUserDropdownOpen((prev) => !prev)}
+                    aria-expanded={isUserDropdownOpen}
+                    aria-controls="control-horario-user-options"
+                  >
+                    <span>
+                      {filters.userIds.length
+                        ? `${filters.userIds.length} seleccionados`
+                        : 'Selecciona usuarios'}
+                    </span>
+                    <span className="ms-2">▾</span>
+                  </Button>
+                  <Collapse in={isUserDropdownOpen}>
+                    <div
+                      id="control-horario-user-options"
+                      className="border rounded p-2 mt-2"
+                      style={{ maxHeight: '240px', overflowY: 'auto' }}
+                    >
+                      {people.map((person) => {
+                        const isChecked = filters.userIds.includes(person.id);
+                        return (
+                          <Form.Check
+                            key={person.id}
+                            id={`control-horario-user-${person.id}`}
+                            type="checkbox"
+                            label={person.name}
+                            checked={isChecked}
+                            onChange={(event) => {
+                              const { checked } = event.currentTarget;
+                              setFilters((prev) => {
+                                const userIds = checked
+                                  ? Array.from(new Set([...prev.userIds, person.id]))
+                                  : prev.userIds.filter((userId) => userId !== person.id);
+                                return { ...prev, userIds };
+                              });
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </Collapse>
                 </div>
                 <Form.Text className="text-muted">Si no seleccionas usuarios, se muestran todos.</Form.Text>
               </Form.Group>
