@@ -551,7 +551,6 @@ export default function ControlHorarioPage() {
                     </div>
                   </Collapse>
                 </div>
-                <Form.Text className="text-muted">Si no seleccionas usuarios, se muestran todos.</Form.Text>
               </Form.Group>
               <Form.Group controlId="control-horario-role">
                 <Form.Label>Tipo</Form.Label>
