@@ -393,7 +393,11 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
     if (!entry || !documents?.length) return [];
 
     return documents.filter((document) => {
-      if (document.document_type !== 'gasto') return false;
+      if (
+        !['gasto', 'parking_peaje_kilometraje', 'dietas'].includes(document.document_type ?? '')
+      ) {
+        return false;
+      }
       if (!document.created_at) return false;
 
       const createdAt = new Date(document.created_at);
