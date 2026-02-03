@@ -7,6 +7,7 @@ import {
   fetchOfficePayrolls,
   saveOfficePayroll,
   type TrainerExtraCostFieldKey,
+  type OfficePayrollUpsertPayload,
   type OfficePayrollRecord,
   type OfficePayrollResponse,
 } from '../../features/reporting/api';
@@ -263,9 +264,62 @@ function preservePayrollBaseValues(
   return merged;
 }
 
+function areExtraValuesEqual(current: string, initial: string): boolean {
+  const currentValue = normalizeNumber(current);
+  const initialValue = normalizeNumber(initial);
+  if (currentValue === null && initialValue === null) {
+    return true;
+  }
+  return currentValue === initialValue;
+}
+
+function buildExtrasUpdatePayload(
+  entry: OfficePayrollRecord,
+  fields: Record<ExtrasSummaryKey, string>,
+  initialFields: Record<ExtrasSummaryKey, string>,
+  totalExtras: string,
+): OfficePayrollUpsertPayload | null {
+  let hasChanges = false;
+  const payload: OfficePayrollUpsertPayload = {
+    userId: entry.userId,
+    year: entry.year,
+    month: entry.month,
+  };
+
+  for (const field of EXTRAS_SUMMARY_FIELDS) {
+    if (areExtraValuesEqual(fields[field.key], initialFields[field.key])) {
+      continue;
+    }
+    hasChanges = true;
+    switch (field.key) {
+      case 'kilometraje':
+        payload.kilometrajes = fields[field.key];
+        break;
+      case 'horasExtras':
+        payload.horasExtras = fields[field.key];
+        break;
+      case 'otrosGastos':
+        payload.otrosGastos = fields[field.key];
+        break;
+      default:
+        payload[field.key] = fields[field.key];
+        break;
+    }
+  }
+
+  if (hasChanges) {
+    payload.totalExtras = totalExtras;
+    return payload;
+  }
+
+  return null;
+}
+
 function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
   const navigate = useNavigate();
   const [fields, setFields] = useState<Record<ExtrasSummaryKey, string>>(extrasInitialFields);
+  const [initialFields, setInitialFields] =
+    useState<Record<ExtrasSummaryKey, string>>(extrasInitialFields);
 
   const refreshedPayrollQuery = useQuery({
     queryKey: ['reporting', 'nominas-oficina-entry', entry?.userId ?? null, entry?.year ?? null, entry?.month ?? null],
@@ -285,6 +339,7 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
   useEffect(() => {
     if (!entry) {
       setFields(extrasInitialFields);
+      setInitialFields(extrasInitialFields);
       return;
     }
     const sourceEntry = refreshedPayrollQuery.data ?? entry;
@@ -294,6 +349,7 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
       nextFields[field.key] = typeof rawValue === 'number' ? rawValue.toFixed(2) : rawValue ?? '';
     }
     setFields(nextFields);
+    setInitialFields(nextFields);
   }, [entry, refreshedPayrollQuery.data]);
 
   const monthRange = useMemo(() => {
@@ -370,20 +426,16 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
   }, [fields]);
 
   const mutation = useMutation({
-    mutationFn: () =>
-      saveOfficePayroll({
-        userId: entry?.userId as string,
-        year: entry?.year as number,
-        month: entry?.month as number,
-        dietas: fields.dietas,
-        kilometrajes: fields.kilometraje,
-        pernocta: fields.pernocta,
-        nocturnidad: fields.nocturnidad,
-        festivo: fields.festivo,
-        horasExtras: fields.horasExtras,
-        otrosGastos: fields.otrosGastos,
-        totalExtras: editableTotalExtras,
-      }),
+    mutationFn: async () => {
+      if (!entry) {
+        throw new Error('No hay datos de nómina para guardar.');
+      }
+      const payload = buildExtrasUpdatePayload(entry, fields, initialFields, editableTotalExtras);
+      if (!payload) {
+        return entry;
+      }
+      return saveOfficePayroll(payload);
+    },
     onSuccess: (saved) => {
       onSaved(entry ? preservePayrollBaseValues(entry, saved) : saved);
     },
