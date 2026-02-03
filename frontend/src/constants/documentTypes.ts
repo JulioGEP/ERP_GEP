@@ -1,6 +1,6 @@
 export const DOCUMENT_TYPES = [
   { value: 'curriculum_vitae', label: 'Curriculum Vitae' },
-  { value: 'personales', label: 'Personales' },
+  { value: 'personales', label: 'Personal' },
   { value: 'certificados', label: 'Certificados' },
   { value: 'gasto', label: 'Gasto' },
   { value: 'parking_peaje_kilometraje', label: 'Parking / Peaje / Kilometraje' },

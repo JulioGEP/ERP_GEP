@@ -228,6 +228,7 @@ async function handleCreateRequest(request: any, prisma: ReturnType<typeof getPr
 
         const uploadResult = await uploadTrainerDocumentToGoogleDrive({
           trainer,
+          user: auth.user,
           documentTypeLabel: 'Justificante',
           fileName: finalFileName,
           mimeType: parsed.data.mimeType,

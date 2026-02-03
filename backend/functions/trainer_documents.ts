@@ -16,7 +16,7 @@ import {
 
 const ALLOWED_DOCUMENT_TYPES = new Map([
   ['curriculum_vitae', 'Curriculum Vitae'],
-  ['personales', 'Personales'],
+  ['personales', 'Personal'],
   ['certificados', 'Certificados'],
   ['gasto', 'Gasto'],
   ['parking_peaje_kilometraje', 'Parking / Peaje / Kilometraje'],
