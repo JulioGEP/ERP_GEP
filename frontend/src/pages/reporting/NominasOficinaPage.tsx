@@ -337,6 +337,12 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
   });
 
   useEffect(() => {
+    if (entry?.userId && entry?.year && entry?.month) {
+      void refreshedPayrollQuery.refetch();
+    }
+  }, [entry?.userId, entry?.year, entry?.month, refreshedPayrollQuery]);
+
+  useEffect(() => {
     if (!entry) {
       setFields(extrasInitialFields);
       setInitialFields(extrasInitialFields);
