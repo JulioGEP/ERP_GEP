@@ -161,16 +161,41 @@ function parsePayrollExpense(value: any, column: PayrollExpenseColumn) {
     return { expense: null, error: errorResponse('VALIDATION_ERROR', 'La fecha del gasto es obligatoria', 400) };
   }
 
-  const parsedDate = new Date(rawDate);
-  if (Number.isNaN(parsedDate.getTime())) {
+  const datePart = rawDate.split('T')[0];
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(datePart);
+  let parsedYear: number | null = null;
+  let parsedMonth: number | null = null;
+
+  if (dateMatch) {
+    const year = Number(dateMatch[1]);
+    const month = Number(dateMatch[2]);
+    const day = Number(dateMatch[3]);
+    const reconstructed = new Date(Date.UTC(year, month - 1, day));
+    if (
+      reconstructed.getUTCFullYear() === year &&
+      reconstructed.getUTCMonth() === month - 1 &&
+      reconstructed.getUTCDate() === day
+    ) {
+      parsedYear = year;
+      parsedMonth = month;
+    }
+  } else {
+    const parsedDate = new Date(rawDate);
+    if (!Number.isNaN(parsedDate.getTime())) {
+      parsedYear = parsedDate.getUTCFullYear();
+      parsedMonth = parsedDate.getUTCMonth() + 1;
+    }
+  }
+
+  if (!parsedYear || !parsedMonth) {
     return { expense: null, error: errorResponse('VALIDATION_ERROR', 'La fecha del gasto no es válida', 400) };
   }
 
   return {
     expense: {
       amount: Number(amount.toFixed(2)),
-      year: parsedDate.getUTCFullYear(),
-      month: parsedDate.getUTCMonth() + 1,
+      year: parsedYear,
+      month: parsedMonth,
       column,
     },
     error: null,
