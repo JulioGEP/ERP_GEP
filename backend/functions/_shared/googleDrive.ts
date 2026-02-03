@@ -7,6 +7,7 @@ import { toMadridISOString } from "./timezone";
 import { getPrisma } from "./prisma";
 
 const DEFAULT_BASE_FOLDER_NAME = "Documentos ERP";
+const DEFAULT_USER_DOCUMENTS_BASE_FOLDER_NAME = "Equipo GEP Group";
 const DEAL_DOCUMENTS_LEGACY_FOLDER_NAME = "Documentos del deal";
 const SESSION_DOCUMENTS_LEGACY_FOLDER_NAME = "Documentos del deal";
 const CERTIFICATES_FOLDER_NAME = "Certificados";
@@ -122,6 +123,89 @@ function resolveTrainerId(trainer: any): string | null {
   return null;
 }
 
+function resolveUserId(user: any): string | null {
+  const candidates: unknown[] = [
+    user?.id,
+    user?.user_id,
+    user?.userId,
+  ];
+
+  for (const candidate of candidates) {
+    const value = toNonEmptyString(candidate);
+    if (value) return value;
+  }
+
+  return null;
+}
+
+function buildUserFolderName(user: any): string {
+  const firstName = toNonEmptyString(user?.first_name ?? user?.firstName);
+  const lastName = toNonEmptyString(user?.last_name ?? user?.lastName);
+  const fullName = toNonEmptyString(user?.name ?? user?.full_name ?? user?.fullName);
+  const email = toNonEmptyString(user?.email);
+  const userId = resolveUserId(user);
+
+  const displayName = toNonEmptyString([firstName, lastName].filter(Boolean).join(" "));
+  const candidate =
+    displayName ||
+    fullName ||
+    email ||
+    userId ||
+    "Usuario";
+
+  return sanitizeName(candidate) || "Usuario";
+}
+
+async function resolveUserForTrainer(trainer: any, explicitUser?: any | null): Promise<any | null> {
+  if (explicitUser) {
+    return explicitUser;
+  }
+
+  const trainerUserId =
+    resolveUserId(trainer?.user ?? trainer) ||
+    toNonEmptyString(trainer?.user_id ?? trainer?.userId);
+  if (!trainerUserId) {
+    return null;
+  }
+
+  try {
+    const prisma = getPrisma();
+    return await prisma.users.findUnique({ where: { id: trainerUserId } });
+  } catch (err) {
+    console.warn("[google-drive-sync] No se pudo resolver el usuario del formador", {
+      trainerUserId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
+async function ensureUserFolder(params: {
+  driveId: string;
+  baseFolderId: string;
+  user: any;
+  createIfMissing?: boolean;
+}): Promise<{ folderId: string; folderName: string } | null> {
+  const folderName = buildUserFolderName(params.user);
+  if (params.createIfMissing === false) {
+    const folderId = await findFolder({
+      name: folderName,
+      parentId: params.baseFolderId,
+      driveId: params.driveId,
+    });
+    return folderId ? { folderId, folderName } : null;
+  }
+
+  const folderId = await ensureUniqueSubfolder({
+    driveId: params.driveId,
+    parentId: params.baseFolderId,
+    folderName,
+    context: { userId: resolveUserId(params.user) },
+  });
+
+  return { folderId, folderName };
+}
+
 function uniqueSanitizedNames(names: Array<string | null | undefined>): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -207,6 +291,14 @@ function isHttpUrl(value?: unknown): value is string {
 
 function resolveDriveBaseFolderName(): string {
   return process.env.GOOGLE_DRIVE_BASE_FOLDER_NAME?.trim() || DEFAULT_BASE_FOLDER_NAME;
+}
+
+function resolveUserDocumentsBaseFolderName(preferred?: string | null): string {
+  return (
+    preferred?.trim() ||
+    process.env.USER_DOCUMENTS_BASE_FOLDER_NAME?.trim() ||
+    DEFAULT_USER_DOCUMENTS_BASE_FOLDER_NAME
+  );
 }
 
 function resolveDriveSharedId(): string | null {
@@ -2116,6 +2208,7 @@ async function findFileIdInFolder(params: {
 
 export async function uploadTrainerDocumentToGoogleDrive(params: {
   trainer: any;
+  user?: any | null;
   documentTypeLabel?: string | null;
   fileName: string;
   mimeType?: string | null;
@@ -2139,25 +2232,43 @@ export async function uploadTrainerDocumentToGoogleDrive(params: {
   }
 
   const trainerId = resolveTrainerId(params.trainer);
+  const baseFolderName = resolveUserDocumentsBaseFolderName();
   const baseFolderId = await ensureFolder({
-    name: resolveDriveBaseFolderName(),
+    name: baseFolderName,
     parentId: driveId,
     driveId,
   });
 
-  const trainersRootId = await ensureTrainersRootFolder({
-    driveId,
-    baseFolderId,
-    createIfMissing: true,
-  });
+  const trainerUser = await resolveUserForTrainer(params.trainer, params.user);
+  let trainerParentFolderId: string | null = null;
 
-  if (!trainersRootId) {
-    throw new Error("No se pudo preparar la carpeta de formadores en Drive");
+  if (trainerUser) {
+    const userFolderInfo = await ensureUserFolder({
+      driveId,
+      baseFolderId,
+      user: trainerUser,
+      createIfMissing: true,
+    });
+    trainerParentFolderId = userFolderInfo?.folderId ?? null;
+  }
+
+  if (!trainerParentFolderId) {
+    const trainersRootId = await ensureTrainersRootFolder({
+      driveId,
+      baseFolderId,
+      createIfMissing: true,
+    });
+
+    if (!trainersRootId) {
+      throw new Error("No se pudo preparar la carpeta de formadores en Drive");
+    }
+
+    trainerParentFolderId = trainersRootId;
   }
 
   const trainerFolder = await ensureTrainerFolder({
     driveId,
-    trainersRootId,
+    trainersRootId: trainerParentFolderId,
     trainer: params.trainer,
     createIfMissing: true,
   });
@@ -2225,6 +2336,7 @@ export async function uploadTrainerDocumentToGoogleDrive(params: {
 
 export async function deleteTrainerDocumentFromGoogleDrive(params: {
   trainer: any;
+  user?: any | null;
   driveFileId?: string | null;
   driveFileName?: string | null;
   driveWebViewLink?: string | null;
@@ -2239,9 +2351,9 @@ export async function deleteTrainerDocumentFromGoogleDrive(params: {
   }
 
   const trainerId = resolveTrainerId(params.trainer);
-
+  const baseFolderName = resolveUserDocumentsBaseFolderName();
   const baseFolderId = await findFolder({
-    name: resolveDriveBaseFolderName(),
+    name: baseFolderName,
     parentId: driveId,
     driveId,
   });
@@ -2249,34 +2361,54 @@ export async function deleteTrainerDocumentFromGoogleDrive(params: {
   if (!baseFolderId) {
     console.warn("[google-drive-sync] Carpeta base no encontrada al eliminar documento de formador", {
       trainerId,
+      baseFolderName,
     });
   }
 
-  const trainersRootId = await ensureTrainersRootFolder({
-    driveId,
-    baseFolderId,
-    createIfMissing: false,
-  });
+  const trainerFolders: Array<{ folderId: string; folderName: string }> = [];
+  const trainerUser = await resolveUserForTrainer(params.trainer, params.user);
 
-  if (!trainersRootId) {
-    console.warn("[google-drive-sync] Carpeta de formadores no encontrada al eliminar documento", {
-      trainerId,
+  if (baseFolderId && trainerUser) {
+    const userFolderInfo = await ensureUserFolder({
+      driveId,
+      baseFolderId,
+      user: trainerUser,
+      createIfMissing: false,
     });
-    return { fileDeleted: false };
+
+    if (userFolderInfo) {
+      const trainerFolder = await ensureTrainerFolder({
+        driveId,
+        trainersRootId: userFolderInfo.folderId,
+        trainer: params.trainer,
+        createIfMissing: false,
+      });
+
+      if (trainerFolder) {
+        trainerFolders.push(trainerFolder);
+      }
+    }
   }
 
-  const trainerFolder = await ensureTrainerFolder({
-    driveId,
-    trainersRootId,
-    trainer: params.trainer,
-    createIfMissing: false,
-  });
-
-  if (!trainerFolder) {
-    console.warn("[google-drive-sync] Carpeta del formador no encontrada al eliminar documento", {
-      trainerId,
+  if (baseFolderId) {
+    const trainersRootId = await ensureTrainersRootFolder({
+      driveId,
+      baseFolderId,
+      createIfMissing: false,
     });
-    return { fileDeleted: false };
+
+    if (trainersRootId) {
+      const trainerFolder = await ensureTrainerFolder({
+        driveId,
+        trainersRootId,
+        trainer: params.trainer,
+        createIfMissing: false,
+      });
+
+      if (trainerFolder) {
+        trainerFolders.push(trainerFolder);
+      }
+    }
   }
 
   let fileId = toNonEmptyString(params.driveFileId);
@@ -2285,19 +2417,32 @@ export async function deleteTrainerDocumentFromGoogleDrive(params: {
   }
 
   if (!fileId && params.driveFileName) {
-    try {
-      fileId = await findFileIdInFolder({
-        folderId: trainerFolder.folderId,
-        driveId,
-        name: params.driveFileName,
-      });
-    } catch (err) {
-      console.warn("[google-drive-sync] Error buscando documento de formador por nombre", {
+    if (!trainerFolders.length) {
+      console.warn("[google-drive-sync] Carpeta del formador no encontrada al eliminar documento", {
         trainerId,
-        folderId: trainerFolder.folderId,
-        fileName: params.driveFileName,
-        error: err instanceof Error ? err.message : String(err),
       });
+      return { fileDeleted: false };
+    }
+
+    for (const folder of trainerFolders) {
+      try {
+        fileId = await findFileIdInFolder({
+          folderId: folder.folderId,
+          driveId,
+          name: params.driveFileName,
+        });
+      } catch (err) {
+        console.warn("[google-drive-sync] Error buscando documento de formador por nombre", {
+          trainerId,
+          folderId: folder.folderId,
+          fileName: params.driveFileName,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      if (fileId) {
+        break;
+      }
     }
   }
 
@@ -2393,6 +2538,7 @@ export async function deleteUserDocumentFromGoogleDrive(params: {
 
 export async function getTrainerFolderWebViewLink(params: {
   trainer: any;
+  user?: any | null;
   createIfMissing?: boolean;
 }): Promise<string | null> {
   const driveId = resolveDriveSharedId();
@@ -2405,7 +2551,7 @@ export async function getTrainerFolderWebViewLink(params: {
   }
 
   const trainerId = resolveTrainerId(params.trainer);
-  const baseFolderName = resolveDriveBaseFolderName();
+  const baseFolderName = resolveUserDocumentsBaseFolderName();
 
   let baseFolderId: string | null;
   if (params.createIfMissing === false) {
@@ -2426,6 +2572,39 @@ export async function getTrainerFolderWebViewLink(params: {
     console.warn("[google-drive-sync] Carpeta base no encontrada al obtener enlace de formador", {
       trainerId,
     });
+  }
+
+  const trainerUser = await resolveUserForTrainer(params.trainer, params.user);
+  if (baseFolderId && trainerUser) {
+    const userFolderInfo = await ensureUserFolder({
+      driveId,
+      baseFolderId,
+      user: trainerUser,
+      createIfMissing: params.createIfMissing,
+    });
+
+    if (userFolderInfo) {
+      const trainerFolder = await ensureTrainerFolder({
+        driveId,
+        trainersRootId: userFolderInfo.folderId,
+        trainer: params.trainer,
+        createIfMissing: params.createIfMissing,
+      });
+
+      if (trainerFolder) {
+        try {
+          const link = await ensureFilePublicWebViewLink(trainerFolder.folderId);
+          return link ?? `https://drive.google.com/drive/folders/${trainerFolder.folderId}`;
+        } catch (err) {
+          console.warn("[google-drive-sync] No se pudo generar enlace público de carpeta de formador", {
+            trainerId,
+            folderId: trainerFolder.folderId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          return `https://drive.google.com/drive/folders/${trainerFolder.folderId}`;
+        }
+      }
+    }
   }
 
   const trainersRootId = await ensureTrainersRootFolder({
@@ -2711,10 +2890,7 @@ export async function uploadUserDocumentToGoogleDrive(params: {
     throw new Error('Credenciales de Google Drive no configuradas');
   }
 
-  const baseFolderName =
-    params.baseFolderName?.trim() ||
-    process.env.USER_DOCUMENTS_BASE_FOLDER_NAME?.trim() ||
-    'Equipo GEP Group';
+  const baseFolderName = resolveUserDocumentsBaseFolderName(params.baseFolderName);
 
   const baseFolderId = await ensureFolder({
     name: baseFolderName,
@@ -2722,25 +2898,18 @@ export async function uploadUserDocumentToGoogleDrive(params: {
     driveId,
   });
 
-  const userNamePieces: string[] = [];
-  if (params.user?.first_name) userNamePieces.push(String(params.user.first_name));
-  if (params.user?.last_name) userNamePieces.push(String(params.user.last_name));
-  if (!userNamePieces.length && params.user?.name) {
-    userNamePieces.push(String(params.user.name));
-  }
-  if (!userNamePieces.length && params.user?.email) {
-    userNamePieces.push(String(params.user.email));
-  }
-
-  const userFolderName =
-    sanitizeName(userNamePieces.join(' ').trim()) || sanitizeName(params.user?.id || '') || 'Usuario';
-
-  const userFolderId = await ensureUniqueSubfolder({
+  const userFolderInfo = await ensureUserFolder({
     driveId,
-    parentId: baseFolderId,
-    folderName: userFolderName,
-    context: { userId: params.user?.id },
+    baseFolderId,
+    user: params.user,
+    createIfMissing: true,
   });
+
+  if (!userFolderInfo) {
+    throw new Error('No se pudo preparar la carpeta del usuario en Drive');
+  }
+
+  const userFolderId = userFolderInfo.folderId;
 
   let destinationFolderId = userFolderId;
   if (params.subfolderName) {
