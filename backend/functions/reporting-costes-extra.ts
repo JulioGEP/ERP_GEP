@@ -76,16 +76,6 @@ type ExtraCostRecord = {
   updated_at: Date;
 };
 
-type ExtraCostTotalsRow = {
-  dietas: DecimalLike | number | string | null;
-  kilometraje: DecimalLike | number | string | null;
-  pernocta: DecimalLike | number | string | null;
-  nocturnidad: DecimalLike | number | string | null;
-  festivo: DecimalLike | number | string | null;
-  horas_extras: DecimalLike | number | string | null;
-  gastos_extras: DecimalLike | number | string | null;
-};
-
 type SessionAssignmentRow = {
   sesion_id: string;
   trainer_id: string;
@@ -208,10 +198,59 @@ function buildMonthBoundaries(date: Date): { start: Date; end: Date } | null {
   return { start, end };
 }
 
-async function syncFixedTrainerPayrollExtras(
+type PayrollDelta = {
+  dietas: number;
+  kilometrajes: number;
+  pernocta: number;
+  nocturnidad: number;
+  festivo: number;
+  horas_extras: number;
+  otros_gastos: number;
+  total_extras: number;
+};
+
+const PAYROLL_DELTA_FIELDS: Array<{ key: keyof ExtraCostRecord; payrollKey: keyof PayrollDelta }> = [
+  { key: 'dietas', payrollKey: 'dietas' },
+  { key: 'kilometraje', payrollKey: 'kilometrajes' },
+  { key: 'pernocta', payrollKey: 'pernocta' },
+  { key: 'nocturnidad', payrollKey: 'nocturnidad' },
+  { key: 'festivo', payrollKey: 'festivo' },
+  { key: 'horas_extras', payrollKey: 'horas_extras' },
+  { key: 'gastos_extras', payrollKey: 'otros_gastos' },
+];
+
+function buildPayrollDelta(
+  before: Partial<ExtraCostRecord> | null,
+  after: ExtraCostRecord,
+): PayrollDelta {
+  const delta: PayrollDelta = {
+    dietas: 0,
+    kilometrajes: 0,
+    pernocta: 0,
+    nocturnidad: 0,
+    festivo: 0,
+    horas_extras: 0,
+    otros_gastos: 0,
+    total_extras: 0,
+  };
+
+  for (const field of PAYROLL_DELTA_FIELDS) {
+    const previousValue = decimalToNumber(before?.[field.key] ?? 0);
+    const nextValue = decimalToNumber(after[field.key] ?? 0);
+    const diff = Math.round((nextValue - previousValue) * 100) / 100;
+    delta[field.payrollKey] = diff;
+    delta.total_extras += diff;
+  }
+
+  delta.total_extras = Math.round(delta.total_extras * 100) / 100;
+  return delta;
+}
+
+async function applyPayrollDelta(
   prisma: ReturnType<typeof getPrisma>,
   trainer: TrainerSummary,
   periodDate: Date | null | undefined,
+  delta: PayrollDelta,
 ) {
   if (!trainer.contrato_fijo || !trainer.user_id || !periodDate) {
     return;
@@ -222,84 +261,72 @@ async function syncFixedTrainerPayrollExtras(
     return;
   }
 
-  const { start, end } = boundaries;
-  const year = start.getUTCFullYear();
-  const month = start.getUTCMonth() + 1;
+  const year = boundaries.start.getUTCFullYear();
+  const month = boundaries.start.getUTCMonth() + 1;
 
-  const rows = await prisma.$queryRaw<ExtraCostTotalsRow[]>(sql`
-    SELECT
-      COALESCE(SUM(tec.dietas), 0) AS dietas,
-      COALESCE(SUM(tec.kilometraje), 0) AS kilometraje,
-      COALESCE(SUM(tec.pernocta), 0) AS pernocta,
-      COALESCE(SUM(tec.nocturnidad), 0) AS nocturnidad,
-      COALESCE(SUM(tec.festivo), 0) AS festivo,
-      COALESCE(SUM(tec.horas_extras), 0) AS horas_extras,
-      COALESCE(SUM(tec.gastos_extras), 0) AS gastos_extras
-    FROM trainer_extra_costs tec
-      LEFT JOIN sesiones s ON tec.session_id = s.id
-      LEFT JOIN variants v ON tec.variant_id = v.id
-    WHERE tec.trainer_id = ${trainer.trainer_id}
-      AND (
-        (s.fecha_inicio_utc IS NOT NULL AND s.fecha_inicio_utc >= ${start}::timestamptz AND s.fecha_inicio_utc < ${end}::timestamptz)
-        OR (v.date IS NOT NULL AND v.date >= ${start}::timestamptz AND v.date < ${end}::timestamptz)
-      )
-  `);
+  const existing = await prisma.office_payrolls.findUnique({
+    where: { user_id_year_month: { user_id: trainer.user_id, year, month } },
+  });
 
-  const totals = rows[0] ?? {
-    dietas: 0,
-    kilometraje: 0,
-    pernocta: 0,
-    nocturnidad: 0,
-    festivo: 0,
-    horas_extras: 0,
-    gastos_extras: 0,
-  } satisfies ExtraCostTotalsRow;
-
-  const dietas = decimalToNumber(totals.dietas);
-  const kilometraje = decimalToNumber(totals.kilometraje);
-  const pernocta = decimalToNumber(totals.pernocta);
-  const nocturnidad = decimalToNumber(totals.nocturnidad);
-  const festivo = decimalToNumber(totals.festivo);
-  const horasExtras = decimalToNumber(totals.horas_extras);
-  const otrosGastos = decimalToNumber(totals.gastos_extras);
-
-  const totalExtras =
-    dietas +
-    kilometraje +
-    pernocta +
-    nocturnidad +
-    festivo +
-    horasExtras +
-    otrosGastos;
+  const hasDelta = Object.values(delta).some((value) => Math.abs(value) > 0.001);
+  if (!hasDelta) {
+    return;
+  }
 
   const toDecimal = (value: number) => new Prisma.Decimal(Math.round(value * 100) / 100);
 
-  await prisma.office_payrolls.upsert({
-    where: { user_id_year_month: { user_id: trainer.user_id, year, month } },
-    update: {
-      dietas: toDecimal(dietas),
-      kilometrajes: toDecimal(kilometraje),
-      pernocta: toDecimal(pernocta),
-      nocturnidad: toDecimal(nocturnidad),
-      festivo: toDecimal(festivo),
-      horas_extras: toDecimal(horasExtras),
-      otros_gastos: toDecimal(otrosGastos),
-      total_extras: toDecimal(totalExtras),
-    },
-    create: {
-      user_id: trainer.user_id,
-      year,
-      month,
-      dietas: toDecimal(dietas),
-      kilometrajes: toDecimal(kilometraje),
-      pernocta: toDecimal(pernocta),
-      nocturnidad: toDecimal(nocturnidad),
-      festivo: toDecimal(festivo),
-      horas_extras: toDecimal(horasExtras),
-      otros_gastos: toDecimal(otrosGastos),
-      total_extras: toDecimal(totalExtras),
-    },
+  const nextValues = {
+    dietas: decimalToNumber(existing?.dietas ?? 0) + delta.dietas,
+    kilometrajes: decimalToNumber(existing?.kilometrajes ?? 0) + delta.kilometrajes,
+    pernocta: decimalToNumber(existing?.pernocta ?? 0) + delta.pernocta,
+    nocturnidad: decimalToNumber(existing?.nocturnidad ?? 0) + delta.nocturnidad,
+    festivo: decimalToNumber(existing?.festivo ?? 0) + delta.festivo,
+    horas_extras: decimalToNumber(existing?.horas_extras ?? 0) + delta.horas_extras,
+    otros_gastos: decimalToNumber(existing?.otros_gastos ?? 0) + delta.otros_gastos,
+  };
+
+  const updateData: Prisma.office_payrollsUpdateInput = {};
+
+  (Object.keys(nextValues) as Array<keyof typeof nextValues>).forEach((key) => {
+    if (!existing) return;
+    const diff =
+      Math.round((nextValues[key] - decimalToNumber(existing?.[key] ?? 0)) * 100) / 100;
+    if (Math.abs(diff) > 0.001) {
+      updateData[key] = toDecimal(nextValues[key]);
+    }
   });
+
+  const currentTotalExtras = existing ? decimalToNumber(existing.total_extras) : null;
+  if (currentTotalExtras !== null) {
+    updateData.total_extras = toDecimal(currentTotalExtras + delta.total_extras);
+  }
+
+  if (existing) {
+    if (Object.keys(updateData).length === 0) {
+      return;
+    }
+    await prisma.office_payrolls.update({
+      where: { user_id_year_month: { user_id: trainer.user_id, year, month } },
+      data: updateData,
+    });
+    return;
+  }
+
+  const createData: Prisma.office_payrollsCreateInput = {
+    user_id: trainer.user_id,
+    year,
+    month,
+    dietas: toDecimal(nextValues.dietas),
+    kilometrajes: toDecimal(nextValues.kilometrajes),
+    pernocta: toDecimal(nextValues.pernocta),
+    nocturnidad: toDecimal(nextValues.nocturnidad),
+    festivo: toDecimal(nextValues.festivo),
+    horas_extras: toDecimal(nextValues.horas_extras),
+    otros_gastos: toDecimal(nextValues.otros_gastos),
+    total_extras: toDecimal(delta.total_extras),
+  };
+
+  await prisma.office_payrolls.create({ data: createData });
 }
 
 function parseDateParts(value: string): { year: number; month: number; day: number } | null {
@@ -1063,6 +1090,12 @@ export const handler = createHttpHandler(async (request) => {
     parsedNotes.value,
   );
 
+  const existingCost = await prisma.trainer_extra_costs.findUnique({
+    where: hasSession
+      ? { trainer_id_session_id: { trainer_id: trainerId, session_id: sessionId! } }
+      : { trainer_id_variant_id: { trainer_id: trainerId, variant_id: variantId! } },
+  });
+
   const upsertResult = await prisma.trainer_extra_costs.upsert({
     where: hasSession
       ? { trainer_id_session_id: { trainer_id: trainerId, session_id: sessionId! } }
@@ -1083,7 +1116,8 @@ export const handler = createHttpHandler(async (request) => {
   const periodDate = hasSession
     ? sessionInfo?.fecha_inicio_utc ?? null
     : variantInfo?.date ?? null;
-  await syncFixedTrainerPayrollExtras(prisma, trainer, periodDate ?? null);
+  const payrollDelta = buildPayrollDelta(existingCost as ExtraCostRecord | null, upsertResult as ExtraCostRecord);
+  await applyPayrollDelta(prisma, trainer, periodDate ?? null, payrollDelta);
 
   return successResponse({ item: responseItem });
 });
