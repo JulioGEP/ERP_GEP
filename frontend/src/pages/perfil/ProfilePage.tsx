@@ -106,6 +106,7 @@ export default function ProfilePage() {
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseAmountTouched, setExpenseAmountTouched] = useState(false);
   const [expenseDate, setExpenseDate] = useState('');
   const [expenseValidationError, setExpenseValidationError] = useState<string | null>(null);
   const [showJustificationModal, setShowJustificationModal] = useState(false);
@@ -245,6 +246,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!requiresExpenseDetails) {
       setExpenseAmount('');
+      setExpenseAmountTouched(false);
       setExpenseDate('');
       setExpenseValidationError(null);
       setShowExpenseModal(false);
@@ -253,10 +255,13 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!showExpenseModal) return;
-    if (expenseAmount) return;
-    if (payrollFieldValue === null || payrollFieldValue === undefined) return;
+    if (expenseAmountTouched) return;
+    if (payrollFieldValue === null || payrollFieldValue === undefined) {
+      setExpenseAmount('');
+      return;
+    }
     setExpenseAmount(String(payrollFieldValue));
-  }, [expenseAmount, payrollFieldValue, showExpenseModal]);
+  }, [expenseAmountTouched, payrollFieldValue, showExpenseModal]);
 
   const shouldShowVacations = trainerId ? trainerDetailsQuery.data?.contrato_fijo === true : true;
 
@@ -427,6 +432,7 @@ export default function ProfilePage() {
       setUploadSuccess('Documento subido correctamente.');
       setSelectedDocument(null);
       setExpenseAmount('');
+      setExpenseAmountTouched(false);
       setExpenseDate('');
       setExpenseValidationError(null);
       setShowExpenseModal(false);
@@ -466,6 +472,7 @@ export default function ProfilePage() {
 
     if (requiresExpenseDetails) {
       setExpenseValidationError(null);
+      setExpenseAmountTouched(false);
       setShowExpenseModal(true);
       return;
     }
@@ -1216,7 +1223,10 @@ export default function ProfilePage() {
                 min="0"
                 step="0.01"
                 value={expenseAmount}
-                onChange={(event) => setExpenseAmount(event.target.value)}
+                onChange={(event) => {
+                  setExpenseAmountTouched(true);
+                  setExpenseAmount(event.target.value);
+                }}
                 required
               />
             </InputGroup>
