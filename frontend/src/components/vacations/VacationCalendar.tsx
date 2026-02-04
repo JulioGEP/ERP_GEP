@@ -1,5 +1,6 @@
 // frontend/src/components/vacations/VacationCalendar.tsx
 import type { VacationType, UserVacationDay } from '../../api/userVacations';
+import { VACATION_TYPE_LABELS } from '../../constants/vacations';
 
 const MONTH_FORMATTER = new Intl.DateTimeFormat('es-ES', { month: 'long' });
 const WEEKDAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
@@ -69,17 +70,27 @@ export function VacationCalendar({ year, days, onDayClick, selectedDates = [], r
 
                   const isSelected = selectedDates.includes(cell.date as string);
                   const typeClass = cell.type ? `type-${cell.type}` : '';
+                  const typeLabel = cell.type ? VACATION_TYPE_LABELS[cell.type] : '';
 
                   return (
                     <button
                       key={cell.date}
                       type="button"
-                      className={`vacation-day ${typeClass} ${isSelected ? 'selected' : ''}`.trim()}
-                      onClick={onDayClick ? () => onDayClick(cell.date as string, cell.type) : undefined}
-                      disabled={readOnly}
+                      className={`vacation-day ${typeClass} ${isSelected ? 'selected' : ''} ${
+                        readOnly ? 'is-readonly' : ''
+                      }`.trim()}
+                      onClick={
+                        onDayClick && !readOnly ? () => onDayClick(cell.date as string, cell.type) : undefined
+                      }
+                      aria-disabled={readOnly || undefined}
                     >
                       <span className="day-number">{cell.dayLabel}</span>
-                      {cell.type ? <span className="day-type">{cell.type}</span> : null}
+                      {cell.type ? (
+                        <>
+                          <span className="day-type">{cell.type}</span>
+                          <span className="day-type-toggle">{typeLabel}</span>
+                        </>
+                      ) : null}
                     </button>
                   );
                 })}

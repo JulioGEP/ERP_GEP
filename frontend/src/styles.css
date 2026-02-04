@@ -1557,6 +1557,10 @@ option.session-option-unavailable {
   transition: all 0.12s ease-in-out;
 }
 
+.vacation-calendar .vacation-day.is-readonly {
+  cursor: default;
+}
+
 .vacation-calendar .vacation-day:hover:not(:disabled):not(.empty) {
   border-color: #cbd5e1;
   background: #eef2ff;
@@ -1586,6 +1590,29 @@ option.session-option-unavailable {
   color: #fff;
   padding: 1px 5px;
   border-radius: 999px;
+}
+
+.vacation-calendar .vacation-day .day-type-toggle {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%) translateY(4px);
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(17, 24, 39, 0.9);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease-in-out, transform 0.12s ease-in-out;
+}
+
+.vacation-calendar .vacation-day:hover .day-type-toggle,
+.vacation-calendar .vacation-day:focus-visible .day-type-toggle {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .vacation-calendar .vacation-day.type-A {
