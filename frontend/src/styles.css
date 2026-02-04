@@ -1513,6 +1513,7 @@ option.session-option-unavailable {
 .vacation-calendar .vacation-month {
   width: 100%;
   min-width: 0;
+  overflow: visible;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 12px;
@@ -1532,6 +1533,7 @@ option.session-option-unavailable {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
+  overflow: visible;
 }
 
 .vacation-calendar .vacation-weekday {
@@ -1554,6 +1556,7 @@ option.session-option-unavailable {
   display: grid;
   place-items: center;
   cursor: pointer;
+  overflow: visible;
   transition: all 0.12s ease-in-out;
 }
 
@@ -1603,6 +1606,7 @@ option.session-option-unavailable {
   font-weight: 600;
   color: #fff;
   background: rgba(17, 24, 39, 0.9);
+  z-index: 2;
   white-space: nowrap;
   opacity: 0;
   pointer-events: none;
