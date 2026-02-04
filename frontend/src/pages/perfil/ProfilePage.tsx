@@ -25,6 +25,7 @@ import {
   VACATION_TYPE_ORDER,
 } from '../../constants/vacations';
 import { fetchTrainerDocuments, fetchTrainers, uploadTrainerDocument } from '../../features/recursos/api';
+import { fetchOfficePayrolls, type OfficePayrollRecord } from '../../features/reporting/api';
 import { TRAINER_DOCUMENT_TYPES, type TrainerDocumentTypeValue } from '../../features/recursos/trainers.constants';
 import { VacationCalendar } from '../../components/vacations/VacationCalendar';
 import { useAuth } from '../../context/AuthContext';
@@ -171,6 +172,19 @@ export default function ProfilePage() {
   const requiresExpenseDetails =
     EXPENSE_DOCUMENT_TYPES.has(selectedDocumentType) && (!trainerId || isFixedTrainer === true);
 
+  const payrollFieldKey = useMemo(() => {
+    switch (selectedDocumentType) {
+      case 'dietas':
+        return 'dietas';
+      case 'parking_peaje_kilometraje':
+        return 'kilometrajes';
+      case 'gasto':
+        return 'otrosGastos';
+      default:
+        return null;
+    }
+  }, [selectedDocumentType]);
+
   const expenseModalCopy = useMemo(() => {
     switch (selectedDocumentType) {
       case 'dietas':
@@ -197,6 +211,37 @@ export default function ProfilePage() {
     }
   }, [selectedDocumentType]);
 
+  const payrollReferenceDate = useMemo(() => {
+    if (expenseDate) {
+      const parsed = new Date(expenseDate);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+    return new Date();
+  }, [expenseDate]);
+
+  const payrollYear = payrollReferenceDate.getUTCFullYear();
+  const payrollMonth = payrollReferenceDate.getUTCMonth() + 1;
+
+  const officePayrollQuery = useQuery({
+    queryKey: ['profile-office-payrolls', payrollYear],
+    queryFn: () => fetchOfficePayrolls(payrollYear),
+    enabled: requiresExpenseDetails && Boolean(user?.id),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const payrollEntry = useMemo<OfficePayrollRecord | null>(() => {
+    if (!officePayrollQuery.data || !user?.id) return null;
+    return (
+      officePayrollQuery.data.entries.find(
+        (entry) => entry.userId === user.id && entry.year === payrollYear && entry.month === payrollMonth,
+      ) ?? null
+    );
+  }, [officePayrollQuery.data, payrollMonth, payrollYear, user?.id]);
+
+  const payrollFieldValue = payrollEntry && payrollFieldKey ? payrollEntry[payrollFieldKey] : null;
+
   useEffect(() => {
     if (!requiresExpenseDetails) {
       setExpenseAmount('');
@@ -205,6 +250,13 @@ export default function ProfilePage() {
       setShowExpenseModal(false);
     }
   }, [requiresExpenseDetails]);
+
+  useEffect(() => {
+    if (!showExpenseModal) return;
+    if (expenseAmount) return;
+    if (payrollFieldValue === null || payrollFieldValue === undefined) return;
+    setExpenseAmount(String(payrollFieldValue));
+  }, [expenseAmount, payrollFieldValue, showExpenseModal]);
 
   const shouldShowVacations = trainerId ? trainerDetailsQuery.data?.contrato_fijo === true : true;
 
@@ -1168,7 +1220,15 @@ export default function ProfilePage() {
                 required
               />
             </InputGroup>
+            {officePayrollQuery.isLoading ? (
+              <div className="text-muted small mt-1">Cargando importe actual…</div>
+            ) : payrollFieldValue !== null && payrollFieldValue !== undefined ? (
+              <div className="text-muted small mt-1">Importe actual aplicado: {payrollFieldValue} €</div>
+            ) : null}
           </Form.Group>
+          <p className="text-muted small mb-0">
+            Si tienes más de un ticket, <strong>tienes que sumar los importes</strong>
+          </p>
           <Form.Group>
             <Form.Label>Fecha del gasto</Form.Label>
             <Form.Control
