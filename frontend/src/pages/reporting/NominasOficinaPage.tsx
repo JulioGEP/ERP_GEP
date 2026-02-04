@@ -154,9 +154,9 @@ function resolveNumericValue(value: number | null, fallback?: number | null): nu
 function calculateTotals(entries: OfficePayrollRecord[]) {
   return entries.reduce(
     (acc, entry) => {
-      const salarioBruto = resolveNumericValue(entry.salarioBruto, entry.defaultSalarioBruto);
-      const aportacion = resolveNumericValue(entry.aportacionSsIrpf, entry.defaultAportacionSsIrpf);
-      const salarioLimpio = resolveNumericValue(entry.salarioLimpio, entry.defaultSalarioLimpio);
+      const salarioBruto = resolveNumericValue(entry.salarioBrutoTotal);
+      const aportacion = resolveNumericValue(entry.aportacionSsIrpf);
+      const salarioLimpio = resolveNumericValue(entry.salarioLimpio);
 
       acc.count += 1;
       acc.salarioBruto += salarioBruto ?? 0;
@@ -1244,16 +1244,10 @@ export default function NominasOficinaPage({
                                 </thead>
                                 <tbody>
                                   {items.map((entry) => {
-                                    const salarioBruto = resolveDisplayValue(entry.salarioBruto, entry.defaultSalarioBruto);
+                                    const salarioBruto = resolveDisplayValue(entry.salarioBrutoTotal);
                                     const totalExtras = resolveDisplayValue(entry.totalExtras);
-                                    const aportacion = resolveDisplayValue(
-                                      entry.aportacionSsIrpf,
-                                      entry.defaultAportacionSsIrpf,
-                                    );
-                                    const salarioLimpio = resolveDisplayValue(
-                                      entry.salarioLimpio,
-                                      entry.defaultSalarioLimpio,
-                                    );
+                                    const aportacion = resolveDisplayValue(entry.aportacionSsIrpf);
+                                    const salarioLimpio = resolveDisplayValue(entry.salarioLimpio);
 
                                     return (
                                       <tr key={`${year}-${month}-${entry.userId}`}>
