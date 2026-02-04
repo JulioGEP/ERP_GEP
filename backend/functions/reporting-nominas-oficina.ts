@@ -284,13 +284,9 @@ function serializeRecord(
 ): OfficePayrollResponseItem {
   const totalExtras = calculateExtrasTotal(record);
   const salarioBruto = decimalToNumber(record.salario_bruto);
-  const dietas = decimalToNumber(record.dietas);
-  const kilometrajes = decimalToNumber(record.kilometrajes);
   const salarioBrutoTotalPersisted = decimalToNumber(record.salario_bruto_total);
   const salarioBrutoTotalCalculated =
-    salarioBruto === null && dietas === null && kilometrajes === null
-      ? null
-      : (salarioBruto ?? 0) + (dietas ?? 0) + (kilometrajes ?? 0);
+    salarioBruto === null && totalExtras === null ? null : (salarioBruto ?? 0) + (totalExtras ?? 0);
   const salarioBrutoTotal = salarioBrutoTotalPersisted ?? salarioBrutoTotalCalculated;
 
   return {
