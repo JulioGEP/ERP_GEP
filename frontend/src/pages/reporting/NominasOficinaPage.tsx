@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Accordion, Alert, Badge, Button, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
@@ -168,12 +168,6 @@ function calculateTotals(entries: OfficePayrollRecord[]) {
   );
 }
 
-type ExtrasTotalsSummary = {
-  totals: Record<ExtrasSummaryKey, number>;
-  total: number;
-  hasValues: boolean;
-};
-
 type ExtrasModalProps = {
   entry: OfficePayrollRecord | null;
   onHide: () => void;
@@ -256,23 +250,6 @@ const PAYROLL_BASE_FIELDS: Array<keyof OfficePayrollRecord> = [
   'defaultContingenciasComunesDetalle',
   'defaultTotalEmpresa',
 ];
-
-function createEmptyExtrasTotals(): Record<ExtrasSummaryKey, number> {
-  return EXTRAS_SUMMARY_FIELDS.reduce((acc, field) => {
-    acc[field.key] = 0;
-    return acc;
-  }, {} as Record<ExtrasSummaryKey, number>);
-}
-
-function buildExtrasTotalsSummary(totals: Record<ExtrasSummaryKey, number>): ExtrasTotalsSummary {
-  const total = EXTRAS_TOTAL_FIELDS.reduce((sum, fieldKey) => sum + totals[fieldKey], 0);
-  const hasValues = EXTRAS_SUMMARY_FIELDS.some((field) => totals[field.key] !== 0);
-  return {
-    totals,
-    total: Number(total.toFixed(2)),
-    hasValues,
-  };
-}
 
 function preservePayrollBaseValues(
   existing: OfficePayrollRecord,
@@ -1083,106 +1060,6 @@ export default function NominasOficinaPage({
     return entries.filter(filterEntries);
   }, [filterEntries, payrollQuery.data?.entries]);
 
-  const extraCostsRange = useMemo(() => {
-    if (!filteredEntries.length) return null;
-    let minYear = filteredEntries[0].year;
-    let minMonth = filteredEntries[0].month;
-    let maxYear = filteredEntries[0].year;
-    let maxMonth = filteredEntries[0].month;
-
-    for (const entry of filteredEntries) {
-      if (entry.year < minYear || (entry.year === minYear && entry.month < minMonth)) {
-        minYear = entry.year;
-        minMonth = entry.month;
-      }
-      if (entry.year > maxYear || (entry.year === maxYear && entry.month > maxMonth)) {
-        maxYear = entry.year;
-        maxMonth = entry.month;
-      }
-    }
-
-    const startRange = buildMonthRange(minYear, minMonth);
-    const endRange = buildMonthRange(maxYear, maxMonth);
-    return {
-      startDate: startRange.startDate,
-      endDate: endRange.endDate,
-    };
-  }, [filteredEntries]);
-
-  const extraCostsSummaryQuery = useQuery({
-    queryKey: [
-      'reporting',
-      'costes-extra-summary',
-      extraCostsRange?.startDate ?? null,
-      extraCostsRange?.endDate ?? null,
-    ],
-    queryFn: () =>
-      fetchTrainerExtraCosts({
-        startDate: extraCostsRange?.startDate,
-        endDate: extraCostsRange?.endDate,
-      }),
-    enabled: Boolean(extraCostsRange),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const extraCostsTotalsByEntry = useMemo(() => {
-    const totalsMap = new Map<string, Record<ExtrasSummaryKey, number>>();
-    for (const item of extraCostsSummaryQuery.data ?? []) {
-      const dateValue = item.scheduledStart ?? item.createdAt ?? item.updatedAt;
-      if (!dateValue) continue;
-      const parsedDate = new Date(dateValue);
-      if (Number.isNaN(parsedDate.getTime())) continue;
-      const year = parsedDate.getUTCFullYear();
-      const month = parsedDate.getUTCMonth() + 1;
-      const idCandidates = new Set(
-        [item.trainerUserId, item.trainerId].filter((value): value is string => Boolean(value)),
-      );
-
-      for (const id of idCandidates) {
-        const key = `${id}-${year}-${month}`;
-        const totals = totalsMap.get(key) ?? createEmptyExtrasTotals();
-        for (const field of EXTRAS_SUMMARY_FIELDS) {
-          totals[field.key] += item.costs[field.costsKey] ?? 0;
-        }
-        totalsMap.set(key, totals);
-      }
-    }
-
-    const summaryMap = new Map<string, ExtrasTotalsSummary>();
-    totalsMap.forEach((totals, key) => {
-      summaryMap.set(key, buildExtrasTotalsSummary(totals));
-    });
-    return summaryMap;
-  }, [extraCostsSummaryQuery.data]);
-
-  const getExtrasSummaryForEntry = useCallback(
-    (entry: OfficePayrollRecord): ExtrasTotalsSummary | null => {
-      const key = `${entry.userId}-${entry.year}-${entry.month}`;
-      return extraCostsTotalsByEntry.get(key) ?? null;
-    },
-    [extraCostsTotalsByEntry],
-  );
-
-  const mergeEntryWithExtras = useCallback(
-    (entry: OfficePayrollRecord): OfficePayrollRecord => {
-      const summary = getExtrasSummaryForEntry(entry);
-      if (!summary?.hasValues) return entry;
-
-      return {
-        ...entry,
-        dietas: summary.totals.dietas,
-        kilometrajes: summary.totals.kilometraje,
-        pernocta: summary.totals.pernocta,
-        nocturnidad: summary.totals.nocturnidad,
-        festivo: summary.totals.festivo,
-        horasExtras: summary.totals.horasExtras,
-        otrosGastos: summary.totals.otrosGastos,
-        totalExtras: summary.total,
-      };
-    },
-    [getExtrasSummaryForEntry],
-  );
-
   const filteredAvailableYears = useMemo(() => {
     if (!filterEntries) {
       return payrollQuery.data?.availableYears ?? [];
@@ -1367,19 +1244,15 @@ export default function NominasOficinaPage({
                                 </thead>
                                 <tbody>
                                   {items.map((entry) => {
-                                    const effectiveEntry = mergeEntryWithExtras(entry);
-                                    const salarioBruto = resolveDisplayValue(
-                                      effectiveEntry.salarioBruto,
-                                      effectiveEntry.defaultSalarioBruto,
-                                    );
-                                    const totalExtras = resolveDisplayValue(effectiveEntry.totalExtras);
+                                    const salarioBruto = resolveDisplayValue(entry.salarioBruto, entry.defaultSalarioBruto);
+                                    const totalExtras = resolveDisplayValue(entry.totalExtras);
                                     const aportacion = resolveDisplayValue(
-                                      effectiveEntry.aportacionSsIrpf,
-                                      effectiveEntry.defaultAportacionSsIrpf,
+                                      entry.aportacionSsIrpf,
+                                      entry.defaultAportacionSsIrpf,
                                     );
                                     const salarioLimpio = resolveDisplayValue(
-                                      effectiveEntry.salarioLimpio,
-                                      effectiveEntry.defaultSalarioLimpio,
+                                      entry.salarioLimpio,
+                                      entry.defaultSalarioLimpio,
                                     );
 
                                     return (
@@ -1408,7 +1281,7 @@ export default function NominasOficinaPage({
                                             <Button
                                               size="sm"
                                               variant="outline-primary"
-                                              onClick={() => setSelectedEntry(mergeEntryWithExtras(entry))}
+                                              onClick={() => setSelectedEntry(entry)}
                                             >
                                               Nómina
                                             </Button>
