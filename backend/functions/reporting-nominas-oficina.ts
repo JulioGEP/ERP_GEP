@@ -269,6 +269,28 @@ function calculateExtrasTotal(record: {
   return Number(values.reduce((total, value) => total + value, 0));
 }
 
+function calculateBrutoExtras(record: {
+  otros_gastos?: DecimalLike;
+  pernocta?: DecimalLike;
+  nocturnidad?: DecimalLike;
+  festivo?: DecimalLike;
+  horas_extras?: DecimalLike;
+}): number | null {
+  const values = [
+    record.otros_gastos,
+    record.pernocta,
+    record.nocturnidad,
+    record.festivo,
+    record.horas_extras,
+  ]
+    .map((value) => decimalToNumber(value))
+    .filter((value): value is number => value !== null);
+
+  if (values.length === 0) return null;
+
+  return Number(values.reduce((total, value) => total + value, 0));
+}
+
 function serializeRecord(
   record: OfficePayrollRow,
   user: {
@@ -284,10 +306,21 @@ function serializeRecord(
 ): OfficePayrollResponseItem {
   const totalExtras = calculateExtrasTotal(record);
   const salarioBruto = decimalToNumber(record.salario_bruto);
+  const salarioBrutoExtras = calculateBrutoExtras(record);
   const salarioBrutoTotalPersisted = decimalToNumber(record.salario_bruto_total);
   const salarioBrutoTotalCalculated =
-    salarioBruto === null && totalExtras === null ? null : (salarioBruto ?? 0) + (totalExtras ?? 0);
+    salarioBruto === null && salarioBrutoExtras === null
+      ? null
+      : (salarioBruto ?? 0) + (salarioBrutoExtras ?? 0);
   const salarioBrutoTotal = salarioBrutoTotalPersisted ?? salarioBrutoTotalCalculated;
+  const aportacion = decimalToNumber(record.aportacion_ss_irpf);
+  const dietas = decimalToNumber(record.dietas);
+  const kilometrajes = decimalToNumber(record.kilometrajes);
+  const salarioLimpioCalculated =
+    salarioBrutoTotal !== null && aportacion !== null
+      ? salarioBrutoTotal + aportacion + (dietas ?? 0) + (kilometrajes ?? 0)
+      : null;
+  const salarioLimpio = decimalToNumber(record.salario_limpio) ?? salarioLimpioCalculated;
 
   return {
     id: record.id,
@@ -298,8 +331,8 @@ function serializeRecord(
     trainerFixedContract: Boolean(user.trainer?.contrato_fijo),
     year: record.year,
     month: record.month,
-    dietas: decimalToNumber(record.dietas),
-    kilometrajes: decimalToNumber(record.kilometrajes),
+    dietas,
+    kilometrajes,
     pernocta: decimalToNumber(record.pernocta),
     nocturnidad: decimalToNumber(record.nocturnidad),
     festivo: decimalToNumber(record.festivo),
@@ -318,7 +351,7 @@ function serializeRecord(
     retencion: decimalToNumber(record.retencion),
     aportacionSsIrpf: decimalToNumber(record.aportacion_ss_irpf),
     aportacionSsIrpfDetalle: sanitizeText(record.aportacion_ss_irpf_detalle),
-    salarioLimpio: decimalToNumber(record.salario_limpio),
+    salarioLimpio,
     contingenciasComunes: decimalToNumber(record.contingencias_comunes),
     contingenciasComunesDetalle: sanitizeText(record.contingencias_comunes_detalle),
     totalEmpresa: decimalToNumber(record.total_empresa),

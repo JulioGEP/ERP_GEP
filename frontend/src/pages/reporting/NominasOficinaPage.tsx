@@ -641,6 +641,13 @@ const payrollInitialFields = {
   contingenciasComunesDetalle: '',
   contingenciasComunes: '',
   totalEmpresa: '',
+  dietas: '',
+  kilometrajes: '',
+  pernocta: '',
+  nocturnidad: '',
+  festivo: '',
+  horasExtras: '',
+  otrosGastos: '',
 };
 
 type PayrollFieldKey = keyof typeof payrollInitialFields;
@@ -650,8 +657,19 @@ function applyPayrollCalculations(fields: typeof payrollInitialFields): typeof p
   const salarioBrutoCalculado = calculateSalarioBruto(baseRetencionMensual, fields.horasSemana);
   const salarioBruto = salarioBrutoCalculado !== null ? salarioBrutoCalculado : normalizeNumber(fields.salarioBruto);
   const extrasTotal = normalizeNumber(fields.totalExtras);
+  const dietas = normalizeNumber(fields.dietas);
+  const kilometrajes = normalizeNumber(fields.kilometrajes);
+  const pernocta = normalizeNumber(fields.pernocta);
+  const nocturnidad = normalizeNumber(fields.nocturnidad);
+  const festivo = normalizeNumber(fields.festivo);
+  const horasExtras = normalizeNumber(fields.horasExtras);
+  const otrosGastos = normalizeNumber(fields.otrosGastos);
+  const brutoExtrasTotal =
+    pernocta === null && nocturnidad === null && festivo === null && horasExtras === null && otrosGastos === null
+      ? null
+      : (pernocta ?? 0) + (nocturnidad ?? 0) + (festivo ?? 0) + (horasExtras ?? 0) + (otrosGastos ?? 0);
   const salarioBrutoTotal =
-    salarioBruto === null && extrasTotal === null ? null : (salarioBruto ?? 0) + (extrasTotal ?? 0);
+    salarioBruto === null && brutoExtrasTotal === null ? null : (salarioBruto ?? 0) + (brutoExtrasTotal ?? 0);
   const retencionPorcentaje = parsePercentageInput(fields.retencion ?? '');
 
   const aportacionExpression = fields.aportacionSsIrpfDetalle || fields.aportacionSsIrpf;
@@ -686,7 +704,9 @@ function applyPayrollCalculations(fields: typeof payrollInitialFields): typeof p
       : null;
 
   const salarioLimpioCalculado =
-    salarioBrutoTotal !== null && aporteCalculado !== null ? salarioBrutoTotal + aporteCalculado : null;
+    salarioBrutoTotal !== null && aporteCalculado !== null
+      ? salarioBrutoTotal + aporteCalculado + (dietas ?? 0) + (kilometrajes ?? 0)
+      : null;
 
   return {
     ...fields,
@@ -737,6 +757,13 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
         ),
         contingenciasComunes: resolveValue(entry.contingenciasComunes, entry.defaultContingenciasComunes),
         totalEmpresa: resolveValue(entry.totalEmpresa, entry.defaultTotalEmpresa),
+        dietas: resolveValue(entry.dietas),
+        kilometrajes: resolveValue(entry.kilometrajes),
+        pernocta: resolveValue(entry.pernocta),
+        nocturnidad: resolveValue(entry.nocturnidad),
+        festivo: resolveValue(entry.festivo),
+        horasExtras: resolveValue(entry.horasExtras),
+        otrosGastos: resolveValue(entry.otrosGastos),
       }),
     );
   }, [entry]);
