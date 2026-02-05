@@ -284,6 +284,10 @@ async function applyPayrollDelta(
     horas_extras: decimalToNumber(existing?.horas_extras ?? 0) + delta.horas_extras,
     otros_gastos: decimalToNumber(existing?.otros_gastos ?? 0) + delta.otros_gastos,
   };
+  const nextTotalExtras =
+    Math.round(
+      Object.values(nextValues).reduce((acc, value) => acc + value, 0) * 100,
+    ) / 100;
 
   const updateData: Prisma.office_payrollsUpdateInput = {};
 
@@ -296,9 +300,12 @@ async function applyPayrollDelta(
     }
   });
 
-  const currentTotalExtras = existing ? decimalToNumber(existing.total_extras) : null;
-  if (currentTotalExtras !== null) {
-    updateData.total_extras = toDecimal(currentTotalExtras + delta.total_extras);
+  if (existing) {
+    const currentTotalExtras = existing.total_extras;
+    const currentTotalValue = decimalToNumber(currentTotalExtras ?? 0);
+    if (currentTotalExtras === null || Math.abs(nextTotalExtras - currentTotalValue) > 0.001) {
+      updateData.total_extras = toDecimal(nextTotalExtras);
+    }
   }
 
   if (existing) {
@@ -323,7 +330,7 @@ async function applyPayrollDelta(
     festivo: toDecimal(nextValues.festivo),
     horas_extras: toDecimal(nextValues.horas_extras),
     otros_gastos: toDecimal(nextValues.otros_gastos),
-    total_extras: toDecimal(delta.total_extras),
+    total_extras: toDecimal(nextTotalExtras),
   };
 
   await prisma.office_payrolls.create({ data: createData });
