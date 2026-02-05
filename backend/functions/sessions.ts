@@ -91,6 +91,42 @@ function toPositiveInt(value: unknown, fallback = 0): number {
   if (!Number.isFinite(num) || num <= 0) return fallback;
   return Math.floor(num);
 }
+
+const TIEMPO_PARADA_VALUES = new Set([0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4]);
+
+function toNumberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(',', '.'));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (typeof value === 'object') {
+    const record = value as { toNumber?: () => number; toString?: () => string };
+    if (typeof record.toNumber === 'function') {
+      const parsed = record.toNumber();
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    if (typeof record.toString === 'function') {
+      const parsed = Number(record.toString());
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+  }
+  return null;
+}
+
+function parseTiempoParada(value: unknown): { value?: number | null; error?: ReturnType<typeof errorResponse> } {
+  if (value === undefined) return {};
+  if (value === null || value === '') return { value: null };
+  const parsed = toNumberOrNull(value);
+  if (parsed === null) {
+    return { error: errorResponse('VALIDATION_ERROR', 'Tiempo de parada inválido', 400) };
+  }
+  if (!TIEMPO_PARADA_VALUES.has(parsed)) {
+    return { error: errorResponse('VALIDATION_ERROR', 'Tiempo de parada fuera de rango', 400) };
+  }
+  return { value: parsed };
+}
 function parseSessionIdFromPath(path: string): string | null {
   const value = String(path || '');
   const match = value.match(/\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/([^/?#]+)/i);
@@ -143,6 +179,7 @@ type SessionRecord = {
   nombre_cache: string;
   fecha_inicio_utc: Date | null;
   fecha_fin_utc: Date | null;
+  tiempo_parada: unknown;
   sala_id: string | null;
   direccion: string;
   estado: SessionEstado;
@@ -464,6 +501,7 @@ function normalizeSession(row: SessionRecord) {
     nombre_cache: normalized.nombre_cache,
     fecha_inicio_utc: toIsoOrNull(normalized.fecha_inicio_utc),
     fecha_fin_utc: toIsoOrNull(normalized.fecha_fin_utc),
+    tiempo_parada: toNumberOrNull(normalized.tiempo_parada),
     sala_id: normalized.sala_id,
     direccion: normalized.direccion,
     estado,
@@ -483,6 +521,7 @@ function buildSessionAuditSnapshot(session: ReturnType<typeof normalizeSession>)
     estado: session.estado,
     fecha_inicio_utc: session.fecha_inicio_utc,
     fecha_fin_utc: session.fecha_fin_utc,
+    tiempo_parada: session.tiempo_parada,
     sala_id: session.sala_id,
     direccion: session.direccion,
     trainer_ids: session.trainer_ids,
@@ -596,6 +635,13 @@ function buildSessionPatch(body: any): SessionPatchResult {
     const value = toOptionalText(body.direccion);
     if (value == null) return { error: errorResponse('VALIDATION_ERROR', 'La dirección es obligatoria', 400) };
     data.direccion = value;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'tiempo_parada')) {
+    const parsed = parseTiempoParada(body.tiempo_parada);
+    if (parsed.error) return { error: parsed.error };
+    if ('value' in parsed) {
+      data.tiempo_parada = parsed.value ?? null;
+    }
   }
   if (Object.prototype.hasOwnProperty.call(body, 'nombre_cache')) {
     const value = toOptionalText(body.nombre_cache);
@@ -1539,6 +1585,8 @@ if (method === 'GET') {
       if (fechaInicioResult && 'error' in fechaInicioResult) return fechaInicioResult.error;
       const fechaFinResult = parseDateInput(body.fecha_fin_utc);
       if (fechaFinResult && 'error' in fechaFinResult) return fechaFinResult.error;
+      const tiempoParadaResult = parseTiempoParada(body.tiempo_parada);
+      if (tiempoParadaResult.error) return tiempoParadaResult.error;
 
       const rangeError = ensureValidDateRange(
         (fechaInicioResult as Date | null | undefined) ?? undefined,
@@ -1551,6 +1599,7 @@ if (method === 'GET') {
       const fechaFinDate = fechaFinResult === undefined ? null : (fechaFinResult as Date | null);
       const salaId = toTrimmed(body.sala_id);
       const forceEstadoBorrador = shouldForceEstadoBorrador(body.force_estado_borrador);
+      const tiempoParadaValue = 'value' in tiempoParadaResult ? tiempoParadaResult.value : undefined;
 
       const auditUserIdPromise = resolveUserIdFromEvent(event, prisma);
 
@@ -1607,6 +1656,9 @@ if (method === 'GET') {
         if (fechaFinResult !== undefined) {
           createData.fecha_fin_utc = fechaFinDate as Date | null;
         }
+        if (tiempoParadaValue !== undefined) {
+          createData.tiempo_parada = tiempoParadaValue;
+        }
 
         const created = await tx.sesiones.create({
           data: createData,
@@ -1645,18 +1697,19 @@ if (method === 'GET') {
       });
 
       const auditUserId = await auditUserIdPromise;
-      const auditAfter = {
-        id: result.id,
-        deal_id: result.deal_id,
-        deal_product_id: result.deal_product_id,
-        estado: result.estado,
-        fecha_inicio_utc: result.fecha_inicio_utc,
-        fecha_fin_utc: result.fecha_fin_utc,
-        sala_id: result.sala_id,
-        direccion: result.direccion,
-        trainer_ids: result.trainer_ids,
-        unidad_movil_ids: result.unidad_movil_ids,
-      };
+        const auditAfter = {
+          id: result.id,
+          deal_id: result.deal_id,
+          deal_product_id: result.deal_product_id,
+          estado: result.estado,
+          fecha_inicio_utc: result.fecha_inicio_utc,
+          fecha_fin_utc: result.fecha_fin_utc,
+          tiempo_parada: result.tiempo_parada,
+          sala_id: result.sala_id,
+          direccion: result.direccion,
+          trainer_ids: result.trainer_ids,
+          unidad_movil_ids: result.unidad_movil_ids,
+        };
 
       await logAudit({
         userId: auditUserId,

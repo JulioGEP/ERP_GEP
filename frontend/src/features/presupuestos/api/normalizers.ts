@@ -605,6 +605,7 @@ export function normalizeSession(row: any): SessionDTO {
     nombre_cache: toStringValue(row?.nombre_cache ?? row?.nombre) ?? '',
     fecha_inicio_utc: toStringValue(row?.fecha_inicio_utc ?? row?.fechaInicioUtc) ?? null,
     fecha_fin_utc: toStringValue(row?.fecha_fin_utc ?? row?.fechaFinUtc) ?? null,
+    tiempo_parada: toNumber(row?.tiempo_parada ?? row?.tiempoParada) ?? null,
     sala_id: toStringValue(row?.sala_id ?? row?.salaId) ?? null,
     direccion: toStringValue(row?.direccion) ?? '',
     estado: toSessionEstadoValue(row?.estado),

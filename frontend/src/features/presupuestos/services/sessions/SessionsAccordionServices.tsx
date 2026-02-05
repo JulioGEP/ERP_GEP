@@ -137,6 +137,14 @@ const TRAINER_INVITE_STATUS_BADGES: Record<SessionTrainerInviteStatus, { label: 
 
 const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
 const IN_COMPANY_ROOM_VALUE = '__IN_COMPANY__';
+const TIEMPO_PARADA_OPTIONS = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4];
+
+function formatTiempoParada(value: number): string {
+  return value.toLocaleString('es-ES', {
+    minimumFractionDigits: value % 1 === 0 ? 0 : 1,
+    maximumFractionDigits: 1,
+  });
+}
 
 function formatErrorMessage(error: unknown, fallback: string): string {
   if (isApiError(error)) {
@@ -802,6 +810,7 @@ type SessionFormState = {
   nombre_cache: string;
   fecha_inicio_local: string | null;
   fecha_fin_local: string | null;
+  tiempo_parada: number | null;
   sala_id: string | null;
   direccion: string;
   estado: SessionEstado;
@@ -992,6 +1001,7 @@ function mapSessionToForm(session: SessionDTO): SessionFormState {
     nombre_cache: session.nombre_cache,
     fecha_inicio_local: formatDateForInput(session.fecha_inicio_utc),
     fecha_fin_local: formatDateForInput(session.fecha_fin_utc),
+    tiempo_parada: typeof session.tiempo_parada === 'number' ? session.tiempo_parada : null,
     sala_id: session.sala_id ?? null,
     direccion: session.direccion ?? '',
     estado: session.estado,
@@ -1114,6 +1124,7 @@ function buildSessionPatchPayload(
       nombre_cache: form.nombre_cache,
       fecha_inicio_utc: localInputToUtc(form.fecha_inicio_local) ?? null,
       fecha_fin_utc: localInputToUtc(form.fecha_fin_local) ?? null,
+      tiempo_parada: form.tiempo_parada ?? null,
       sala_id: form.sala_id,
       direccion: form.direccion,
       trainer_ids: form.trainer_ids,
@@ -1136,6 +1147,11 @@ function buildSessionPatchPayload(
 
   if (form.fecha_fin_local !== saved.fecha_fin_local) {
     patch.fecha_fin_utc = endIso ?? null;
+    hasChanges = true;
+  }
+
+  if (form.tiempo_parada !== saved.tiempo_parada) {
+    patch.tiempo_parada = form.tiempo_parada ?? null;
     hasChanges = true;
   }
 
@@ -2784,6 +2800,32 @@ function SessionEditor({
               <option value="SUSPENDIDA">{SESSION_ESTADO_LABELS.SUSPENDIDA}</option>
               <option value="CANCELADA">{SESSION_ESTADO_LABELS.CANCELADA}</option>
               <option value="FINALIZADA">{SESSION_ESTADO_LABELS.FINALIZADA}</option>
+            </Form.Select>
+          </Form.Group>
+        </Col>
+      </Row>
+
+      <Row className="g-3 mt-1">
+        <Col md={6} lg={3}>
+          <Form.Group controlId={`session-${form.id}-tiempo-parada`}>
+            <Form.Label>Tiempo de parada</Form.Label>
+            <Form.Select
+              value={form.tiempo_parada ?? ''}
+              onChange={(event) => {
+                const rawValue = event.target.value;
+                const nextValue = rawValue ? Number(rawValue) : null;
+                onChange((current) => ({ ...current, tiempo_parada: nextValue }));
+              }}
+              title={buildFieldTooltip(
+                form.tiempo_parada == null ? 'Sin parada' : `${formatTiempoParada(form.tiempo_parada)} h`,
+              )}
+            >
+              <option value="">Sin parada</option>
+              {TIEMPO_PARADA_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {formatTiempoParada(value)} h
+                </option>
+              ))}
             </Form.Select>
           </Form.Group>
         </Col>
