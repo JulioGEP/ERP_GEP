@@ -18,6 +18,24 @@ const ALLOWED_DOCUMENT_TYPES = new Map([
 ]);
 
 type PayrollExpenseColumn = 'otros_gastos' | 'kilometrajes' | 'dietas';
+type PayrollExtraField =
+  | 'dietas'
+  | 'kilometrajes'
+  | 'pernocta'
+  | 'nocturnidad'
+  | 'festivo'
+  | 'horas_extras'
+  | 'otros_gastos';
+
+const PAYROLL_EXTRA_FIELDS: PayrollExtraField[] = [
+  'dietas',
+  'kilometrajes',
+  'pernocta',
+  'nocturnidad',
+  'festivo',
+  'horas_extras',
+  'otros_gastos',
+];
 
 type PayrollExpense = {
   amount: number;
@@ -38,6 +56,25 @@ function toStringOrNull(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   const text = String(value).trim();
   return text.length ? text : null;
+}
+
+function decimalToNumber(value: unknown): number {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (typeof (value as { toNumber?: () => number }).toNumber === 'function') {
+    const parsed = (value as { toNumber: () => number }).toNumber();
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function resolveDocumentType(value: unknown) {
@@ -216,13 +253,22 @@ async function persistPayrollExpense(
   });
 
   const column = expense.column;
-  const currentAmount = existing?.[column as keyof typeof existing]
-    ? Number(existing?.[column as keyof typeof existing])
-    : 0;
+  const currentAmount = decimalToNumber(existing?.[column as keyof typeof existing] ?? 0);
   const totalAmount = Number((currentAmount + expense.amount).toFixed(2));
+  const nextValues = PAYROLL_EXTRA_FIELDS.reduce<Record<PayrollExtraField, number>>((acc, field) => {
+    const currentValue = decimalToNumber(existing?.[field as keyof typeof existing] ?? 0);
+    acc[field] = field === column ? totalAmount : currentValue;
+    return acc;
+  }, {} as Record<PayrollExtraField, number>);
+  const nextTotalExtras = Number(
+    PAYROLL_EXTRA_FIELDS.reduce((acc, field) => acc + nextValues[field], 0).toFixed(2),
+  );
 
   if (existing) {
-    const updateData = { [column]: new Prisma.Decimal(totalAmount) } as Prisma.office_payrollsUpdateInput;
+    const updateData = {
+      [column]: new Prisma.Decimal(totalAmount),
+      total_extras: new Prisma.Decimal(nextTotalExtras),
+    } as Prisma.office_payrollsUpdateInput;
     await prisma.office_payrolls.update({
       where: { user_id_year_month: { user_id: userId, year: expense.year, month: expense.month } },
       data: updateData,
@@ -235,6 +281,7 @@ async function persistPayrollExpense(
     year: expense.year,
     month: expense.month,
     [column]: new Prisma.Decimal(totalAmount),
+    total_extras: new Prisma.Decimal(nextTotalExtras),
   } as Prisma.office_payrollsCreateInput;
   await prisma.office_payrolls.create({
     data: createData,
