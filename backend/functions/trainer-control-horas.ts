@@ -28,7 +28,6 @@ type SessionRow = {
     nombre_cache: string | null;
     fecha_inicio_utc: Date | null;
     fecha_fin_utc: Date | null;
-    tiempo_parada: DecimalLike | number | string | null;
     deals: { tipo_servicio: string | null } | null;
   } | null;
 };
@@ -151,16 +150,14 @@ function parseDateFilters(query: Record<string, string | undefined>): ParsedDate
   return { startDate, endDate };
 }
 
-function computeSessionHours(start: Date | null, end: Date | null, breakHours = 0): number {
+function computeSessionHours(start: Date | null, end: Date | null): number {
   if (!start || !end) return 0;
   const startTime = start.getTime();
   const endTime = end.getTime();
   if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) return 0;
   const diff = endTime - startTime;
   if (!Number.isFinite(diff) || diff <= 0) return 0;
-  const total = diff / (60 * 60 * 1000);
-  const pause = Number.isFinite(breakHours) ? Math.max(0, breakHours) : 0;
-  return Math.max(0, total - pause);
+  return diff / (60 * 60 * 1000);
 }
 
 function formatSessionDate(date: Date | null): string | null {
@@ -333,7 +330,6 @@ export const handler = createHttpHandler(async (request) => {
           nombre_cache: true,
           fecha_inicio_utc: true,
           fecha_fin_utc: true,
-          tiempo_parada: true,
           deals: { select: { tipo_servicio: true } },
         },
       },
@@ -441,12 +437,7 @@ export const handler = createHttpHandler(async (request) => {
 
     const sessionName = row.sesiones?.nombre_cache ?? null;
     const sessionDate = formatSessionDate(row.sesiones?.fecha_inicio_utc ?? null);
-    const breakHours = decimalToNumber(row.sesiones?.tiempo_parada ?? 0);
-    const hours = computeSessionHours(
-      row.sesiones?.fecha_inicio_utc ?? null,
-      row.sesiones?.fecha_fin_utc ?? null,
-      breakHours,
-    );
+    const hours = computeSessionHours(row.sesiones?.fecha_inicio_utc ?? null, row.sesiones?.fecha_fin_utc ?? null);
 
     const extraCostRecord = extraCostMap.get(`session:${sessionId}`) ?? null;
     const sessionType: 'formacion' | 'preventivo' = isPreventiveService(row.sesiones?.deals?.tipo_servicio)
