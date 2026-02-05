@@ -45,6 +45,7 @@ export type SessionDTO = {
   nombre_cache: string;
   fecha_inicio_utc: string | null;
   fecha_fin_utc: string | null;
+  tiempo_parada: number | null;
   sala_id: string | null;
   direccion: string;
   estado: SessionEstado;
@@ -854,6 +855,7 @@ function normalizeSession(row: any): SessionDTO {
   const nombre_cache = toStringValue(row?.nombre_cache) ?? "Sesión";
   const fecha_inicio_utc = toStringValue(row?.fecha_inicio_utc);
   const fecha_fin_utc = toStringValue(row?.fecha_fin_utc);
+  const tiempo_parada = toNumber(row?.tiempo_parada);
   const sala_id = toStringValue(row?.sala_id);
   const direccion = toStringValue(row?.direccion) ?? "";
   const estado = toSessionEstadoValue(row?.estado);
@@ -878,6 +880,7 @@ function normalizeSession(row: any): SessionDTO {
     nombre_cache,
     fecha_inicio_utc: fecha_inicio_utc ?? null,
     fecha_fin_utc: fecha_fin_utc ?? null,
+    tiempo_parada: typeof tiempo_parada === "number" ? tiempo_parada : null,
     sala_id: sala_id ?? null,
     direccion,
     estado,
@@ -1659,6 +1662,7 @@ export async function createSession(
     nombre_cache?: string;
     fecha_inicio_utc?: string | null;
     fecha_fin_utc?: string | null;
+    tiempo_parada?: number | null;
     sala_id?: string | null;
     direccion?: string | null;
     trainer_ids?: string[];
@@ -1678,6 +1682,7 @@ export async function createSession(
   if (payload.nombre_cache !== undefined) body.nombre_cache = payload.nombre_cache;
   if (payload.fecha_inicio_utc !== undefined) body.fecha_inicio_utc = payload.fecha_inicio_utc;
   if (payload.fecha_fin_utc !== undefined) body.fecha_fin_utc = payload.fecha_fin_utc;
+  if (payload.tiempo_parada !== undefined) body.tiempo_parada = payload.tiempo_parada;
   if (payload.sala_id !== undefined) body.sala_id = payload.sala_id;
   if (payload.direccion !== undefined) body.direccion = payload.direccion;
   const trainerIds = sanitizeStringArray(payload.trainer_ids);
@@ -1703,6 +1708,7 @@ export async function patchSession(
     nombre_cache: string;
     fecha_inicio_utc: string | null;
     fecha_fin_utc: string | null;
+    tiempo_parada: number | null;
     sala_id: string | null;
     direccion: string | null;
     trainer_ids: string[];
@@ -1723,6 +1729,8 @@ export async function patchSession(
     body.fecha_inicio_utc = payload.fecha_inicio_utc ?? null;
   if (Object.prototype.hasOwnProperty.call(payload, "fecha_fin_utc"))
     body.fecha_fin_utc = payload.fecha_fin_utc ?? null;
+  if (Object.prototype.hasOwnProperty.call(payload, "tiempo_parada"))
+    body.tiempo_parada = payload.tiempo_parada ?? null;
   if (Object.prototype.hasOwnProperty.call(payload, "sala_id")) body.sala_id = payload.sala_id ?? null;
   if (Object.prototype.hasOwnProperty.call(payload, "direccion")) body.direccion = payload.direccion ?? "";
   if (Object.prototype.hasOwnProperty.call(payload, "trainer_ids")) {

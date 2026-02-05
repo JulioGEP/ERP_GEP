@@ -93,6 +93,7 @@ import { MultiSessionModal } from '../../sessions/MultiSessionModal';
 
 const SESSION_LIMIT = 10;
 const MADRID_TIMEZONE = 'Europe/Madrid';
+const TIEMPO_PARADA_OPTIONS = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
 
 type ToastParams = {
   variant: 'success' | 'danger' | 'info';
@@ -1609,6 +1610,7 @@ type SessionFormState = {
   nombre_cache: string;
   fecha_inicio_local: string | null;
   fecha_fin_local: string | null;
+  tiempo_parada: number | null;
   sala_id: string | null;
   direccion: string;
   estado: SessionEstado;
@@ -1778,6 +1780,7 @@ function mapSessionToForm(session: SessionDTO): SessionFormState {
     nombre_cache: session.nombre_cache,
     fecha_inicio_local: formatDateForInput(session.fecha_inicio_utc),
     fecha_fin_local: formatDateForInput(session.fecha_fin_utc),
+    tiempo_parada: session.tiempo_parada ?? null,
     sala_id: session.sala_id ?? null,
     direccion: session.direccion ?? '',
     estado: session.estado,
@@ -1900,6 +1903,7 @@ function buildSessionPatchPayload(
       nombre_cache: form.nombre_cache,
       fecha_inicio_utc: localInputToUtc(form.fecha_inicio_local) ?? null,
       fecha_fin_utc: localInputToUtc(form.fecha_fin_local) ?? null,
+      tiempo_parada: form.tiempo_parada ?? null,
       sala_id: form.sala_id,
       direccion: form.direccion,
       trainer_ids: form.trainer_ids,
@@ -1922,6 +1926,11 @@ function buildSessionPatchPayload(
 
   if (form.fecha_fin_local !== saved.fecha_fin_local) {
     patch.fecha_fin_utc = endIso ?? null;
+    hasChanges = true;
+  }
+
+  if (form.tiempo_parada !== saved.tiempo_parada) {
+    patch.tiempo_parada = form.tiempo_parada ?? null;
     hasChanges = true;
   }
 
@@ -2272,6 +2281,7 @@ export function SessionsAccordionEmpresas({
       direccion?: string | null;
       trainer_ids?: string[];
       unidad_movil_ids?: string[];
+      tiempo_parada?: number | null;
       sala_id?: string | null;
       force_estado_borrador?: boolean;
     }) =>
@@ -2708,6 +2718,7 @@ export function SessionsAccordionEmpresas({
         direccion: session.direccion ?? dealAddress ?? '',
         trainer_ids: session.trainer_ids,
         unidad_movil_ids: session.unidad_movil_ids,
+        tiempo_parada: session.tiempo_parada ?? null,
         sala_id: session.sala_id,
         force_estado_borrador: true,
       });
@@ -4001,6 +4012,37 @@ function SessionEditor({
             {hasDateRange && availabilityFetching && !availabilityError && (
               <div className="text-muted small mt-1">Comprobando disponibilidad…</div>
             )}
+          </Form.Group>
+        </Col>
+      </Row>
+
+      <Row className="g-3 mt-1">
+        <Col md={6} lg={3}>
+          <Form.Group controlId={`session-${form.id}-tiempo-parada`}>
+            <Form.Label>Tiempo de parada</Form.Label>
+            <Form.Select
+              value={form.tiempo_parada ?? ''}
+              onChange={(event) => {
+                const value = event.target.value;
+                onChange((current) => ({
+                  ...current,
+                  tiempo_parada: value ? Number(value) : null,
+                }));
+              }}
+              title={buildFieldTooltip(
+                form.tiempo_parada ? `${form.tiempo_parada} h` : 'Sin parada',
+              )}
+            >
+              <option value="">Sin parada</option>
+              {TIEMPO_PARADA_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option} h
+                </option>
+              ))}
+            </Form.Select>
+            <Form.Text className="text-muted">
+              Se descuenta del total de horas trabajadas.
+            </Form.Text>
           </Form.Group>
         </Col>
       </Row>
