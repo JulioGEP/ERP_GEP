@@ -652,6 +652,55 @@ const payrollInitialFields = {
 
 type PayrollFieldKey = keyof typeof payrollInitialFields;
 
+function buildPayrollFieldsFromEntry(entry: OfficePayrollRecord): typeof payrollInitialFields {
+  const resolveValue = (value: string | number | null | undefined, fallback?: string | number | null) => {
+    const raw = value ?? fallback;
+    if (raw === null || raw === undefined) return '';
+    return typeof raw === 'number' ? raw.toString() : raw;
+  };
+
+  return applyPayrollCalculations({
+    convenio: resolveValue(entry.convenio, entry.defaultConvenio),
+    categoria: resolveValue(entry.categoria, entry.defaultCategoria),
+    antiguedad: resolveValue(entry.antiguedad, entry.defaultAntiguedad ?? entry.startDate),
+    horasSemana: resolveValue(entry.horasSemana, entry.defaultHorasSemana),
+    baseRetencion: resolveValue(entry.baseRetencion, entry.defaultBaseRetencion ?? entry.salarioBruto),
+    baseRetencionDetalle: resolveValue(entry.baseRetencionDetalle, entry.defaultBaseRetencionDetalle),
+    salarioBruto: resolveValue(entry.salarioBruto, entry.defaultSalarioBruto),
+    totalExtras: resolveValue(entry.totalExtras),
+    salarioBrutoTotal: resolveValue(entry.salarioBrutoTotal, entry.defaultSalarioBrutoTotal),
+    retencion: resolveValue(entry.retencion, entry.defaultRetencion),
+    aportacionSsIrpfDetalle: resolveValue(
+      entry.aportacionSsIrpfDetalle,
+      entry.defaultAportacionSsIrpfDetalle,
+    ),
+    aportacionSsIrpf: resolveValue(entry.aportacionSsIrpf, entry.defaultAportacionSsIrpf),
+    salarioLimpio: resolveValue(entry.salarioLimpio, entry.defaultSalarioLimpio),
+    contingenciasComunesDetalle: resolveValue(
+      entry.contingenciasComunesDetalle,
+      entry.defaultContingenciasComunesDetalle,
+    ),
+    contingenciasComunes: resolveValue(entry.contingenciasComunes, entry.defaultContingenciasComunes),
+    totalEmpresa: resolveValue(entry.totalEmpresa, entry.defaultTotalEmpresa),
+    dietas: resolveValue(entry.dietas),
+    kilometrajes: resolveValue(entry.kilometrajes),
+    pernocta: resolveValue(entry.pernocta),
+    nocturnidad: resolveValue(entry.nocturnidad),
+    festivo: resolveValue(entry.festivo),
+    horasExtras: resolveValue(entry.horasExtras),
+    otrosGastos: resolveValue(entry.otrosGastos),
+  });
+}
+
+function hasPayrollTableMismatch(value: number | null, calculatedValue: string): boolean {
+  const tableValue = resolveNumericValue(value);
+  const calculated = normalizeNumber(calculatedValue);
+
+  if (tableValue === null && calculated === null) return false;
+  if (tableValue === null || calculated === null) return true;
+  return Math.abs(tableValue - calculated) > 0.01;
+}
+
 function applyPayrollCalculations(fields: typeof payrollInitialFields): typeof payrollInitialFields {
   const baseRetencionMensual = calculateBaseRetencionMonthly(fields);
   const salarioBrutoCalculado = calculateSalarioBruto(baseRetencionMensual, fields.horasSemana);
@@ -727,45 +776,7 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
 
   useEffect(() => {
     if (!entry) return;
-    const resolveValue = (value: string | number | null | undefined, fallback?: string | number | null) => {
-      const raw = value ?? fallback;
-      if (raw === null || raw === undefined) return '';
-      return typeof raw === 'number' ? raw.toString() : raw;
-    };
-
-    setFields(
-      applyPayrollCalculations({
-        convenio: resolveValue(entry.convenio, entry.defaultConvenio),
-        categoria: resolveValue(entry.categoria, entry.defaultCategoria),
-        antiguedad: resolveValue(entry.antiguedad, entry.defaultAntiguedad ?? entry.startDate),
-        horasSemana: resolveValue(entry.horasSemana, entry.defaultHorasSemana),
-        baseRetencion: resolveValue(entry.baseRetencion, entry.defaultBaseRetencion ?? entry.salarioBruto),
-        baseRetencionDetalle: resolveValue(entry.baseRetencionDetalle, entry.defaultBaseRetencionDetalle),
-        salarioBruto: resolveValue(entry.salarioBruto, entry.defaultSalarioBruto),
-        totalExtras: resolveValue(entry.totalExtras),
-        salarioBrutoTotal: resolveValue(entry.salarioBrutoTotal, entry.defaultSalarioBrutoTotal),
-        retencion: resolveValue(entry.retencion, entry.defaultRetencion),
-        aportacionSsIrpfDetalle: resolveValue(
-          entry.aportacionSsIrpfDetalle,
-          entry.defaultAportacionSsIrpfDetalle,
-        ),
-        aportacionSsIrpf: resolveValue(entry.aportacionSsIrpf, entry.defaultAportacionSsIrpf),
-        salarioLimpio: resolveValue(entry.salarioLimpio, entry.defaultSalarioLimpio),
-        contingenciasComunesDetalle: resolveValue(
-          entry.contingenciasComunesDetalle,
-          entry.defaultContingenciasComunesDetalle,
-        ),
-        contingenciasComunes: resolveValue(entry.contingenciasComunes, entry.defaultContingenciasComunes),
-        totalEmpresa: resolveValue(entry.totalEmpresa, entry.defaultTotalEmpresa),
-        dietas: resolveValue(entry.dietas),
-        kilometrajes: resolveValue(entry.kilometrajes),
-        pernocta: resolveValue(entry.pernocta),
-        nocturnidad: resolveValue(entry.nocturnidad),
-        festivo: resolveValue(entry.festivo),
-        horasExtras: resolveValue(entry.horasExtras),
-        otrosGastos: resolveValue(entry.otrosGastos),
-      }),
-    );
+    setFields(buildPayrollFieldsFromEntry(entry));
   }, [entry]);
 
   const handleFieldChange = (field: PayrollFieldKey, value: string) => {
@@ -1244,6 +1255,22 @@ export default function NominasOficinaPage({
                                 </thead>
                                 <tbody>
                                   {items.map((entry) => {
+                                    const modalFields = buildPayrollFieldsFromEntry(entry);
+                                    const mismatches = {
+                                      salarioBrutoTotal: hasPayrollTableMismatch(
+                                        entry.salarioBrutoTotal,
+                                        modalFields.salarioBrutoTotal,
+                                      ),
+                                      totalExtras: hasPayrollTableMismatch(entry.totalExtras, modalFields.totalExtras),
+                                      aportacionSsIrpf: hasPayrollTableMismatch(
+                                        entry.aportacionSsIrpf,
+                                        modalFields.aportacionSsIrpf,
+                                      ),
+                                      salarioLimpio: hasPayrollTableMismatch(
+                                        entry.salarioLimpio,
+                                        modalFields.salarioLimpio,
+                                      ),
+                                    };
                                     const salarioBruto = resolveDisplayValue(entry.salarioBrutoTotal);
                                     const totalExtras = resolveDisplayValue(entry.totalExtras);
                                     const aportacion = resolveDisplayValue(entry.aportacionSsIrpf);
@@ -1265,10 +1292,18 @@ export default function NominasOficinaPage({
                                             </Badge>
                                           ) : null}
                                         </td>
-                                        <td>{salarioBruto}</td>
-                                        <td>{totalExtras}</td>
-                                        <td>{aportacion}</td>
-                                        <td>{salarioLimpio}</td>
+                                        <td className={mismatches.salarioBrutoTotal ? 'text-danger fw-semibold' : ''}>
+                                          {salarioBruto}
+                                        </td>
+                                        <td className={mismatches.totalExtras ? 'text-danger fw-semibold' : ''}>
+                                          {totalExtras}
+                                        </td>
+                                        <td className={mismatches.aportacionSsIrpf ? 'text-danger fw-semibold' : ''}>
+                                          {aportacion}
+                                        </td>
+                                        <td className={mismatches.salarioLimpio ? 'text-danger fw-semibold' : ''}>
+                                          {salarioLimpio}
+                                        </td>
                                         <td>{entry.isSaved ? 'Guardada' : 'Sin guardar'}</td>
                                         <td className="text-end">
                                           <div className="d-inline-flex gap-2">
