@@ -154,6 +154,13 @@ function parseTiempoParadaInput(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function normalizeTiempoParadaValue(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') return parseTiempoParadaInput(value);
+  return null;
+}
+
 function formatErrorMessage(error: unknown, fallback: string): string {
   if (isApiError(error)) {
     if (error.code === 'PAYLOAD_TOO_LARGE' || error.status === 413) {
@@ -1009,7 +1016,7 @@ function mapSessionToForm(session: SessionDTO): SessionFormState {
     nombre_cache: session.nombre_cache,
     fecha_inicio_local: formatDateForInput(session.fecha_inicio_utc),
     fecha_fin_local: formatDateForInput(session.fecha_fin_utc),
-    tiempo_parada: Number.isFinite(session.tiempo_parada ?? Number.NaN) ? session.tiempo_parada : null,
+    tiempo_parada: normalizeTiempoParadaValue(session.tiempo_parada),
     sala_id: session.sala_id ?? null,
     direccion: session.direccion ?? '',
     estado: session.estado,
@@ -1127,12 +1134,13 @@ function buildSessionPatchPayload(
   form: SessionFormState,
   saved: SessionFormState | undefined,
 ): Parameters<typeof patchSession>[1] | null | 'INVALID_DATES' | 'INVALID_START' | 'INVALID_END' {
+  const normalizedTiempoParada = normalizeTiempoParadaValue(form.tiempo_parada);
   if (!saved) {
     return {
       nombre_cache: form.nombre_cache,
       fecha_inicio_utc: localInputToUtc(form.fecha_inicio_local) ?? null,
       fecha_fin_utc: localInputToUtc(form.fecha_fin_local) ?? null,
-      tiempo_parada: form.tiempo_parada ?? null,
+      tiempo_parada: normalizedTiempoParada,
       sala_id: form.sala_id,
       direccion: form.direccion,
       trainer_ids: form.trainer_ids,
@@ -1158,8 +1166,9 @@ function buildSessionPatchPayload(
     hasChanges = true;
   }
 
-  if (form.tiempo_parada !== saved.tiempo_parada) {
-    patch.tiempo_parada = form.tiempo_parada ?? null;
+  const savedTiempoParada = normalizeTiempoParadaValue(saved.tiempo_parada);
+  if (normalizedTiempoParada !== savedTiempoParada) {
+    patch.tiempo_parada = normalizedTiempoParada;
     hasChanges = true;
   }
 
