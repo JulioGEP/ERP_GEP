@@ -146,6 +146,14 @@ function formatTiempoParada(value: number): string {
   });
 }
 
+function parseTiempoParadaInput(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(',', '.');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function formatErrorMessage(error: unknown, fallback: string): string {
   if (isApiError(error)) {
     if (error.code === 'PAYLOAD_TOO_LARGE' || error.status === 413) {
@@ -1001,7 +1009,7 @@ function mapSessionToForm(session: SessionDTO): SessionFormState {
     nombre_cache: session.nombre_cache,
     fecha_inicio_local: formatDateForInput(session.fecha_inicio_utc),
     fecha_fin_local: formatDateForInput(session.fecha_fin_utc),
-    tiempo_parada: typeof session.tiempo_parada === 'number' ? session.tiempo_parada : null,
+    tiempo_parada: Number.isFinite(session.tiempo_parada ?? Number.NaN) ? session.tiempo_parada : null,
     sala_id: session.sala_id ?? null,
     direccion: session.direccion ?? '',
     estado: session.estado,
@@ -2812,8 +2820,7 @@ function SessionEditor({
             <Form.Select
               value={form.tiempo_parada ?? ''}
               onChange={(event) => {
-                const rawValue = event.target.value;
-                const nextValue = rawValue ? Number(rawValue) : null;
+                const nextValue = parseTiempoParadaInput(event.target.value);
                 onChange((current) => ({ ...current, tiempo_parada: nextValue }));
               }}
               title={buildFieldTooltip(
