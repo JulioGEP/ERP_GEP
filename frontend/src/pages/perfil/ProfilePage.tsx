@@ -1237,7 +1237,7 @@ export default function ProfilePage() {
             ) : null}
           </Form.Group>
           <p className="text-muted small mb-0">
-            Si tienes más de un ticket, <strong>tienes que sumar los importes</strong>
+            Si tienes más de un ticket, añade el valor del nuevo y el ERP sumará los importes
           </p>
           <Form.Group>
             <Form.Label>Fecha del gasto</Form.Label>
