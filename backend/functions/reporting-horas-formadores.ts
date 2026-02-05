@@ -13,6 +13,7 @@ type SessionTrainerRow = {
     id: string;
     fecha_inicio_utc: Date | null;
     fecha_fin_utc: Date | null;
+    tiempo_parada: DecimalLike | number | string | null;
     deals: { tipo_servicio: string | null } | null;
   } | null;
   trainers: { trainer_id: string; name: string | null; apellido: string | null } | null;
@@ -66,14 +67,16 @@ const EXTRA_COST_COLUMNS = [
   'gastos_extras',
 ] as const;
 
-function computeSessionHours(start: Date | null, end: Date | null): number {
+function computeSessionHours(start: Date | null, end: Date | null, breakHours = 0): number {
   if (!start || !end) return 0;
   const startTime = start.getTime();
   const endTime = end.getTime();
   if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) return 0;
   const diff = endTime - startTime;
   if (!Number.isFinite(diff) || diff <= 0) return 0;
-  return diff / (60 * 60 * 1000);
+  const total = diff / (60 * 60 * 1000);
+  const normalizedBreak = Number.isFinite(breakHours) ? Math.max(0, breakHours) : 0;
+  return Math.max(0, total - normalizedBreak);
 }
 
 function normalizeName(value: string | null | undefined): string | null {
@@ -322,14 +325,15 @@ export const handler = createHttpHandler(async (request) => {
     select: {
       sesion_id: true,
       trainer_id: true,
-      sesiones: {
-        select: {
-          id: true,
-          fecha_inicio_utc: true,
-          fecha_fin_utc: true,
-          deals: { select: { tipo_servicio: true } },
+        sesiones: {
+          select: {
+            id: true,
+            fecha_inicio_utc: true,
+            fecha_fin_utc: true,
+            tiempo_parada: true,
+            deals: { select: { tipo_servicio: true } },
+          },
         },
-      },
       trainers: {
         select: {
           trainer_id: true,
@@ -435,9 +439,11 @@ export const handler = createHttpHandler(async (request) => {
     }
 
     const sessionId = row.sesion_id || row.sesiones?.id || null;
+    const breakHours = decimalToNumber(row.sesiones?.tiempo_parada);
     const hours = computeSessionHours(
       row.sesiones?.fecha_inicio_utc ?? null,
       row.sesiones?.fecha_fin_utc ?? null,
+      breakHours,
     );
 
     const extraCostKey = sessionId ? `session:${sessionId}:${trainerId}` : null;

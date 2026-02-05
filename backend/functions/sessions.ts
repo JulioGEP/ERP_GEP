@@ -92,7 +92,7 @@ function toPositiveInt(value: unknown, fallback = 0): number {
   return Math.floor(num);
 }
 
-const TIEMPO_PARADA_VALUES = new Set([0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4]);
+const TIEMPO_PARADA_VALUES = new Set([1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]);
 
 function toNumberOrNull(value: unknown): number | null {
   if (value === null || value === undefined) return null;
