@@ -67,6 +67,7 @@ export async function createSession(
     nombre_cache?: string;
     fecha_inicio_utc?: string | null;
     fecha_fin_utc?: string | null;
+    tiempo_parada?: number | null;
     sala_id?: string | null;
     direccion?: string | null;
     trainer_ids?: string[];
@@ -86,6 +87,7 @@ export async function createSession(
   if (payload.nombre_cache !== undefined) body.nombre_cache = payload.nombre_cache;
   if (payload.fecha_inicio_utc !== undefined) body.fecha_inicio_utc = payload.fecha_inicio_utc;
   if (payload.fecha_fin_utc !== undefined) body.fecha_fin_utc = payload.fecha_fin_utc;
+  if (payload.tiempo_parada !== undefined) body.tiempo_parada = payload.tiempo_parada;
   if (payload.sala_id !== undefined) body.sala_id = payload.sala_id;
   if (payload.direccion !== undefined) body.direccion = payload.direccion;
   const trainerIds = sanitizeStringArray(payload.trainer_ids);
@@ -111,6 +113,7 @@ export async function patchSession(
     nombre_cache: string;
     fecha_inicio_utc: string | null;
     fecha_fin_utc: string | null;
+    tiempo_parada: number | null;
     sala_id: string | null;
     direccion: string | null;
     trainer_ids: string[];
@@ -131,6 +134,8 @@ export async function patchSession(
     body.fecha_inicio_utc = payload.fecha_inicio_utc ?? null;
   if (Object.prototype.hasOwnProperty.call(payload, 'fecha_fin_utc'))
     body.fecha_fin_utc = payload.fecha_fin_utc ?? null;
+  if (Object.prototype.hasOwnProperty.call(payload, 'tiempo_parada'))
+    body.tiempo_parada = payload.tiempo_parada ?? null;
   if (Object.prototype.hasOwnProperty.call(payload, 'sala_id')) body.sala_id = payload.sala_id ?? null;
   if (Object.prototype.hasOwnProperty.call(payload, 'direccion')) body.direccion = payload.direccion ?? '';
   if (Object.prototype.hasOwnProperty.call(payload, 'trainer_ids')) {

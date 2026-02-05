@@ -45,6 +45,7 @@ export type SessionDTO = {
   nombre_cache: string;
   fecha_inicio_utc: string | null;
   fecha_fin_utc: string | null;
+  tiempo_parada: number | null;
   sala_id: string | null;
   direccion: string;
   estado: SessionEstado;
@@ -854,6 +855,7 @@ function normalizeSession(row: any): SessionDTO {
   const nombre_cache = toStringValue(row?.nombre_cache) ?? "Sesión";
   const fecha_inicio_utc = toStringValue(row?.fecha_inicio_utc);
   const fecha_fin_utc = toStringValue(row?.fecha_fin_utc);
+  const tiempo_parada = toNumber(row?.tiempo_parada ?? row?.tiempoParada);
   const sala_id = toStringValue(row?.sala_id);
   const direccion = toStringValue(row?.direccion) ?? "";
   const estado = toSessionEstadoValue(row?.estado);
@@ -878,6 +880,7 @@ function normalizeSession(row: any): SessionDTO {
     nombre_cache,
     fecha_inicio_utc: fecha_inicio_utc ?? null,
     fecha_fin_utc: fecha_fin_utc ?? null,
+    tiempo_parada: tiempo_parada ?? null,
     sala_id: sala_id ?? null,
     direccion,
     estado,
