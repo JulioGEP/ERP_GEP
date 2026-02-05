@@ -418,6 +418,7 @@ model sessions {
   direccion        String
   comentarios      String?
   drive_url        String?
+  tiempo_parada    Decimal?     @db.Decimal(3, 1)
   created_at       DateTime      @default(now()) @db.Timestamptz(6)
   updated_at       DateTime      @updatedAt @db.Timestamptz(6)
   estado           SessionEstado @default(BORRADOR)
