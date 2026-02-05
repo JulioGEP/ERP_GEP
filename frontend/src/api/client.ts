@@ -159,6 +159,10 @@ export async function delJson<T = any>(path: string, body?: any, init?: RequestI
 export function toNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === 'number') return Number.isNaN(value) ? null : value;
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(',', '.'));
+    return Number.isNaN(parsed) ? null : parsed;
+  }
   const parsed = Number(value);
   return Number.isNaN(parsed) ? null : parsed;
 }
