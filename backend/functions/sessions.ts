@@ -636,13 +636,8 @@ function buildSessionPatch(body: any): SessionPatchResult {
     if (value == null) return { error: errorResponse('VALIDATION_ERROR', 'La dirección es obligatoria', 400) };
     data.direccion = value;
   }
-  const tiempoParadaInput = Object.prototype.hasOwnProperty.call(body, 'tiempo_parada')
-    ? body.tiempo_parada
-    : Object.prototype.hasOwnProperty.call(body, 'tiempoParada')
-    ? body.tiempoParada
-    : undefined;
-  if (tiempoParadaInput !== undefined) {
-    const parsed = parseTiempoParada(tiempoParadaInput);
+  if (Object.prototype.hasOwnProperty.call(body, 'tiempo_parada')) {
+    const parsed = parseTiempoParada(body.tiempo_parada);
     if (parsed.error) return { error: parsed.error };
     if ('value' in parsed) {
       data.tiempo_parada = parsed.value ?? null;
@@ -1590,13 +1585,7 @@ if (method === 'GET') {
       if (fechaInicioResult && 'error' in fechaInicioResult) return fechaInicioResult.error;
       const fechaFinResult = parseDateInput(body.fecha_fin_utc);
       if (fechaFinResult && 'error' in fechaFinResult) return fechaFinResult.error;
-      const tiempoParadaResult = parseTiempoParada(
-        Object.prototype.hasOwnProperty.call(body, 'tiempo_parada')
-          ? body.tiempo_parada
-          : Object.prototype.hasOwnProperty.call(body, 'tiempoParada')
-          ? body.tiempoParada
-          : undefined,
-      );
+      const tiempoParadaResult = parseTiempoParada(body.tiempo_parada);
       if (tiempoParadaResult.error) return tiempoParadaResult.error;
 
       const rangeError = ensureValidDateRange(
