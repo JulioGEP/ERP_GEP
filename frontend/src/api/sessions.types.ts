@@ -29,7 +29,6 @@ export type SessionDTO = {
   nombre_cache: string;
   fecha_inicio_utc: string | null;
   fecha_fin_utc: string | null;
-  tiempo_parada: number | null;
   sala_id: string | null;
   direccion: string;
   estado: SessionEstado;
