@@ -105,6 +105,11 @@ function parseInputToNumber(value: string): number | null {
   return Math.round(parsed * 100) / 100;
 }
 
+function hasNonZeroValue(value: string): boolean {
+  const parsed = parseInputToNumber(value);
+  return parsed !== null && Math.abs(parsed) > 0.005;
+}
+
 function createDraftFromItem(item: TrainerExtraCostRecord): CostDraft {
   const fields = {} as Record<TrainerExtraCostFieldKey, string>;
   for (const definition of COST_FIELD_DEFINITIONS) {
@@ -706,7 +711,11 @@ export default function CostesExtraPage() {
                         value={draft.fields[definition.key]}
                         onChange={(event) => handleFieldChange(definition.key, event.currentTarget.value)}
                         disabled={saving}
-                        className="text-end"
+                        className={`text-end ${
+                          hasNonZeroValue(draft.fields[definition.key])
+                            ? 'bg-warning-subtle border-warning'
+                            : ''
+                        }`}
                       />
                     </td>
                   ))}
