@@ -79,8 +79,10 @@ async function sendSlackMessage(token: string, text: string) {
 }
 
 export const handler: Handler = async () => {
+  console.info('daily-availability-slack: inicio ejecución');
   const slackToken = process.env.SLACK_TOKEN?.trim();
   if (!slackToken) {
+    console.error('daily-availability-slack: falta SLACK_TOKEN');
     return {
       statusCode: 500,
       body: JSON.stringify({ ok: false, error: 'SLACK_TOKEN no configurado.' }),
@@ -120,13 +122,6 @@ export const handler: Handler = async () => {
     const todayEntries = entries.filter((entry) => entry.date.getTime() === todayDate.getTime());
     const tomorrowEntries = entries.filter((entry) => entry.date.getTime() === tomorrowDate.getTime());
 
-    if (!todayEntries.length && !tomorrowEntries.length) {
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ ok: true, skipped: true, message: 'Sin ausencias hoy ni mañana.' }),
-      };
-    }
-
     const todayText = todayEntries.length
       ? `Hoy ${joinWithConjunction(todayEntries.map(buildUserLabel))}.`
       : 'Hoy estamos todos.';
@@ -150,6 +145,7 @@ export const handler: Handler = async () => {
       };
     }
 
+    console.info('daily-availability-slack: mensaje enviado');
     return {
       statusCode: 200,
       body: JSON.stringify({ ok: true, message, slack: payload }),
