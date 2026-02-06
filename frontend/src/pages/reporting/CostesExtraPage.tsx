@@ -375,6 +375,14 @@ export default function CostesExtraPage() {
   }, [items]);
 
   const numberFormatter = useMemo(() => new Intl.NumberFormat('es-ES'), []);
+  const hoursFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat('es-ES', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+    [],
+  );
   const dateFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat('es-ES', {
@@ -427,6 +435,7 @@ export default function CostesExtraPage() {
       'Inicio planificado',
       'Fin planificado',
       'Documentos',
+      'Horas',
       ...COST_FIELD_DEFINITIONS.map((definition) => definition.label),
     ];
 
@@ -452,6 +461,9 @@ export default function CostesExtraPage() {
             .join('\n')
         : '';
 
+      const workedHours =
+        typeof item.workedHours === 'number' ? Number(item.workedHours.toFixed(2)) : '';
+
       const costValues = COST_FIELD_DEFINITIONS.map((definition) => {
         const parsed = parseInputToNumber(draft.fields[definition.key]);
         return parsed ?? draft.fields[definition.key];
@@ -469,6 +481,7 @@ export default function CostesExtraPage() {
         scheduledStart,
         scheduledEnd,
         documentLabel,
+        workedHours,
         ...costValues,
       ];
     });
@@ -543,6 +556,9 @@ export default function CostesExtraPage() {
               <th style={{ minWidth: '220px' }}>Formador</th>
               <th style={{ minWidth: '260px' }}>Asignación</th>
               <th style={{ minWidth: '200px' }}>Documentos</th>
+              <th style={{ minWidth: '120px' }} className="text-end">
+                Horas
+              </th>
               {COST_FIELD_DEFINITIONS.map((definition) => (
                 <th key={definition.key} className="text-end" style={{ minWidth: '140px' }}>
                   {definition.label}
@@ -676,6 +692,11 @@ export default function CostesExtraPage() {
                     ) : (
                       <span className="text-muted">Sin documentos</span>
                     )}
+                  </td>
+                  <td className="align-middle text-end">
+                    {typeof item.workedHours === 'number'
+                      ? hoursFormatter.format(item.workedHours)
+                      : '—'}
                   </td>
                   {COST_FIELD_DEFINITIONS.map((definition) => (
                     <td key={definition.key} className="align-middle">
