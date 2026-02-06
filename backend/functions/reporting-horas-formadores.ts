@@ -1,8 +1,12 @@
+import { join, sqltag, type Sql } from '@prisma/client/runtime/library';
+
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { requireAuth } from './_shared/auth';
 import { getPrisma } from './_shared/prisma';
 import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
+
+const sql = sqltag;
 
 type DecimalLike = { toNumber?: () => number; toString?: () => string };
 
@@ -25,6 +29,17 @@ type VariantTrainerRow = {
   date: Date | string | null;
   products: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
   trainers: { trainer_id: string; name: string | null; apellido: string | null } | null;
+};
+
+type VariantInviteRow = {
+  variant_id: string;
+  trainer_id: string;
+  variant: {
+    id: string;
+    date: Date | string | null;
+    products: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
+  } | null;
+  trainer: { trainer_id: string; name: string | null; apellido: string | null } | null;
 };
 
 type TrainerExtraCostRow = {
@@ -50,6 +65,15 @@ type TrainerHoursAccumulator = {
   totalHours: number;
   serviceCost: number;
   extraCost: number;
+};
+
+type VariantAssignment = {
+  variantId: string;
+  trainerId: string;
+  date: Date | string | null;
+  products: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
+  trainerName: string | null;
+  trainerLastName: string | null;
 };
 
 const DEFAULT_SERVICE_COSTS = {
@@ -272,6 +296,17 @@ function parseDateFilters(query: Record<string, string | undefined>): ParsedDate
   return { startDate, endDate };
 }
 
+function buildVariantDateConditions(startDate: Date | null, endDate: Date | null): Sql {
+  const conditions: Sql[] = [];
+  if (startDate) {
+    conditions.push(sql`v.date >= ${startDate}`);
+  }
+  if (endDate) {
+    conditions.push(sql`v.date <= ${endDate}`);
+  }
+  return conditions.length ? join(conditions, ' AND ') : sql`TRUE`;
+}
+
 export const handler = createHttpHandler(async (request) => {
   if (request.method !== 'GET') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
@@ -344,7 +379,20 @@ export const handler = createHttpHandler(async (request) => {
     },
   })) as SessionTrainerRow[];
 
-  const variantRows = (await prisma.variants.findMany({
+  const variantAssignments = new Map<string, VariantAssignment>();
+
+  const addVariantAssignment = (assignment: VariantAssignment) => {
+    if (!assignment.variantId || !assignment.trainerId) {
+      return;
+    }
+    const key = `${assignment.variantId}:${assignment.trainerId}`;
+    if (variantAssignments.has(key)) {
+      return;
+    }
+    variantAssignments.set(key, assignment);
+  };
+
+  const directVariantRows = (await prisma.variants.findMany({
     where: {
       trainer_id: { not: null },
       date: variantDateFilter,
@@ -363,6 +411,113 @@ export const handler = createHttpHandler(async (request) => {
     },
   })) as VariantTrainerRow[];
 
+  for (const row of directVariantRows) {
+    const trainerId = row.trainer_id || row.trainers?.trainer_id;
+    if (!trainerId || !row.id) {
+      continue;
+    }
+    addVariantAssignment({
+      variantId: row.id,
+      trainerId,
+      date: row.date,
+      products: row.products ?? null,
+      trainerName: normalizeName(row.trainers?.name),
+      trainerLastName: normalizeName(row.trainers?.apellido),
+    });
+  }
+
+  const inviteRows = (await prisma.variant_trainer_invites.findMany({
+    where: {
+      status: 'CONFIRMED',
+      variant: {
+        date: variantDateFilter,
+      },
+      trainer: {
+        contrato_fijo: false,
+      },
+    },
+    select: {
+      variant_id: true,
+      trainer_id: true,
+      variant: {
+        select: {
+          id: true,
+          date: true,
+          products: { select: { hora_inicio: true, hora_fin: true } },
+        },
+      },
+      trainer: {
+        select: {
+          trainer_id: true,
+          name: true,
+          apellido: true,
+        },
+      },
+    },
+  })) as VariantInviteRow[];
+
+  for (const invite of inviteRows) {
+    if (!invite.variant || !invite.variant_id) {
+      continue;
+    }
+    addVariantAssignment({
+      variantId: invite.variant_id,
+      trainerId: invite.trainer_id,
+      date: invite.variant?.date ?? null,
+      products: invite.variant?.products ?? null,
+      trainerName: normalizeName(invite.trainer?.name),
+      trainerLastName: normalizeName(invite.trainer?.apellido),
+    });
+  }
+
+  try {
+    const whereClause = buildVariantDateConditions(startDate, endDate);
+    const rawAssignments = await prisma.$queryRaw(
+      sql`
+        SELECT v.id::text AS variant_id,
+               vtl.trainer_id::text AS trainer_id,
+               v.date AS date,
+               p.hora_inicio AS hora_inicio,
+               p.hora_fin AS hora_fin,
+               t.name AS name,
+               t.apellido AS apellido
+        FROM variant_trainer_links vtl
+        JOIN variants v ON v.id = vtl.variant_id
+        LEFT JOIN products p ON p.id_woo = v.id_padre
+        LEFT JOIN trainers t ON t.trainer_id = vtl.trainer_id
+        WHERE ${whereClause}
+          AND t.contrato_fijo = false
+      `,
+    );
+    const rows = (rawAssignments as Array<{
+      variant_id: string;
+      trainer_id: string;
+      date: Date | string | null;
+      hora_inicio: Date | string | null;
+      hora_fin: Date | string | null;
+      name: string | null;
+      apellido: string | null;
+    }> | null | undefined) ?? [];
+
+    for (const row of rows) {
+      if (!row.variant_id || !row.trainer_id) {
+        continue;
+      }
+      addVariantAssignment({
+        variantId: row.variant_id,
+        trainerId: row.trainer_id,
+        date: row.date,
+        products: { hora_inicio: row.hora_inicio, hora_fin: row.hora_fin },
+        trainerName: normalizeName(row.name),
+        trainerLastName: normalizeName(row.apellido),
+      });
+    }
+  } catch (error) {
+    if (!(error instanceof Error && /variant_trainer_links/i.test(error.message))) {
+      throw error;
+    }
+  }
+
   const totals = new Map<string, TrainerHoursAccumulator>();
   const trainerIds = new Set<string>();
   const sessionIds = new Set<string>();
@@ -378,14 +533,9 @@ export const handler = createHttpHandler(async (request) => {
     }
   }
 
-  for (const row of variantRows) {
-    const trainerId = row.trainer_id || row.trainers?.trainer_id;
-    if (trainerId) {
-      trainerIds.add(trainerId);
-    }
-    if (row.id) {
-      variantIds.add(row.id);
-    }
+  for (const assignment of variantAssignments.values()) {
+    trainerIds.add(assignment.trainerId);
+    variantIds.add(assignment.variantId);
   }
 
   let extraCostRecords: TrainerExtraCostRow[] = [];
@@ -483,39 +633,33 @@ export const handler = createHttpHandler(async (request) => {
     });
   }
 
-  for (const row of variantRows) {
-    const trainerId = row.trainer_id || row.trainers?.trainer_id;
-    if (!trainerId) {
-      continue;
-    }
-
-    const hours = computeVariantHours(row.date, row.products ?? { hora_inicio: null, hora_fin: null });
-    const variantId = row.id;
-    const extraCostKey = `variant:${variantId}:${trainerId}`;
+  for (const assignment of variantAssignments.values()) {
+    const hours = computeVariantHours(assignment.date, assignment.products ?? { hora_inicio: null, hora_fin: null });
+    const extraCostKey = `variant:${assignment.variantId}:${assignment.trainerId}`;
     const extraCostRecord = extraCostMap.get(extraCostKey) ?? null;
     const serviceRate = resolveServiceRate(extraCostRecord, 'formacion');
     const serviceCost = hours * serviceRate;
     const extraCost = sumExtraCosts(extraCostRecord);
 
-    const existing = totals.get(trainerId);
+    const existing = totals.get(assignment.trainerId);
     if (existing) {
       existing.sessionCount += 1;
       existing.totalHours += hours;
       existing.serviceCost += serviceCost;
       existing.extraCost += extraCost;
-      if (existing.name === null && normalizeName(row.trainers?.name)) {
-        existing.name = normalizeName(row.trainers?.name);
+      if (existing.name === null && assignment.trainerName) {
+        existing.name = assignment.trainerName;
       }
-      if (existing.lastName === null && normalizeName(row.trainers?.apellido)) {
-        existing.lastName = normalizeName(row.trainers?.apellido);
+      if (existing.lastName === null && assignment.trainerLastName) {
+        existing.lastName = assignment.trainerLastName;
       }
       continue;
     }
 
-    totals.set(trainerId, {
-      trainerId,
-      name: normalizeName(row.trainers?.name),
-      lastName: normalizeName(row.trainers?.apellido),
+    totals.set(assignment.trainerId, {
+      trainerId: assignment.trainerId,
+      name: assignment.trainerName,
+      lastName: assignment.trainerLastName,
       sessionCount: 1,
       totalHours: hours,
       serviceCost,
