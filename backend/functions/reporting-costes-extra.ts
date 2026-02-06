@@ -834,34 +834,6 @@ async function fetchVariantAssignments(
     }
   }
 
-  const inviteDateFilter: { not: null; gte?: Date; lte?: Date } = { not: null };
-  if (startDate) {
-    inviteDateFilter.gte = startDate;
-  }
-  if (endDate) {
-    inviteDateFilter.lte = endDate;
-  }
-
-  const inviteAssignments = (await prisma.variant_trainer_invites.findMany({
-    where: {
-      status: 'CONFIRMED',
-      variant: { date: inviteDateFilter },
-    },
-    select: { variant_id: true, trainer_id: true },
-  })) as Array<{ variant_id: string; trainer_id: string }>;
-
-  for (const row of inviteAssignments) {
-    const variantId = normalizeIdentifier(row.variant_id);
-    const trainerId = normalizeIdentifier(row.trainer_id);
-    if (!variantId || !trainerId) {
-      continue;
-    }
-    if (!assignments.has(variantId)) {
-      assignments.set(variantId, new Set());
-    }
-    assignments.get(variantId)!.add(trainerId);
-  }
-
   return assignments;
 }
 
