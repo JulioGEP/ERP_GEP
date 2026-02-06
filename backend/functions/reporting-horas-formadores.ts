@@ -1,8 +1,12 @@
+import { join, sqltag, type Sql } from '@prisma/client/runtime/library';
+
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { requireAuth } from './_shared/auth';
 import { getPrisma } from './_shared/prisma';
 import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
+
+const sql = sqltag;
 
 type DecimalLike = { toNumber?: () => number; toString?: () => string };
 
@@ -16,14 +20,6 @@ type SessionTrainerRow = {
     tiempo_parada: DecimalLike | number | string | null;
     deals: { tipo_servicio: string | null } | null;
   } | null;
-  trainers: { trainer_id: string; name: string | null; apellido: string | null } | null;
-};
-
-type VariantTrainerRow = {
-  id: string;
-  trainer_id: string | null;
-  date: Date | string | null;
-  products: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
   trainers: { trainer_id: string; name: string | null; apellido: string | null } | null;
 };
 
@@ -80,6 +76,12 @@ function computeSessionHours(start: Date | null, end: Date | null, breakHours = 
 }
 
 function normalizeName(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function normalizeIdentifier(value: string | null | undefined): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
@@ -188,6 +190,110 @@ function computeVariantHours(
   }
 
   return diff / (60 * 60 * 1000);
+}
+
+async function fetchVariantAssignments(
+  prisma: ReturnType<typeof getPrisma>,
+  startDate: Date | null,
+  endDate: Date | null,
+): Promise<Map<string, Set<string>>> {
+  const assignments = new Map<string, Set<string>>();
+  const variantDateFilter: { not: null; gte?: Date; lte?: Date } = { not: null };
+
+  if (startDate) {
+    variantDateFilter.gte = startDate;
+  }
+  if (endDate) {
+    variantDateFilter.lte = endDate;
+  }
+
+  const directVariants = (await prisma.variants.findMany({
+    where: {
+      trainer_id: { not: null },
+      date: variantDateFilter,
+      trainers: {
+        is: {
+          contrato_fijo: false,
+        },
+      },
+    },
+    select: {
+      id: true,
+      trainer_id: true,
+    },
+  })) as Array<{ id: string | null; trainer_id: string | null }>;
+
+  for (const variant of directVariants) {
+    const variantId = normalizeIdentifier(variant.id);
+    const trainerId = normalizeIdentifier(variant.trainer_id);
+    if (!variantId || !trainerId) {
+      continue;
+    }
+    if (!assignments.has(variantId)) {
+      assignments.set(variantId, new Set());
+    }
+    assignments.get(variantId)!.add(trainerId);
+  }
+
+  const conditions: Sql[] = [sql`t.contrato_fijo = false`];
+  if (startDate) {
+    conditions.push(sql`v.date >= ${startDate}`);
+  }
+  if (endDate) {
+    conditions.push(sql`v.date <= ${endDate}`);
+  }
+  const whereClause = conditions.length > 0 ? join(conditions, ' AND ') : sql`TRUE`;
+
+  try {
+    const rawAssignments = await prisma.$queryRaw(
+      sql`
+        SELECT vtl.variant_id::text AS variant_id, vtl.trainer_id::text AS trainer_id
+        FROM variant_trainer_links vtl
+        JOIN variants v ON v.id = vtl.variant_id
+        JOIN trainers t ON t.trainer_id = vtl.trainer_id
+        WHERE ${whereClause}
+      `,
+    );
+    const linkedAssignments = (rawAssignments as Array<{ variant_id: string; trainer_id: string }> | null | undefined) ?? [];
+    for (const row of linkedAssignments) {
+      const variantId = normalizeIdentifier(row.variant_id);
+      const trainerId = normalizeIdentifier(row.trainer_id);
+      if (!variantId || !trainerId) {
+        continue;
+      }
+      if (!assignments.has(variantId)) {
+        assignments.set(variantId, new Set());
+      }
+      assignments.get(variantId)!.add(trainerId);
+    }
+  } catch (error) {
+    if (!(error instanceof Error && /variant_trainer_links/i.test(error.message))) {
+      throw error;
+    }
+  }
+
+  const inviteAssignments = (await prisma.variant_trainer_invites.findMany({
+    where: {
+      status: 'CONFIRMED',
+      variant: { date: variantDateFilter },
+      trainer: { contrato_fijo: false },
+    },
+    select: { variant_id: true, trainer_id: true },
+  })) as Array<{ variant_id: string; trainer_id: string }>;
+
+  for (const row of inviteAssignments) {
+    const variantId = normalizeIdentifier(row.variant_id);
+    const trainerId = normalizeIdentifier(row.trainer_id);
+    if (!variantId || !trainerId) {
+      continue;
+    }
+    if (!assignments.has(variantId)) {
+      assignments.set(variantId, new Set());
+    }
+    assignments.get(variantId)!.add(trainerId);
+  }
+
+  return assignments;
 }
 
 type ParsedDateFilters =
@@ -312,14 +418,6 @@ export const handler = createHttpHandler(async (request) => {
     },
   };
 
-  const variantDateFilter: { not: null; gte?: Date; lte?: Date } = { not: null };
-  if (startDate) {
-    variantDateFilter.gte = startDate;
-  }
-  if (endDate) {
-    variantDateFilter.lte = endDate;
-  }
-
   const rows = (await prisma.sesion_trainers.findMany({
     where: sessionWhere,
     select: {
@@ -344,29 +442,12 @@ export const handler = createHttpHandler(async (request) => {
     },
   })) as SessionTrainerRow[];
 
-  const variantRows = (await prisma.variants.findMany({
-    where: {
-      trainer_id: { not: null },
-      date: variantDateFilter,
-      trainers: {
-        is: {
-          contrato_fijo: false,
-        },
-      },
-    },
-    select: {
-      id: true,
-      trainer_id: true,
-      date: true,
-      products: { select: { hora_inicio: true, hora_fin: true } },
-      trainers: { select: { trainer_id: true, name: true, apellido: true } },
-    },
-  })) as VariantTrainerRow[];
+  const variantAssignments = await fetchVariantAssignments(prisma, startDate, endDate);
+  const variantIds = new Set<string>(variantAssignments.keys());
 
   const totals = new Map<string, TrainerHoursAccumulator>();
   const trainerIds = new Set<string>();
   const sessionIds = new Set<string>();
-  const variantIds = new Set<string>();
 
   for (const row of rows) {
     const trainerId = row.trainer_id || row.trainers?.trainer_id;
@@ -378,14 +459,21 @@ export const handler = createHttpHandler(async (request) => {
     }
   }
 
-  for (const row of variantRows) {
-    const trainerId = row.trainer_id || row.trainers?.trainer_id;
-    if (trainerId) {
+  for (const trainerSet of variantAssignments.values()) {
+    for (const trainerId of trainerSet) {
       trainerIds.add(trainerId);
     }
-    if (row.id) {
-      variantIds.add(row.id);
-    }
+  }
+
+  const trainerRecords = trainerIds.size
+    ? await prisma.trainers.findMany({
+        where: { trainer_id: { in: Array.from(trainerIds) } },
+        select: { trainer_id: true, name: true, apellido: true },
+      })
+    : [];
+  const trainerMap = new Map<string, { name: string | null; apellido: string | null }>();
+  for (const trainer of trainerRecords) {
+    trainerMap.set(trainer.trainer_id, { name: trainer.name ?? null, apellido: trainer.apellido ?? null });
   }
 
   let extraCostRecords: TrainerExtraCostRow[] = [];
@@ -456,6 +544,9 @@ export const handler = createHttpHandler(async (request) => {
     const serviceRate = resolveServiceRate(extraCostRecord, sessionType);
     const serviceCost = hours * serviceRate;
     const extraCost = sumExtraCosts(extraCostRecord);
+    const trainerInfo = trainerMap.get(trainerId);
+    const trainerName = normalizeName(row.trainers?.name) ?? normalizeName(trainerInfo?.name ?? null);
+    const trainerLastName = normalizeName(row.trainers?.apellido) ?? normalizeName(trainerInfo?.apellido ?? null);
 
     const existing = totals.get(trainerId);
     if (existing) {
@@ -463,19 +554,19 @@ export const handler = createHttpHandler(async (request) => {
       existing.totalHours += hours;
       existing.serviceCost += serviceCost;
       existing.extraCost += extraCost;
-      if (existing.name === null && normalizeName(row.trainers?.name)) {
-        existing.name = normalizeName(row.trainers?.name);
+      if (existing.name === null && trainerName) {
+        existing.name = trainerName;
       }
-      if (existing.lastName === null && normalizeName(row.trainers?.apellido)) {
-        existing.lastName = normalizeName(row.trainers?.apellido);
+      if (existing.lastName === null && trainerLastName) {
+        existing.lastName = trainerLastName;
       }
       continue;
     }
 
     totals.set(trainerId, {
       trainerId,
-      name: normalizeName(row.trainers?.name),
-      lastName: normalizeName(row.trainers?.apellido),
+      name: trainerName,
+      lastName: trainerLastName,
       sessionCount: 1,
       totalHours: hours,
       serviceCost,
@@ -483,44 +574,65 @@ export const handler = createHttpHandler(async (request) => {
     });
   }
 
-  for (const row of variantRows) {
-    const trainerId = row.trainer_id || row.trainers?.trainer_id;
-    if (!trainerId) {
+  const variantDetails = variantIds.size
+    ? await prisma.variants.findMany({
+        where: { id: { in: Array.from(variantIds) } },
+        select: {
+          id: true,
+          date: true,
+          products: { select: { hora_inicio: true, hora_fin: true } },
+        },
+      })
+    : [];
+  const variantDetailMap = new Map<string, { date: Date | string | null; products: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null }>();
+  for (const variant of variantDetails) {
+    variantDetailMap.set(variant.id, { date: variant.date ?? null, products: variant.products ?? null });
+  }
+
+  for (const [variantId, trainerSet] of variantAssignments.entries()) {
+    const variantInfo = variantDetailMap.get(variantId);
+    if (!variantInfo) {
       continue;
     }
+    for (const trainerId of trainerSet) {
+      const hours = computeVariantHours(
+        variantInfo.date,
+        variantInfo.products ?? { hora_inicio: null, hora_fin: null },
+      );
+      const extraCostKey = `variant:${variantId}:${trainerId}`;
+      const extraCostRecord = extraCostMap.get(extraCostKey) ?? null;
+      const serviceRate = resolveServiceRate(extraCostRecord, 'formacion');
+      const serviceCost = hours * serviceRate;
+      const extraCost = sumExtraCosts(extraCostRecord);
+      const trainerInfo = trainerMap.get(trainerId);
+      const trainerName = normalizeName(trainerInfo?.name ?? null);
+      const trainerLastName = normalizeName(trainerInfo?.apellido ?? null);
 
-    const hours = computeVariantHours(row.date, row.products ?? { hora_inicio: null, hora_fin: null });
-    const variantId = row.id;
-    const extraCostKey = `variant:${variantId}:${trainerId}`;
-    const extraCostRecord = extraCostMap.get(extraCostKey) ?? null;
-    const serviceRate = resolveServiceRate(extraCostRecord, 'formacion');
-    const serviceCost = hours * serviceRate;
-    const extraCost = sumExtraCosts(extraCostRecord);
+      const existing = totals.get(trainerId);
+      if (existing) {
+        existing.sessionCount += 1;
+        existing.totalHours += hours;
+        existing.serviceCost += serviceCost;
+        existing.extraCost += extraCost;
+        if (existing.name === null && trainerName) {
+          existing.name = trainerName;
+        }
+        if (existing.lastName === null && trainerLastName) {
+          existing.lastName = trainerLastName;
+        }
+        continue;
+      }
 
-    const existing = totals.get(trainerId);
-    if (existing) {
-      existing.sessionCount += 1;
-      existing.totalHours += hours;
-      existing.serviceCost += serviceCost;
-      existing.extraCost += extraCost;
-      if (existing.name === null && normalizeName(row.trainers?.name)) {
-        existing.name = normalizeName(row.trainers?.name);
-      }
-      if (existing.lastName === null && normalizeName(row.trainers?.apellido)) {
-        existing.lastName = normalizeName(row.trainers?.apellido);
-      }
-      continue;
+      totals.set(trainerId, {
+        trainerId,
+        name: trainerName,
+        lastName: trainerLastName,
+        sessionCount: 1,
+        totalHours: hours,
+        serviceCost,
+        extraCost,
+      });
     }
-
-    totals.set(trainerId, {
-      trainerId,
-      name: normalizeName(row.trainers?.name),
-      lastName: normalizeName(row.trainers?.apellido),
-      sessionCount: 1,
-      totalHours: hours,
-      serviceCost,
-      extraCost,
-    });
   }
 
   const accumulatedItems = Array.from(totals.values());
