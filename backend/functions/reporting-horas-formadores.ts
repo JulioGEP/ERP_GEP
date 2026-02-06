@@ -39,7 +39,7 @@ type VariantInviteRow = {
     date: Date | string | null;
     products: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
   } | null;
-  trainer: { trainer_id: string; name: string | null; apellido: string | null } | null;
+  trainers: { trainer_id: string; name: string | null; apellido: string | null } | null;
 };
 
 type TrainerExtraCostRow = {
@@ -432,7 +432,7 @@ export const handler = createHttpHandler(async (request) => {
       variant: {
         date: variantDateFilter,
       },
-      trainer: {
+      trainers: {
         contrato_fijo: false,
       },
     },
@@ -446,7 +446,7 @@ export const handler = createHttpHandler(async (request) => {
           products: { select: { hora_inicio: true, hora_fin: true } },
         },
       },
-      trainer: {
+      trainers: {
         select: {
           trainer_id: true,
           name: true,
@@ -465,8 +465,8 @@ export const handler = createHttpHandler(async (request) => {
       trainerId: invite.trainer_id,
       date: invite.variant?.date ?? null,
       products: invite.variant?.products ?? null,
-      trainerName: normalizeName(invite.trainer?.name),
-      trainerLastName: normalizeName(invite.trainer?.apellido),
+      trainerName: normalizeName(invite.trainers?.name),
+      trainerLastName: normalizeName(invite.trainers?.apellido),
     });
   }
 
