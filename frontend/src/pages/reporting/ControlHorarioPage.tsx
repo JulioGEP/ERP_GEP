@@ -30,6 +30,7 @@ function getMonthRange(year: number, month: number): { startDate: string; endDat
 function getInitialFilters(): {
   month: number;
   year: number;
+  weekFilter: string;
   userIds: string[];
   roleFilter: 'all' | 'trainer' | 'user';
 } {
@@ -37,6 +38,7 @@ function getInitialFilters(): {
   return {
     month: now.getMonth() + 1,
     year: now.getFullYear(),
+    weekFilter: 'all',
     userIds: [],
     roleFilter: 'all',
   };
@@ -76,6 +78,11 @@ function getIsoWeekInfo(date: Date): { week: number; year: number } {
     1 +
     Math.round(((target.getTime() - firstThursday.getTime()) / 86400000 - 3) / 7);
   return { week, year: isoYear };
+}
+
+function getIsoWeekKey(date: Date): string {
+  const { week, year } = getIsoWeekInfo(date);
+  return `${year}-W${String(week).padStart(2, '0')}`;
 }
 
 function getTotalMinutesClassName(totalMinutes: number): string | undefined {
@@ -238,15 +245,63 @@ export default function ControlHorarioPage() {
     [rows],
   );
 
+  const weekOptions = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        key: string;
+        label: string;
+        week: number;
+        year: number;
+      }
+    >();
+    rowsWithTotals.forEach((row) => {
+      const { week, year } = getIsoWeekInfo(new Date(`${row.date}T00:00:00`));
+      const key = `${year}-W${String(week).padStart(2, '0')}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          label: `Semana ${week} (${year})`,
+          week,
+          year,
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.year !== b.year) {
+        return a.year - b.year;
+      }
+      return a.week - b.week;
+    });
+  }, [rowsWithTotals]);
+
+  useEffect(() => {
+    if (filters.weekFilter === 'all') return;
+    const hasSelectedWeek = weekOptions.some((option) => option.key === filters.weekFilter);
+    if (!hasSelectedWeek) {
+      setFilters((prev) => ({ ...prev, weekFilter: 'all' }));
+    }
+  }, [filters.weekFilter, weekOptions]);
+
+  const rowsWithTotalsFiltered = useMemo(() => {
+    if (filters.weekFilter === 'all') {
+      return rowsWithTotals;
+    }
+    return rowsWithTotals.filter((row) => {
+      const key = getIsoWeekKey(new Date(`${row.date}T00:00:00`));
+      return key === filters.weekFilter;
+    });
+  }, [filters.weekFilter, rowsWithTotals]);
+
   const weekGroups = useMemo(() => {
     const groups: Array<{
       key: string;
       label: string;
-      rows: typeof rowsWithTotals;
+      rows: typeof rowsWithTotalsFiltered;
       totalMinutes: number;
     }> = [];
     const groupMap = new Map<string, typeof groups[number]>();
-    rowsWithTotals.forEach((row) => {
+    rowsWithTotalsFiltered.forEach((row) => {
       const { week, year } = getIsoWeekInfo(new Date(`${row.date}T00:00:00`));
       const key = `${year}-W${String(week).padStart(2, '0')}`;
       let group = groupMap.get(key);
@@ -264,11 +319,11 @@ export default function ControlHorarioPage() {
       group.totalMinutes += row.totalMinutes;
     });
     return groups;
-  }, [rowsWithTotals]);
+  }, [rowsWithTotalsFiltered]);
 
   const monthlyTotalMinutes = useMemo(
-    () => rowsWithTotals.reduce((acc, row) => acc + row.totalMinutes, 0),
-    [rowsWithTotals],
+    () => rowsWithTotalsFiltered.reduce((acc, row) => acc + row.totalMinutes, 0),
+    [rowsWithTotalsFiltered],
   );
 
   const monthOptions = useMemo(
@@ -309,9 +364,9 @@ export default function ControlHorarioPage() {
   };
 
   const handleDownload = () => {
-    if (!rows.length) return;
+    if (!rowsWithTotalsFiltered.length) return;
     const headers = ['Usuario', 'Rol', 'Fecha', 'Fichajes', 'Total'];
-    const lines = rows.map((row) => {
+    const lines = rowsWithTotalsFiltered.map((row) => {
       const totalMinutes = row.entries.reduce((acc, entry) => {
         if (!entry.checkIn || !entry.checkOut) return acc;
         return acc + diffMinutes(entry.checkIn, entry.checkOut);
@@ -504,6 +559,23 @@ export default function ControlHorarioPage() {
                   ))}
                 </Form.Select>
               </Form.Group>
+              <Form.Group controlId="control-horario-week">
+                <Form.Label>Semana ISO</Form.Label>
+                <Form.Select
+                  value={filters.weekFilter}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setFilters((prev) => ({ ...prev, weekFilter: value }));
+                  }}
+                >
+                  <option value="all">Todas</option>
+                  {weekOptions.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
               <Form.Group controlId="control-horario-user">
                 <Form.Label>Usuarios</Form.Label>
                 <div ref={userDropdownRef} className="position-relative" style={{ minWidth: '220px' }}>
@@ -571,10 +643,10 @@ export default function ControlHorarioPage() {
               </Form.Group>
               <div className="ms-auto align-self-end d-flex align-items-center gap-3">
                 <div className="text-end">
-                  <div className="text-muted small">Total mensual</div>
+                  <div className="text-muted small">Total periodo</div>
                   <div className="fw-semibold">{monthlyTotalMinutes ? formatDuration(monthlyTotalMinutes) : '—'}</div>
                 </div>
-                <Button variant="success" onClick={handleDownload} disabled={!rows.length}>
+                <Button variant="success" onClick={handleDownload} disabled={!rowsWithTotalsFiltered.length}>
                   Descargar
                 </Button>
               </div>
