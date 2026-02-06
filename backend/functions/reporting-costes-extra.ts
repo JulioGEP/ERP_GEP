@@ -44,6 +44,7 @@ type SessionInfo = {
   nombre_cache: string | null;
   fecha_inicio_utc: Date | null;
   fecha_fin_utc: Date | null;
+  tiempo_parada: DecimalLike | number | string | null;
   direccion: string | null;
   deal_products: { name: string | null } | null;
   deals: { title: string | null; pipeline_label: string | null; pipeline_id: string | null } | null;
@@ -105,6 +106,7 @@ type TrainerExtraCostResponseItem = {
   site: string | null;
   scheduledStart: string | null;
   scheduledEnd: string | null;
+  workedHours: number | null;
   costs: Record<CostFieldKey, number>;
   notes: string | null;
   createdAt: string | null;
@@ -430,6 +432,28 @@ function formatAmount(amount: number): string {
   return amount.toFixed(2);
 }
 
+function roundToTwoDecimals(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function computeSessionWorkedHours(sessionInfo: SessionInfo | null): number | null {
+  if (!sessionInfo?.fecha_inicio_utc || !sessionInfo?.fecha_fin_utc) {
+    return null;
+  }
+  const startTime = sessionInfo.fecha_inicio_utc.getTime();
+  const endTime = sessionInfo.fecha_fin_utc.getTime();
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
+    return null;
+  }
+  const diff = endTime - startTime;
+  if (!Number.isFinite(diff) || diff <= 0) {
+    return 0;
+  }
+  const totalHours = diff / (60 * 60 * 1000);
+  const breakHours = Math.max(0, decimalToNumber(sessionInfo.tiempo_parada));
+  return roundToTwoDecimals(Math.max(0, totalHours - breakHours));
+}
+
 function mapResponseItem(params: {
   key: string;
   record: ExtraCostRecord | null;
@@ -486,6 +510,7 @@ function mapResponseItem(params: {
       assignmentType === 'session'
         ? toIsoString(sessionInfo?.fecha_fin_utc ?? null)
         : null,
+    workedHours: assignmentType === 'session' ? computeSessionWorkedHours(sessionInfo) : null,
     costs,
     notes: record?.notas ?? null,
     createdAt: toIsoString(record?.created_at ?? null),
@@ -795,6 +820,7 @@ export const handler = createHttpHandler(async (request) => {
             nombre_cache: true,
             fecha_inicio_utc: true,
             fecha_fin_utc: true,
+            tiempo_parada: true,
             direccion: true,
             deal_products: { select: { name: true } },
             deals: { select: { title: true, pipeline_label: true, pipeline_id: true } },

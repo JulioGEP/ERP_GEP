@@ -422,6 +422,7 @@ export type TrainerExtraCostRecord = {
   site: string | null;
   scheduledStart: string | null;
   scheduledEnd: string | null;
+  workedHours: number | null;
   costs: Record<TrainerExtraCostFieldKey, number>;
   notes: string | null;
   createdAt: string | null;
@@ -551,6 +552,9 @@ function sanitizeExtraCostItem(entry: unknown): TrainerExtraCostRecord | null {
     site: sanitizeText(raw.site),
     scheduledStart: sanitizeDate(raw.scheduledStart ?? raw.scheduled_start),
     scheduledEnd: sanitizeDate(raw.scheduledEnd ?? raw.scheduled_end),
+    workedHours: typeof raw.workedHours === 'number' && Number.isFinite(raw.workedHours)
+      ? raw.workedHours
+      : null,
     costs,
     notes: sanitizeText(raw.notes) ?? null,
     createdAt: sanitizeDate(raw.createdAt ?? raw.created_at),
