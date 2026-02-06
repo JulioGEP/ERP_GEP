@@ -766,20 +766,17 @@ async function fetchVariantAssignments(
 ): Promise<Map<string, Set<string>>> {
   const assignments = new Map<string, Set<string>>();
 
-  const variantDateFilter =
-    startDate || endDate
-      ? {
-          date: {
-            ...(startDate ? { gte: startDate } : {}),
-            ...(endDate ? { lte: endDate } : {}),
-          },
-        }
-      : undefined;
-
   const directVariants = (await prisma.variants.findMany({
     where: {
       trainer_id: { not: null },
-      ...(variantDateFilter ?? {}),
+      ...(startDate || endDate
+        ? {
+            date: {
+              ...(startDate ? { gte: startDate } : {}),
+              ...(endDate ? { lte: endDate } : {}),
+            },
+          }
+        : {}),
     },
     select: {
       id: true,
@@ -790,33 +787,6 @@ async function fetchVariantAssignments(
   for (const variant of directVariants) {
     const variantId = normalizeIdentifier(variant.id);
     const trainerId = normalizeIdentifier(variant.trainer_id);
-    if (!variantId || !trainerId) {
-      continue;
-    }
-    if (!assignments.has(variantId)) {
-      assignments.set(variantId, new Set());
-    }
-    assignments.get(variantId)!.add(trainerId);
-  }
-
-  const inviteAssignments = await prisma.variant_trainer_invites.findMany({
-    where: {
-      status: 'CONFIRMED',
-      ...(variantDateFilter
-        ? {
-            variant: variantDateFilter,
-          }
-        : {}),
-    },
-    select: {
-      variant_id: true,
-      trainer_id: true,
-    },
-  });
-
-  for (const invite of inviteAssignments) {
-    const variantId = normalizeIdentifier(invite.variant_id);
-    const trainerId = normalizeIdentifier(invite.trainer_id);
     if (!variantId || !trainerId) {
       continue;
     }
