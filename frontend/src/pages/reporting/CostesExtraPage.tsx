@@ -35,6 +35,11 @@ const COST_FIELD_DEFINITIONS: ReadonlyArray<{
   { key: 'gastosExtras', label: 'Otros gastos (€)' },
 ];
 
+const NON_HIGHLIGHT_COST_KEYS = new Set<TrainerExtraCostFieldKey>([
+  'precioCosteFormacion',
+  'precioCostePreventivo',
+]);
+
 function formatDateForInput(date: Date): string {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
@@ -712,6 +717,7 @@ export default function CostesExtraPage() {
                         onChange={(event) => handleFieldChange(definition.key, event.currentTarget.value)}
                         disabled={saving}
                         className={`text-end ${
+                          !NON_HIGHLIGHT_COST_KEYS.has(definition.key) &&
                           hasNonZeroValue(draft.fields[definition.key])
                             ? 'bg-warning-subtle border-warning'
                             : ''
