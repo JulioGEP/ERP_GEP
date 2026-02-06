@@ -5,7 +5,7 @@ import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { requireAuth } from './_shared/auth';
 import { getPrisma } from './_shared/prisma';
-import { buildMadridDateTime } from './_shared/time';
+import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
 
 const sql = sqltag;
 type DecimalLike = { toNumber?: () => number; toString?: () => string };
@@ -55,7 +55,7 @@ type VariantInfo = {
   name: string | null;
   date: Date | null;
   sede: string | null;
-  products: { name: string | null } | null;
+  products: { name: string | null; hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
 };
 
 type ExtraCostRecord = {
@@ -436,6 +436,60 @@ function roundToTwoDecimals(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+type TimeParts = { hour: number; minute: number };
+
+function extractTimeParts(value: Date | string | null | undefined): TimeParts | null {
+  const formatted = formatTimeFromDb(value);
+  if (!formatted) return null;
+  const match = formatted.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hour = Number.parseInt(match[1], 10);
+  const minute = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+}
+
+function buildDateTime(date: Date, time: TimeParts | null, fallback: TimeParts): Date {
+  const parts = time ?? fallback;
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth() + 1;
+  const day = date.getUTCDate();
+  return buildMadridDateTime({ year, month, day, hour: parts.hour, minute: parts.minute });
+}
+
+function computeVariantWorkedHours(
+  variantDate: Date | string | null | undefined,
+  productTimes: { hora_inicio: Date | string | null; hora_fin: Date | string | null },
+): number {
+  if (!variantDate) return 0;
+
+  const parsedDate = new Date(variantDate);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return 0;
+  }
+
+  const startTime = extractTimeParts(productTimes.hora_inicio);
+  const endTime = extractTimeParts(productTimes.hora_fin);
+
+  const fallbackStart: TimeParts = startTime ?? { hour: 9, minute: 0 };
+  const fallbackEnd: TimeParts = endTime ?? (startTime ? { ...startTime } : { hour: 11, minute: 0 });
+
+  const start = buildDateTime(parsedDate, startTime, fallbackStart);
+  let end = buildDateTime(parsedDate, endTime, fallbackEnd);
+
+  if (end.getTime() <= start.getTime()) {
+    end = new Date(start.getTime() + 60 * 60 * 1000);
+  }
+
+  const diff = end.getTime() - start.getTime();
+  if (!Number.isFinite(diff) || diff <= 0) {
+    return 0;
+  }
+
+  return roundToTwoDecimals(diff / (60 * 60 * 1000));
+}
+
 function computeSessionWorkedHours(sessionInfo: SessionInfo | null): number | null {
   if (!sessionInfo?.fecha_inicio_utc || !sessionInfo?.fecha_fin_utc) {
     return null;
@@ -510,7 +564,13 @@ function mapResponseItem(params: {
       assignmentType === 'session'
         ? toIsoString(sessionInfo?.fecha_fin_utc ?? null)
         : null,
-    workedHours: assignmentType === 'session' ? computeSessionWorkedHours(sessionInfo) : null,
+    workedHours:
+      assignmentType === 'session'
+        ? computeSessionWorkedHours(sessionInfo)
+        : computeVariantWorkedHours(
+            variantInfo?.date ?? null,
+            variantInfo?.products ?? { hora_inicio: null, hora_fin: null },
+          ),
     costs,
     notes: record?.notas ?? null,
     createdAt: toIsoString(record?.created_at ?? null),
@@ -898,7 +958,7 @@ export const handler = createHttpHandler(async (request) => {
             name: true,
             date: true,
             sede: true,
-            products: { select: { name: true } },
+            products: { select: { name: true, hora_inicio: true, hora_fin: true } },
           },
         })) as VariantInfo[])
       : [];
