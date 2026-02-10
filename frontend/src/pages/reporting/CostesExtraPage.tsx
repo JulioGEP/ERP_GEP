@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { Alert, Badge, Button, Card, Form, Spinner, Table } from 'react-bootstrap';
+import { Alert, Badge, Button, Card, Collapse, Form, Spinner, Table } from 'react-bootstrap';
 import { useSearchParams } from 'react-router-dom';
 
 import { isApiError } from '../../api/client';
@@ -275,10 +275,34 @@ export default function CostesExtraPage() {
   }, [searchParams]);
 
   const [filters, setFilters] = useState<{ startDate: string; endDate: string }>(initialFilters);
+  const [selectedTrainerIds, setSelectedTrainerIds] = useState<string[]>(
+    trainerIdFilter ? [trainerIdFilter] : [],
+  );
+  const [isTrainerDropdownOpen, setIsTrainerDropdownOpen] = useState(false);
+  const trainerDropdownRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setFilters(initialFilters);
   }, [initialFilters]);
+
+  useEffect(() => {
+    setSelectedTrainerIds(trainerIdFilter ? [trainerIdFilter] : []);
+  }, [trainerIdFilter]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!isTrainerDropdownOpen) return;
+      const target = event.target as Node | null;
+      if (trainerDropdownRef.current && target && !trainerDropdownRef.current.contains(target)) {
+        setIsTrainerDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [isTrainerDropdownOpen]);
 
   const quickRanges = useMemo(
     () => [
@@ -326,7 +350,7 @@ export default function CostesExtraPage() {
 
   const [drafts, setDrafts] = useState<Record<string, CostDraft>>({});
 
-  const items = useMemo(() => {
+  const itemsWithQueryFilters = useMemo(() => {
     if (hasInvalidRange) {
       return [] as TrainerExtraCostRecord[];
     }
@@ -357,15 +381,55 @@ export default function CostesExtraPage() {
     });
   }, [extraCostsQuery.data, hasInvalidRange, normalizedTrainerNameFilter, trainerIdFilter]);
 
+  const trainerOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const options: Array<{ id: string; label: string }> = [];
+    for (const item of itemsWithQueryFilters) {
+      if (seen.has(item.trainerId)) {
+        continue;
+      }
+      seen.add(item.trainerId);
+      options.push({
+        id: item.trainerId,
+        label: buildTrainerDisplayName(item),
+      });
+    }
+    return options.sort((a, b) => a.label.localeCompare(b.label, 'es'));
+  }, [itemsWithQueryFilters]);
+
+  const items = useMemo(() => {
+    if (!selectedTrainerIds.length) {
+      return itemsWithQueryFilters;
+    }
+    return itemsWithQueryFilters.filter((item) =>
+      selectedTrainerIds.some(
+        (selectedId) => item.trainerId === selectedId || item.trainerUserId === selectedId,
+      ),
+    );
+  }, [itemsWithQueryFilters, selectedTrainerIds]);
+
   const trainerFilterLabel = useMemo(() => {
+    if (selectedTrainerIds.length) {
+      const selectedLabels = trainerOptions
+        .filter((option) => selectedTrainerIds.includes(option.id))
+        .map((option) => option.label);
+      if (selectedLabels.length === 1) {
+        return selectedLabels[0];
+      }
+      if (selectedLabels.length > 1) {
+        return `${selectedLabels.length} formadores`;
+      }
+    }
+
     if (!trainerIdFilter) {
       return trainerFullNameFilter;
     }
+
     if (items.length) {
       return buildTrainerDisplayName(items[0]);
     }
     return trainerNameFilter || trainerIdFilter;
-  }, [items, trainerFullNameFilter, trainerIdFilter, trainerNameFilter]);
+  }, [items, selectedTrainerIds, trainerFullNameFilter, trainerIdFilter, trainerNameFilter, trainerOptions]);
 
   useEffect(() => {
     if (!items.length) {
@@ -805,6 +869,58 @@ export default function CostesExtraPage() {
                   })}
                 </div>
               </div>
+              <Form.Group controlId="costes-extra-trainers" className="mb-0">
+                <Form.Label>Formadores</Form.Label>
+                <div ref={trainerDropdownRef} className="position-relative" style={{ minWidth: '240px' }}>
+                  <Button
+                    variant="outline-secondary"
+                    className="w-100 d-flex align-items-center justify-content-between text-start"
+                    onClick={() => setIsTrainerDropdownOpen((prev) => !prev)}
+                    aria-expanded={isTrainerDropdownOpen}
+                    aria-controls="costes-extra-trainer-options"
+                  >
+                    <span>
+                      {selectedTrainerIds.length
+                        ? `${selectedTrainerIds.length} seleccionados`
+                        : 'Selecciona formadores'}
+                    </span>
+                    <span className="ms-2">▾</span>
+                  </Button>
+                  <Collapse in={isTrainerDropdownOpen}>
+                    <div
+                      id="costes-extra-trainer-options"
+                      className="border rounded p-2 mt-2"
+                      style={{ maxHeight: '240px', overflowY: 'auto' }}
+                    >
+                      {trainerOptions.length ? (
+                        trainerOptions.map((trainer) => {
+                          const isChecked = selectedTrainerIds.includes(trainer.id);
+                          return (
+                            <Form.Check
+                              key={trainer.id}
+                              id={`costes-extra-trainer-${trainer.id}`}
+                              type="checkbox"
+                              label={trainer.label}
+                              checked={isChecked}
+                              onChange={(event) => {
+                                const { checked } = event.currentTarget;
+                                setSelectedTrainerIds((prev) => {
+                                  if (checked) {
+                                    return Array.from(new Set([...prev, trainer.id]));
+                                  }
+                                  return prev.filter((trainerId) => trainerId !== trainer.id);
+                                });
+                              }}
+                            />
+                          );
+                        })
+                      ) : (
+                        <span className="text-muted small">No hay formadores en el rango seleccionado.</span>
+                      )}
+                    </div>
+                  </Collapse>
+                </div>
+              </Form.Group>
               <div className="ms-auto text-end">
                 <span className="text-muted d-block small">Registros mostrados</span>
                 <span className="fw-semibold h5 mb-0">{numberFormatter.format(items.length)}</span>
