@@ -16,6 +16,8 @@ type SlackChannel = {
 type SlackConversationsListResponse = {
   ok?: boolean;
   error?: string;
+  needed?: string;
+  provided?: string;
   channels?: SlackChannel[];
   response_metadata?: {
     next_cursor?: string;
@@ -38,13 +40,13 @@ function sanitizeText(value: unknown): string | null {
   return trimmed.length ? trimmed : null;
 }
 
-async function listSlackChannels(token: string): Promise<SlackChannel[]> {
+async function fetchSlackChannelsByTypes(token: string, types: string): Promise<SlackChannel[]> {
   const channels: SlackChannel[] = [];
   let cursor = '';
 
   do {
     const params = new URLSearchParams({
-      types: 'public_channel,private_channel',
+      types,
       exclude_archived: 'true',
       limit: String(CHANNELS_PAGE_LIMIT),
     });
@@ -66,7 +68,13 @@ async function listSlackChannels(token: string): Promise<SlackChannel[]> {
 
     const payload = (await response.json()) as SlackConversationsListResponse;
     if (!payload.ok) {
-      throw new Error(payload.error ?? 'SLACK_LIST_CHANNELS_FAILED');
+      const code = payload.error ?? 'SLACK_LIST_CHANNELS_FAILED';
+      const needed = sanitizeText(payload.needed);
+      const provided = sanitizeText(payload.provided);
+      const details = [needed ? `needed=${needed}` : null, provided ? `provided=${provided}` : null]
+        .filter((part): part is string => Boolean(part))
+        .join(', ');
+      throw new Error(details ? `${code} (${details})` : code);
     }
 
     if (Array.isArray(payload.channels)) {
@@ -77,6 +85,20 @@ async function listSlackChannels(token: string): Promise<SlackChannel[]> {
   } while (cursor.length > 0);
 
   return channels;
+}
+
+async function listSlackChannels(token: string): Promise<SlackChannel[]> {
+  try {
+    return await fetchSlackChannelsByTypes(token, 'public_channel,private_channel');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (!message.includes('missing_scope')) {
+      throw error;
+    }
+
+    // Fallback: algunos tokens solo tienen alcance para canales públicos.
+    return fetchSlackChannelsByTypes(token, 'public_channel');
+  }
 }
 
 async function sendSlackMessage(token: string, channel: string, message: string) {
