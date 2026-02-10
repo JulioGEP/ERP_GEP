@@ -13,6 +13,11 @@ type SlackChannel = {
   is_archived?: boolean;
 };
 
+type SlackChannelsResult = {
+  channels: SlackChannel[];
+  warning?: string;
+};
+
 type SlackConversationsListResponse = {
   ok?: boolean;
   error?: string;
@@ -87,17 +92,29 @@ async function fetchSlackChannelsByTypes(token: string, types: string): Promise<
   return channels;
 }
 
-async function listSlackChannels(token: string): Promise<SlackChannel[]> {
+function isMissingChannelsScopeError(message: string): boolean {
+  return (
+    message.includes('missing_scope') &&
+    (message.includes('channels:read') || message.includes('groups:read') || message.includes('im:read'))
+  );
+}
+
+async function listSlackChannels(token: string): Promise<SlackChannelsResult> {
   try {
-    return await fetchSlackChannelsByTypes(token, 'public_channel,private_channel');
+    return {
+      channels: await fetchSlackChannelsByTypes(token, 'public_channel,private_channel'),
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
-    if (!message.includes('missing_scope')) {
+    if (!isMissingChannelsScopeError(message)) {
       throw error;
     }
 
-    // Fallback: algunos tokens solo tienen alcance para canales públicos.
-    return fetchSlackChannelsByTypes(token, 'public_channel');
+    return {
+      channels: [],
+      warning:
+        'No fue posible listar canales de Slack con el token actual. Para habilitar el selector concede los scopes channels:read, groups:read, mpim:read e im:read (o conversations:read según tu app) y reinstala la app en Slack.',
+    };
   }
 }
 
@@ -141,7 +158,7 @@ export const handler = createHttpHandler(async (request) => {
 
   if (request.method === 'GET') {
     try {
-      const channels = await listSlackChannels(slackToken);
+      const { channels, warning } = await listSlackChannels(slackToken);
       const normalizedChannels = channels
         .map((channel) => ({
           id: sanitizeText(channel.id),
@@ -155,7 +172,7 @@ export const handler = createHttpHandler(async (request) => {
         )
         .sort((left, right) => left.name.localeCompare(right.name, 'es'));
 
-      return successResponse({ channels: normalizedChannels });
+      return successResponse({ channels: normalizedChannels, warning });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'SLACK_LIST_CHANNELS_FAILED';
       console.error('[reporting-slack-messages] No se pudieron cargar los canales', error);

@@ -23,7 +23,12 @@ export default function SlackMessagesPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const channels = useMemo(() => sortChannels(channelsQuery.data ?? []), [channelsQuery.data]);
+  const channels = useMemo(
+    () => sortChannels(channelsQuery.data?.channels ?? []),
+    [channelsQuery.data?.channels],
+  );
+
+  const channelsWarning = channelsQuery.data?.warning ?? null;
 
   const sendMessageMutation = useMutation({
     mutationFn: sendSlackChannelMessage,
@@ -76,6 +81,13 @@ export default function SlackMessagesPage() {
             </Alert>
           ) : null}
 
+          {!channelsQuery.isError && channelsWarning ? (
+            <Alert variant="warning">
+              {channelsWarning} Puedes enviar mensajes igualmente indicando manualmente el ID del canal
+              (por ejemplo, C0123456789) en el campo de abajo.
+            </Alert>
+          ) : null}
+
           {successMessage ? <Alert variant="success">{successMessage}</Alert> : null}
 
           {sendMessageMutation.isError ? (
@@ -102,6 +114,19 @@ export default function SlackMessagesPage() {
                   </option>
                 ))}
               </Form.Select>
+            </Form.Group>
+
+            <Form.Group className="mb-3" controlId="slack-channel-id-manual">
+              <Form.Label>ID del canal (manual)</Form.Label>
+              <Form.Control
+                type="text"
+                value={selectedChannelId}
+                onChange={(event) => setSelectedChannelId(event.target.value)}
+                placeholder="C0123456789"
+              />
+              <Form.Text className="text-muted">
+                Si no puedes listar canales por falta de scopes, pega aquí el ID del canal de Slack.
+              </Form.Text>
             </Form.Group>
 
             <Form.Group className="mb-3" controlId="slack-message-body">

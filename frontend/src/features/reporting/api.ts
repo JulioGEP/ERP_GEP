@@ -885,18 +885,30 @@ export type SlackChannel = {
   isPrivate: boolean;
 };
 
-export async function fetchSlackChannels(): Promise<SlackChannel[]> {
-  const response = await getJson<{ channels?: SlackChannel[] }>('/reporting-slack-messages');
-  if (!Array.isArray(response?.channels)) {
-    return [];
-  }
-  return response.channels
-    .filter((channel) => typeof channel?.id === 'string' && typeof channel?.name === 'string')
-    .map((channel) => ({
-      id: channel.id,
-      name: channel.name,
-      isPrivate: Boolean(channel.isPrivate),
-    }));
+export type SlackChannelsResponse = {
+  channels: SlackChannel[];
+  warning: string | null;
+};
+
+export async function fetchSlackChannels(): Promise<SlackChannelsResponse> {
+  const response = await getJson<{ channels?: SlackChannel[]; warning?: unknown }>(
+    '/reporting-slack-messages',
+  );
+
+  const channels = Array.isArray(response?.channels)
+    ? response.channels
+        .filter((channel) => typeof channel?.id === 'string' && typeof channel?.name === 'string')
+        .map((channel) => ({
+          id: channel.id,
+          name: channel.name,
+          isPrivate: Boolean(channel.isPrivate),
+        }))
+    : [];
+
+  return {
+    channels,
+    warning: sanitizeText(response?.warning),
+  };
 }
 
 export async function sendSlackChannelMessage(payload: {
