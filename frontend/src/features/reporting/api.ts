@@ -878,3 +878,38 @@ export async function saveOfficePayroll(
   }
   throw new Error('No se pudo guardar la nómina de oficina');
 }
+
+export type SlackChannel = {
+  id: string;
+  name: string;
+  isPrivate: boolean;
+};
+
+export async function fetchSlackChannels(): Promise<SlackChannel[]> {
+  const response = await getJson<{ channels?: SlackChannel[] }>('/reporting-slack-messages');
+  if (!Array.isArray(response?.channels)) {
+    return [];
+  }
+  return response.channels
+    .filter((channel) => typeof channel?.id === 'string' && typeof channel?.name === 'string')
+    .map((channel) => ({
+      id: channel.id,
+      name: channel.name,
+      isPrivate: Boolean(channel.isPrivate),
+    }));
+}
+
+export async function sendSlackChannelMessage(payload: {
+  channelId: string;
+  message: string;
+}): Promise<{ channelId: string | null; messageTs: string | null }> {
+  const response = await postJson<{ channelId?: unknown; messageTs?: unknown }>(
+    '/reporting-slack-messages',
+    payload,
+  );
+
+  return {
+    channelId: sanitizeText(response?.channelId),
+    messageTs: sanitizeText(response?.messageTs),
+  };
+}

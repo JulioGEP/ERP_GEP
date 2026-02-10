@@ -107,6 +107,7 @@ const CostesExtraPage = lazy(() => import('../pages/reporting/CostesExtraPage'))
 const LogsPage = lazy(() => import('../pages/reporting/LogsPage'));
 const ComparativaDashboardPage = lazy(() => import('../pages/reporting/ComparativaDashboardPage'));
 const WebhooksPipedrivePage = lazy(() => import('../pages/reporting/WebhooksPipedrivePage'));
+const SlackMessagesPage = lazy(() => import('../pages/reporting/SlackMessagesPage'));
 const NominasFijosPage = lazy(() => import('../pages/reporting/NominasFijosPage'));
 const NominasFijosDiscontinuosPage = lazy(
   () => import('../pages/reporting/NominasFijosDiscontinuosPage'),
@@ -653,6 +654,17 @@ export function AppRouter({
               path="/reporting/webhooks_pipedrive"
               roles={['Admin']}
               element={<WebhooksPipedrivePage />}
+            />
+          }
+        />
+
+        <Route
+          path="/reporting/mensajes_slack"
+          element={
+            <GuardedRoute
+              path="/reporting/mensajes_slack"
+              roles={['Admin']}
+              element={<SlackMessagesPage />}
             />
           }
         />

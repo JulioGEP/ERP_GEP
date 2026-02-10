@@ -90,6 +90,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/usuarios/nominas_formadores_externos',
   '/perfil/control_horas',
   '/reporting/webhooks_pipedrive',
+  '/reporting/mensajes_slack',
   '/reporting/comparativa',
   '/usuarios',
 ] as const;
