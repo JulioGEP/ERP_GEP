@@ -70,6 +70,7 @@ const WOO_KEY = process.env.WOO_KEY || '';
 const WOO_SECRET = process.env.WOO_SECRET || '';
 
 const DEFAULT_SYNC_CONCURRENCY = 3;
+const LOCAL_DUPLICATED_VARIANT_ID_WOO_MIN = 1_000_000_000_000_000n;
 
 const ESSENTIAL_VARIATION_FIELDS = new Set([
   'id',
@@ -576,6 +577,10 @@ function buildUpdateData(
   return { data, changes };
 }
 
+function isLocallyDuplicatedVariantIdWoo(idWoo: bigint): boolean {
+  return idWoo >= LOCAL_DUPLICATED_VARIANT_ID_WOO_MIN;
+}
+
 async function syncProductVariations(
   prisma: ReturnType<typeof getPrisma>,
   product: ProductWithWooId,
@@ -675,18 +680,30 @@ async function syncProductVariations(
     }
 
     const removedRecords = existing.filter((variant) => !processedIds.has(variant.id_woo.toString()));
-    if (removedRecords.length > 0) {
+    const removableRecords = removedRecords.filter(
+      (variant) => !isLocallyDuplicatedVariantIdWoo(variant.id_woo),
+    );
+    const preservedRecords = removedRecords.filter((variant) =>
+      isLocallyDuplicatedVariantIdWoo(variant.id_woo),
+    );
+
+    if (removableRecords.length > 0) {
       await client.variants.deleteMany({
-        where: { id_woo: { in: removedRecords.map((variant) => variant.id_woo) } },
+        where: { id_woo: { in: removableRecords.map((variant) => variant.id_woo) } },
       });
     }
 
-    const removed: VariationsSyncChange[] = removedRecords.map((variant) => ({
+    const removed: VariationsSyncChange[] = removableRecords.map((variant) => ({
       id_woo: variant.id_woo.toString(),
       name: variant.name,
     }));
 
-    return { added, updated, removed };
+    const preserved: VariationsSyncChange[] = preservedRecords.map((variant) => ({
+      id_woo: variant.id_woo.toString(),
+      name: variant.name,
+    }));
+
+    return { added, updated, removed, preserved };
   });
 
   const totals: SyncTotals = {
@@ -734,6 +751,15 @@ async function syncProductVariations(
     logs.push({
       type: 'info',
       message: 'No se detectaron cambios para este producto.',
+      productWooId,
+      productName: product.name ?? null,
+    });
+  }
+
+  if (transactionResult.preserved.length > 0) {
+    logs.push({
+      type: 'warning',
+      message: `Se conservaron ${transactionResult.preserved.length} variantes duplicadas localmente para no perder sus sesiones asociadas.`,
       productWooId,
       productName: product.name ?? null,
     });
