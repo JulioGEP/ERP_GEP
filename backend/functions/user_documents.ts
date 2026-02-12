@@ -282,7 +282,7 @@ async function persistPayrollExpense(
     month: expense.month,
     [column]: new Prisma.Decimal(totalAmount),
     total_extras: new Prisma.Decimal(nextTotalExtras),
-  } as Prisma.office_payrollsCreateInput;
+  } as Prisma.office_payrollsUncheckedCreateInput;
   await prisma.office_payrolls.create({
     data: createData,
   });

@@ -188,7 +188,7 @@ function parsePayrollInput(payrollInput: any): PayrollMutationInput | { error: R
   if ('antiguedad' in payrollInput) {
     const antiguedad = parseDateOnly(payrollInput.antiguedad);
     if (payrollInput.antiguedad && !antiguedad) {
-      return errorResponse('INVALID_INPUT', 'Fecha de antigüedad inválida', 400);
+      return { error: errorResponse('INVALID_INPUT', 'Fecha de antigüedad inválida', 400) };
     }
     update.antiguedad = antiguedad;
     create.antiguedad = antiguedad ?? undefined;
@@ -237,7 +237,7 @@ function parsePayrollInput(payrollInput: any): PayrollMutationInput | { error: R
     if (field.inputKey in payrollInput) {
       const parsed = parseDecimalField(payrollInput[field.inputKey], { scale: field.scale ?? 2 });
       if (parsed.error) {
-        return errorResponse('INVALID_INPUT', `${field.label} inválido`, 400);
+        return { error: errorResponse('INVALID_INPUT', `${field.label} inválido`, 400) };
       }
       const value = parsed.value ?? null;
 
