@@ -96,6 +96,7 @@ const ESSENTIAL_VARIATION_META_FIELDS = new Set(['key', 'value']);
 
 const LOCATION_KEYWORDS = ['localizacion', 'ubicacion', 'sede'];
 const DATE_KEYWORDS = ['fecha'];
+const LOCAL_DUPLICATED_VARIANT_ID_MIN = 1_000_000_000_000_000n;
 
 type VariationAttribute = {
   id?: number;
@@ -257,6 +258,10 @@ function parseDecimalValue(value: unknown): number | null {
   const numberValue = Number(text);
   if (!Number.isFinite(numberValue)) return null;
   return numberValue;
+}
+
+function isLocalDuplicatedVariantId(idWoo: bigint): boolean {
+  return idWoo >= LOCAL_DUPLICATED_VARIANT_ID_MIN;
 }
 
 function parseIntegerValue(value: unknown): number | null {
@@ -674,14 +679,16 @@ async function syncProductVariations(
       }
     }
 
-    const removedRecords = existing.filter((variant) => !processedIds.has(variant.id_woo.toString()));
-    if (removedRecords.length > 0) {
+    const removableRecords = existing.filter(
+      (variant) => !processedIds.has(variant.id_woo.toString()) && !isLocalDuplicatedVariantId(variant.id_woo),
+    );
+    if (removableRecords.length > 0) {
       await client.variants.deleteMany({
-        where: { id_woo: { in: removedRecords.map((variant) => variant.id_woo) } },
+        where: { id_woo: { in: removableRecords.map((variant) => variant.id_woo) } },
       });
     }
 
-    const removed: VariationsSyncChange[] = removedRecords.map((variant) => ({
+    const removed: VariationsSyncChange[] = removableRecords.map((variant) => ({
       id_woo: variant.id_woo.toString(),
       name: variant.name,
     }));
