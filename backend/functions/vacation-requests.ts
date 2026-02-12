@@ -445,7 +445,8 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
     const requestedBy = `${existing.user.first_name ?? ''} ${existing.user.last_name ?? ''}`.trim() || 'Usuario';
     const humanStart = formatHumanDate(formatDateOnly(existing.start_date));
     const humanEnd = formatHumanDate(formatDateOnly(existing.end_date));
-    const typeLabel = existing.tag ? VACATION_TAG_LABELS[existing.tag] ?? 'Vacaciones' : 'Vacaciones';
+    const vacationTag = existing.tag as keyof typeof VACATION_TAG_LABELS | null;
+    const typeLabel = vacationTag ? VACATION_TAG_LABELS[vacationTag] ?? 'Vacaciones' : 'Vacaciones';
     const notes = existing.notes ? String(existing.notes).trim() : '';
 
     const html = `

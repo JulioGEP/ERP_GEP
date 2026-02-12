@@ -12,7 +12,7 @@ export type MailchimpPersonInput = {
   person_id: string;
   name: string;
   email: string | null;
-  label_ids: Prisma.InputJsonValue | null;
+  label_ids: Prisma.InputJsonValue | typeof Prisma.JsonNull;
   org_id: string | null;
   org_address: string | null;
   size_employees: string | null;
@@ -112,7 +112,7 @@ export async function buildMailchimpPersonInput(
     person_id: personId,
     name,
     email,
-    label_ids: labelIds.length ? labelIds : null,
+    label_ids: labelIds.length ? labelIds : Prisma.JsonNull,
     org_id: orgId,
     org_address: orgAddress,
     size_employees: normalizeText(raw?.[SIZE_EMPLOYEES_FIELD]),

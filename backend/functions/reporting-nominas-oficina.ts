@@ -143,7 +143,7 @@ function buildOfficePayrollCreateData(
   },
   year: number,
   month: number,
-): Prisma.office_payrollsCreateInput {
+): Prisma.office_payrollsUncheckedCreateInput {
   const payroll = user.payroll;
 
   return {
@@ -172,6 +172,11 @@ function sanitizeText(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
+}
+
+function toDecimalOrNull(value: number | null | undefined): Prisma.Decimal | null {
+  if (value === null || value === undefined) return null;
+  return new Prisma.Decimal(value);
 }
 
 function decimalToNumber(value: DecimalLike): number | null {
@@ -710,48 +715,48 @@ async function handlePut(prisma = getPrisma(), request: any) {
   const updateData: Prisma.office_payrollsUpdateInput = {};
   if (hasConvenio) updateData.convenio = convenio ?? null;
   if (hasCategoria) updateData.categoria = categoria ?? null;
-  if (hasDietas) updateData.dietas = dietas === null ? null : new Prisma.Decimal(dietas);
+  if (hasDietas) updateData.dietas = dietas === null ? null : toDecimalOrNull(dietas);
   if (hasKilometrajes)
-    updateData.kilometrajes = kilometrajes === null ? null : new Prisma.Decimal(kilometrajes);
-  if (hasPernocta) updateData.pernocta = pernocta === null ? null : new Prisma.Decimal(pernocta);
+    updateData.kilometrajes = kilometrajes === null ? null : toDecimalOrNull(kilometrajes);
+  if (hasPernocta) updateData.pernocta = pernocta === null ? null : toDecimalOrNull(pernocta);
   if (hasNocturnidad)
-    updateData.nocturnidad = nocturnidad === null ? null : new Prisma.Decimal(nocturnidad);
-  if (hasFestivo) updateData.festivo = festivo === null ? null : new Prisma.Decimal(festivo);
+    updateData.nocturnidad = nocturnidad === null ? null : toDecimalOrNull(nocturnidad);
+  if (hasFestivo) updateData.festivo = festivo === null ? null : toDecimalOrNull(festivo);
   if (hasHorasExtras)
-    updateData.horas_extras = horasExtras === null ? null : new Prisma.Decimal(horasExtras);
+    updateData.horas_extras = horasExtras === null ? null : toDecimalOrNull(horasExtras);
   if (hasOtrosGastos)
-    updateData.otros_gastos = otrosGastos === null ? null : new Prisma.Decimal(otrosGastos);
+    updateData.otros_gastos = otrosGastos === null ? null : toDecimalOrNull(otrosGastos);
   if (hasAnyExtrasField || hasTotalExtras) {
     updateData.total_extras =
-      resolvedTotalExtras === null ? null : new Prisma.Decimal(resolvedTotalExtras);
+      resolvedTotalExtras === null ? null : toDecimalOrNull(resolvedTotalExtras);
   }
   if (hasAntiguedad) updateData.antiguedad = antiguedad ?? null;
   if (hasHorasSemana)
-    updateData.horas_semana = horasSemana === null ? null : new Prisma.Decimal(horasSemana);
+    updateData.horas_semana = horasSemana === null ? null : toDecimalOrNull(horasSemana);
   if (hasBaseRetencion)
-    updateData.base_retencion = baseRetencion === null ? null : new Prisma.Decimal(baseRetencion);
+    updateData.base_retencion = baseRetencion === null ? null : toDecimalOrNull(baseRetencion);
   if (hasBaseRetencionDetalle) updateData.base_retencion_detalle = baseRetencionDetalle ?? null;
   if (hasSalarioBruto)
-    updateData.salario_bruto = salarioBruto === null ? null : new Prisma.Decimal(salarioBruto);
+    updateData.salario_bruto = salarioBruto === null ? null : toDecimalOrNull(salarioBruto);
   if (hasSalarioBrutoTotal) {
     updateData.salario_bruto_total =
-      salarioBrutoTotalInput === null ? null : new Prisma.Decimal(salarioBrutoTotalInput);
+      salarioBrutoTotalInput === null ? null : toDecimalOrNull(salarioBrutoTotalInput);
   }
-  if (hasRetencion) updateData.retencion = retencion === null ? null : new Prisma.Decimal(retencion);
+  if (hasRetencion) updateData.retencion = retencion === null ? null : toDecimalOrNull(retencion);
   if (hasAportacionSsIrpf)
     updateData.aportacion_ss_irpf =
-      aportacionSsIrpf === null ? null : new Prisma.Decimal(aportacionSsIrpf);
+      aportacionSsIrpf === null ? null : toDecimalOrNull(aportacionSsIrpf);
   if (hasAportacionSsIrpfDetalle)
     updateData.aportacion_ss_irpf_detalle = aportacionSsIrpfDetalle ?? null;
   if (hasSalarioLimpio)
-    updateData.salario_limpio = salarioLimpio === null ? null : new Prisma.Decimal(salarioLimpio);
+    updateData.salario_limpio = salarioLimpio === null ? null : toDecimalOrNull(salarioLimpio);
   if (hasContingenciasComunes)
     updateData.contingencias_comunes =
-      contingenciasComunes === null ? null : new Prisma.Decimal(contingenciasComunes);
+      contingenciasComunes === null ? null : toDecimalOrNull(contingenciasComunes);
   if (hasContingenciasComunesDetalle)
     updateData.contingencias_comunes_detalle = contingenciasComunesDetalle ?? null;
   if (hasTotalEmpresa)
-    updateData.total_empresa = totalEmpresa === null ? null : new Prisma.Decimal(totalEmpresa);
+    updateData.total_empresa = totalEmpresa === null ? null : toDecimalOrNull(totalEmpresa);
 
   const createTotalExtras = calculateExtrasTotal({
     total_extras: totalExtrasInput ?? null,
@@ -773,74 +778,74 @@ async function handlePut(prisma = getPrisma(), request: any) {
       month,
       convenio: convenio ?? null,
       categoria: categoria ?? null,
-      dietas: hasDietas ? (dietas === null ? null : new Prisma.Decimal(dietas)) : null,
+      dietas: hasDietas ? (dietas === null ? null : toDecimalOrNull(dietas)) : null,
       kilometrajes: hasKilometrajes
         ? kilometrajes === null
           ? null
-          : new Prisma.Decimal(kilometrajes)
+          : toDecimalOrNull(kilometrajes)
         : null,
-      pernocta: hasPernocta ? (pernocta === null ? null : new Prisma.Decimal(pernocta)) : null,
+      pernocta: hasPernocta ? (pernocta === null ? null : toDecimalOrNull(pernocta)) : null,
       nocturnidad: hasNocturnidad
         ? nocturnidad === null
           ? null
-          : new Prisma.Decimal(nocturnidad)
+          : toDecimalOrNull(nocturnidad)
         : null,
-      festivo: hasFestivo ? (festivo === null ? null : new Prisma.Decimal(festivo)) : null,
+      festivo: hasFestivo ? (festivo === null ? null : toDecimalOrNull(festivo)) : null,
       horas_extras: hasHorasExtras
         ? horasExtras === null
           ? null
-          : new Prisma.Decimal(horasExtras)
+          : toDecimalOrNull(horasExtras)
         : null,
       otros_gastos: hasOtrosGastos
         ? otrosGastos === null
           ? null
-          : new Prisma.Decimal(otrosGastos)
+          : toDecimalOrNull(otrosGastos)
         : null,
-      total_extras: createTotalExtras === null ? null : new Prisma.Decimal(createTotalExtras),
+      total_extras: createTotalExtras === null ? null : toDecimalOrNull(createTotalExtras),
       antiguedad: antiguedad ?? null,
       horas_semana: hasHorasSemana
         ? horasSemana === null
           ? null
-          : new Prisma.Decimal(horasSemana)
+          : toDecimalOrNull(horasSemana)
         : null,
       base_retencion: hasBaseRetencion
         ? baseRetencion === null
           ? null
-          : new Prisma.Decimal(baseRetencion)
+          : toDecimalOrNull(baseRetencion)
         : null,
       base_retencion_detalle: baseRetencionDetalle ?? null,
       salario_bruto: hasSalarioBruto
         ? salarioBruto === null
           ? null
-          : new Prisma.Decimal(salarioBruto)
+          : toDecimalOrNull(salarioBruto)
         : null,
       salario_bruto_total: hasSalarioBrutoTotal
         ? salarioBrutoTotalInput === null
           ? null
-          : new Prisma.Decimal(salarioBrutoTotalInput)
+          : toDecimalOrNull(salarioBrutoTotalInput)
         : null,
-      retencion: hasRetencion ? (retencion === null ? null : new Prisma.Decimal(retencion)) : null,
+      retencion: hasRetencion ? (retencion === null ? null : toDecimalOrNull(retencion)) : null,
       aportacion_ss_irpf: hasAportacionSsIrpf
         ? aportacionSsIrpf === null
           ? null
-          : new Prisma.Decimal(aportacionSsIrpf)
+          : toDecimalOrNull(aportacionSsIrpf)
         : null,
       aportacion_ss_irpf_detalle: aportacionSsIrpfDetalle ?? null,
       salario_limpio: hasSalarioLimpio
         ? salarioLimpio === null
           ? null
-          : new Prisma.Decimal(salarioLimpio)
+          : toDecimalOrNull(salarioLimpio)
         : null,
       contingencias_comunes: hasContingenciasComunes
         ? contingenciasComunes === null
           ? null
-          : new Prisma.Decimal(contingenciasComunes)
+          : toDecimalOrNull(contingenciasComunes)
         : null,
       contingencias_comunes_detalle: contingenciasComunesDetalle ?? null,
       total_empresa: hasTotalEmpresa
         ? totalEmpresa === null
           ? null
-          : new Prisma.Decimal(totalEmpresa)
+          : toDecimalOrNull(totalEmpresa)
         : null,
     },
   });

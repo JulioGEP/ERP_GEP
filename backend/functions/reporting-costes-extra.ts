@@ -321,7 +321,7 @@ async function applyPayrollDelta(
     return;
   }
 
-  const createData: Prisma.office_payrollsCreateInput = {
+  const createData: Prisma.office_payrollsUncheckedCreateInput = {
     user_id: trainer.user_id,
     year,
     month,
@@ -1110,6 +1110,7 @@ export const handler = createHttpHandler(async (request) => {
             fecha_inicio_utc: true,
             fecha_fin_utc: true,
             direccion: true,
+            tiempo_parada: true,
             deal_products: { select: { name: true } },
             deals: { select: { title: true, pipeline_label: true, pipeline_id: true } },
           },
@@ -1134,7 +1135,7 @@ export const handler = createHttpHandler(async (request) => {
         date: true,
         sede: true,
         trainer_id: true,
-        products: { select: { name: true } },
+        products: { select: { name: true, hora_inicio: true, hora_fin: true } },
       },
     });
 
