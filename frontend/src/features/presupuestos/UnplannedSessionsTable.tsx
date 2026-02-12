@@ -287,7 +287,7 @@ export function UnplannedSessionsTable(props?: {
           {query.isFetching ? <Spinner animation="border" size="sm" role="status" /> : null}
         </div>
         <Alert variant="info" className="m-3 mb-0">
-          <p className="mb-0">No hay sesiones pendientes de agendar en Formación Empresa o GEP Services.</p>
+          <p className="mb-0">No hay sesiones pendientes de agendar en Formación Empresa, Preventivos o PCI.</p>
         </Alert>
       </div>
     );

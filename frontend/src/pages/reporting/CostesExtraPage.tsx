@@ -199,7 +199,7 @@ function resolveSessionCategory(item: TrainerExtraCostRecord): { label: string; 
   if (pipelineLabel === 'formacion empresa' || pipelineLabel === 'formacion empresas') {
     return { label: 'Formación Empresa', variant: 'success' };
   }
-  if (pipelineLabel === 'gep services') {
+  if (pipelineLabel === 'gep services' || pipelineLabel === 'preventivos') {
     return { label: 'Preventivo', variant: 'danger' };
   }
   if (item.assignmentType === 'variant') {

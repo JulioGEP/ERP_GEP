@@ -42,7 +42,7 @@ const encodeBudgetsQueryValue = (value: string) =>
 const SESSION_PENDING_COMPLETION_URL = `${ALL_BUDGETS_PATH}?budgets-table__filter__session_estado=PLANIFICADA`;
 
 const SESSION_FORMACION_ABIERTA_URL = `${TRAINERLESS_BUDGETS_PATH}?budgets-table__filter__negocio=${encodeBudgetsQueryValue(
-  'Formación Empresas||GEP Services',
+  'Formación Empresas||Preventivos',
 )}`;
 
 const BUDGETS_PENDING_CAES_URL =
@@ -295,7 +295,7 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
     const definitions = [
       {
         type: 'company' as const,
-        label: 'Formaciones Empresa y GEP Services',
+        label: 'Formaciones Empresa y Preventivos',
         color: '#0d6efd',
       },
       {
@@ -328,7 +328,7 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
                 style={{ display: 'inline-block', width: '12px', height: '4px', backgroundColor: '#0d6efd' }}
                 aria-hidden="true"
               />
-              Formaciones Empresa y GEP Services
+              Formaciones Empresa y Preventivos
             </span>
             <span className="d-flex align-items-center gap-2">
               <span
@@ -357,7 +357,7 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
               onMouseLeave={handleMouseLeave}
             >
               <desc id="sessions-trend-desc">
-                Línea azul Formaciones Empresa y GEP Services, línea violeta Formación Abierta por día.
+                Línea azul Formaciones Empresa y Preventivos, línea violeta Formación Abierta por día.
               </desc>
               <rect
                 x={paddingX}

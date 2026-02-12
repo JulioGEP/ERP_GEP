@@ -93,7 +93,7 @@ function mergeDealDetailData(current: DealDetail | undefined, next: DealDetail):
 }
 
 const EMPTY_DOCUMENTS: DealDocument[] = [];
-const PIPELINE_LABEL = 'GEP Services';
+const FALLBACK_PIPELINE_LABEL = 'Preventivos';
 
 interface Props {
   dealId: string | null;
@@ -177,6 +177,12 @@ export function BudgetDetailModalServices({
   void _autoRefreshOnOpen;
   const qc = useQueryClient();
   const { userId, userName } = useCurrentUserIdentity();
+
+  const pipelineLabel = useMemo(() => {
+    const rawLabel = summary?.pipeline_label ?? summary?.pipeline_id ?? null;
+    const normalized = typeof rawLabel === 'string' ? rawLabel.trim() : '';
+    return normalized.length ? normalized : FALLBACK_PIPELINE_LABEL;
+  }, [summary?.pipeline_id, summary?.pipeline_label]);
 
   const normalizedDealId =
     typeof dealId === 'string' ? dealId.trim() : dealId != null ? String(dealId) : '';
@@ -953,7 +959,7 @@ export function BudgetDetailModalServices({
           <div className="erp-modal-subtitle d-flex align-items-center gap-2 flex-wrap">
             <span className="text-truncate">{presupuestoHeaderLabel}</span>
             <Badge bg="info" text="dark" className="fw-semibold text-nowrap">
-              {PIPELINE_LABEL}
+              {pipelineLabel}
             </Badge>
           </div>
         </Modal.Title>

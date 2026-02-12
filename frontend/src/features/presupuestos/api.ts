@@ -1184,6 +1184,8 @@ const PENDING_PLANNING_PIPELINE_KEYS = new Set<string>([
   normalizePipelineKey("Formación Empresa"),
   normalizePipelineKey("Formación Empresas"),
   normalizePipelineKey("GEP Services"),
+  normalizePipelineKey("Preventivos"),
+  normalizePipelineKey("PCI"),
 ]);
 
 function hasDraftSessions(deal: DealSummary): boolean {

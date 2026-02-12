@@ -29,7 +29,7 @@ const STATUS_VARIANTS: Record<TrainerInviteStatus, { label: string; bg: string; 
 
 const PIPELINE_LABELS: Record<SessionPipelineType, string> = {
   FORMACION_EMPRESA: 'Formación empresa',
-  GEP_SERVICES: 'GEP Services',
+  GEP_SERVICES: 'Preventivos',
 };
 
 function formatDateTime(value: string | null): string {
@@ -499,7 +499,7 @@ export function ConfirmationsView({ onNotify }: ConfirmationsViewProps) {
         <>
           <section className="mt-4">
             <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-              <h2 className="h5 mb-0">Sesiones (Formación empresa / GEP Services)</h2>
+              <h2 className="h5 mb-0">Sesiones (Formación empresa / Preventivos)</h2>
               <Badge bg="warning" text="dark">
                 Pendientes: {summary.sessions.pending}
               </Badge>
