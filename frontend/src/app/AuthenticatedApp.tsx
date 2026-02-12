@@ -326,7 +326,7 @@ type BudgetModalConfig = {
 const BUDGET_MODAL_CONFIG: readonly BudgetModalConfig[] = [
   { component: BudgetDetailModalEmpresas, keys: ['Formación Empresas', 'Formación Empresa'] },
   { component: BudgetDetailModalAbierta, keys: ['Formación Abierta'] },
-  { component: BudgetDetailModalServices, keys: ['GEP Services'] },
+  { component: BudgetDetailModalServices, keys: ['GEP Services', 'Preventivos', 'PCI'] },
   { component: BudgetDetailModalMaterial, keys: ['Material'] },
 ];
 

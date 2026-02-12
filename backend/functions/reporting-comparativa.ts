@@ -272,10 +272,15 @@ function parseStringArrayParam(value: string | string[] | undefined): string[] |
   return normalized.length ? normalized : undefined;
 }
 
+
+function isPciPipeline(value: string | null | undefined): boolean {
+  return normalizePipelineLabel(value) === 'pci';
+}
+
 function classifySession(row: SessionRow): 'gepServices' | 'formacionEmpresa' | 'formacionAbierta' | null {
   const pipeline = normalizePipelineLabel(row.deals?.pipeline_id ?? null);
   if (!pipeline) return null;
-  if (pipeline === 'gep services') return 'gepServices';
+  if (pipeline === 'gep services' || pipeline === 'preventivos') return 'gepServices';
   if (pipeline === 'formacion empresa' || pipeline === 'formacion empresas') return 'formacionEmpresa';
   if (pipeline === 'formacion abierta') return 'formacionAbierta';
   return null;
@@ -418,9 +423,10 @@ export const handler = createHttpHandler(async (request) => {
   const siteFilters =
     parseStringArrayParam(request.query.siteId ?? request.query.siteIds) ??
     parseStringArrayParam(request.event.multiValueQueryStringParameters?.siteId);
-  const trainingTypes =
+  const trainingTypesRaw =
     parseStringArrayParam(request.query.trainingType ?? request.query.trainingTypes) ??
     parseStringArrayParam(request.event.multiValueQueryStringParameters?.trainingType);
+  const trainingTypes = trainingTypesRaw?.filter((pipeline) => !isPciPipeline(pipeline));
   const comerciales =
     parseStringArrayParam(request.query.comercial ?? request.query.comerciales ?? request.query.costCenterId) ??
     parseStringArrayParam(
@@ -430,8 +436,8 @@ export const handler = createHttpHandler(async (request) => {
     );
 
   const [
-    currentSessions,
-    previousSessions,
+    currentSessionsRaw,
+    previousSessionsRaw,
     currentVariants,
     previousVariants,
     currentVariantDeals,
@@ -613,6 +619,10 @@ export const handler = createHttpHandler(async (request) => {
     }),
   ]);
 
+
+  const currentSessions = currentSessionsRaw.filter((session) => !isPciPipeline(session.deals?.pipeline_id));
+  const previousSessions = previousSessionsRaw.filter((session) => !isPciPipeline(session.deals?.pipeline_id));
+
   const currentVariantDealIds = new Set(
     (currentVariantDeals as Array<{ w_id_variation: unknown }> )
       .map((deal) => normalizeVariantWooId(deal.w_id_variation))
@@ -770,7 +780,7 @@ export const handler = createHttpHandler(async (request) => {
 
   const trends = [
     buildWeeklyTrend('Formación Empresa vs comparativa', 'formacionEmpresaSessions', formacionEmpresaCurrentCounts, formacionEmpresaPreviousCounts),
-    buildWeeklyTrend('GEP Services vs comparativa', 'gepServicesSessions', gepCurrentCounts, gepPreviousCounts),
+    buildWeeklyTrend('Preventivos vs comparativa', 'gepServicesSessions', gepCurrentCounts, gepPreviousCounts),
   ];
 
   const formacionEmpresaCurrentProducts = currentSessions
@@ -851,7 +861,7 @@ export const handler = createHttpHandler(async (request) => {
   const highlights = [
     {
       key: 'gepServicesSessions',
-      label: 'GEP Services',
+      label: 'Preventivos',
       unit: 'number' as const,
       value: gepCurrentDates.length,
       lastYearValue: gepPrevious,
@@ -965,7 +975,7 @@ export const handler = createHttpHandler(async (request) => {
   const metricSessions: MetricSessionGroup[] = [
     {
       key: 'gepServicesSessions',
-      label: 'GEP Services',
+      label: 'Preventivos',
       sessions: currentSessions
         .filter((session) => classifySession(session) === 'gepServices')
         .map(buildSessionDetailFromSession)
@@ -1170,7 +1180,7 @@ export const handler = createHttpHandler(async (request) => {
     sites: Array.from(siteOptionSet).sort((a, b) => a.localeCompare(b)),
     trainingTypes: pipelineOptions
       .map((item) => item.pipeline_id?.trim())
-      .filter((value): value is string => Boolean(value))
+      .filter((value): value is string => Boolean(value) && !isPciPipeline(value))
       .sort((a, b) => a.localeCompare(b)),
     comerciales: comercialOptions
       .map((item) => item.comercial?.trim())
@@ -1204,7 +1214,7 @@ export const handler = createHttpHandler(async (request) => {
       },
       {
         key: 'gepServicesCaes',
-        label: 'GEP Services · CAES',
+        label: 'Preventivos · CAES',
         yes: binaryMixes.gepServicesCaes.yes,
         no: binaryMixes.gepServicesCaes.no,
       },

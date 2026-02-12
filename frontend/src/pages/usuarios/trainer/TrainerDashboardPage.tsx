@@ -153,7 +153,7 @@ export default function TrainerDashboardPage() {
                 </div>
                 <div className="display-6 fw-bold text-primary">{formatNumber(query.data.metrics.totalAssigned)}</div>
                 <div className="text-muted small">
-                  Formaciones Empresa: {formatNumber(query.data.metrics.companySessions)} · GEP Services:{' '}
+                  Formaciones Empresa: {formatNumber(query.data.metrics.companySessions)} · Preventivos:{' '}
                   {formatNumber(query.data.metrics.gepServicesSessions)} · Formación Abierta:
                   {` ${formatNumber(query.data.metrics.openTrainingVariants)}`}
                 </div>

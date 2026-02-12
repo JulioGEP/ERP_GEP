@@ -21,7 +21,7 @@ export function BudgetsPage({
       isFetching={isFetching}
       error={error}
       onRetry={onRetry}
-      title="Form. Empresa y GEP Services · Sin Formador"
+      title="Form. Empresa, Preventivos y PCI · Sin Formador"
       subtitle={undefined}
       canImport={false}
       tableContent={(filtersContainer) => (

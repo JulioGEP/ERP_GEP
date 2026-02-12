@@ -27,6 +27,8 @@ const ALLOWED_PIPELINES = new Set<string>([
   normalizePipelineKey('Formación Empresa'),
   normalizePipelineKey('Formación Empresas'),
   normalizePipelineKey('GEP Services'),
+  normalizePipelineKey('Preventivos'),
+  normalizePipelineKey('PCI'),
 ]);
 
 const SESSION_ESTADOS_SET = new Set<string>(SESSION_ESTADOS);
@@ -483,7 +485,7 @@ export function PendingTrainerSessionsTable({
       <div className="d-flex justify-content-between align-items-center px-3 px-md-4 py-3 border-bottom">
         <div>
           <h2 className="h5 mb-1">Sesiones sin formador ({filteredRows.length})</h2>
-          <p className="text-muted small mb-0">Form. Empresa y GEP Services con fecha de inicio y fin asignadas.</p>
+          <p className="text-muted small mb-0">Form. Empresa, Preventivos y PCI con fecha de inicio y fin asignadas.</p>
         </div>
         {isFetching ? <Spinner animation="border" size="sm" role="status" /> : null}
       </div>

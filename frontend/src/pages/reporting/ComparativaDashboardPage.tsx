@@ -13,7 +13,7 @@ import {
 } from '../../features/reporting/api';
 
 const METRIC_CONFIG: { key: string; label: string }[] = [
-  { key: 'gepServicesSessions', label: 'GEP Services' },
+  { key: 'gepServicesSessions', label: 'Preventivos' },
   { key: 'formacionEmpresaSessions', label: 'Formacion Empresa' },
   { key: 'formacionAbiertaVariantesSessions', label: 'Formación Abierta' },
 ];
@@ -31,7 +31,7 @@ const BREAKDOWN_CONFIG = [
   },
   {
     dimension: 'gepServicesType' as const,
-    title: 'GEP Services por tipo de servicio',
+    title: 'Preventivos por tipo de servicio',
     description: 'Sumatorio de sesiones por tipo de servicio',
   },
 ];
@@ -953,7 +953,7 @@ export default function ComparativaDashboardPage() {
           </Col>
           <Col xs={12} lg={6}>
             {renderWeeklyTrendCard(
-              'GEP Services por semana ISO',
+              'Preventivos por semana ISO',
               comparisonDescription,
               'gepServicesSessions',
             )}
@@ -1013,7 +1013,7 @@ export default function ComparativaDashboardPage() {
           </Col>
           <Col xs={12} lg={4}>
             {renderRankingTable(
-              'Productos más usados · GEP Services',
+              'Productos más usados · Preventivos',
               'gepServices',
               'Sin productos registrados en el rango',
             )}
@@ -1038,7 +1038,7 @@ export default function ComparativaDashboardPage() {
           </Col>
           <Col xs={12} lg={4}>
             {renderRankingTable(
-              'Formadores Frecuentes · GEP Services',
+              'Formadores Frecuentes · Preventivos',
               'gepServicesTrainers',
               'Sin formadores registrados en el rango',
               { columnLabel: 'Formador', description: 'Top formadores en el rango seleccionado' },
