@@ -77,6 +77,19 @@ type VariantCombo = {
   date: ParsedDate;
 };
 
+function isWooResourceForbiddenError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const normalizedMessage = (error.message ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  return (
+    normalizedMessage.includes('cannot view this resource') ||
+    normalizedMessage.includes('no puedes ver este recurso')
+  );
+}
+
 function parseSingleDate(value: string): ParsedDate {
   const match = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (!match) {
@@ -645,10 +658,22 @@ export const handler = async (event: any) => {
       return successResponse({ ok: true, created: [], skipped: combos.length, message: 'Todas las combinaciones ya existen.' });
     }
 
-    let attributes = await fetchWooProductAttributes(product.id_woo, token);
-    const ensuredAttributes = ensureWooProductAttributesForCombos(attributes, combosToCreate);
-    if (ensuredAttributes.changed) {
-      attributes = await updateWooProductAttributes(product.id_woo, token, ensuredAttributes.attributes);
+    let attributes: WooProductAttribute[] = [];
+    try {
+      attributes = await fetchWooProductAttributes(product.id_woo, token);
+      const ensuredAttributes = ensureWooProductAttributesForCombos(attributes, combosToCreate);
+      if (ensuredAttributes.changed) {
+        attributes = await updateWooProductAttributes(product.id_woo, token, ensuredAttributes.attributes);
+      }
+    } catch (error) {
+      if (!isWooResourceForbiddenError(error)) {
+        throw error;
+      }
+      console.warn(
+        '[product-variants-create] WooCommerce denied product attributes access; creating variants with fallback attributes',
+        { productWooId: product.id_woo?.toString() ?? null },
+      );
+      attributes = [];
     }
 
     const locationAttribute = attributes.find((attribute) => matchesAttributeKeywords(attribute, LOCATION_KEYWORDS));
