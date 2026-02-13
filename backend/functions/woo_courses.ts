@@ -29,6 +29,7 @@ type ProductSyncReport = {
   productId: string;
   productWooId: string;
   productName: string | null;
+  requestCurl: string;
   fetchedVariations: number;
   validVariations: number;
   skippedVariations: number;
@@ -463,6 +464,14 @@ function buildWooUrl(resource: string, params: Record<string, string | number | 
   return url;
 }
 
+function buildWooVariationsCurl(productId: bigint): string {
+  const resource = `products/${productId.toString()}/variations`;
+  const url = buildWooUrl(resource, { per_page: 100, page: 1 });
+  const authBase64 = Buffer.from('<WOO_KEY>:<WOO_SECRET>').toString('base64');
+
+  return `curl --request GET '${url.toString()}' --header 'Authorization: Basic ${authBase64}'`;
+}
+
 async function fetchWooVariations(productId: bigint): Promise<SanitizedVariation[]> {
   ensureConfigured();
 
@@ -588,6 +597,7 @@ async function syncProductVariations(
 ): Promise<{ summary: ProductSyncReport; totals: SyncTotals; logs: SyncLogEntry[] }> {
   const logs: SyncLogEntry[] = [];
   const productWooId = product.id_woo.toString();
+  const requestCurl = buildWooVariationsCurl(product.id_woo);
 
   const uniqueVariations = new Map<string, VariationPersistence>();
   let skipped = 0;
@@ -706,6 +716,7 @@ async function syncProductVariations(
     productId: product.id,
     productWooId: productWooId,
     productName: product.name ?? null,
+    requestCurl,
     fetchedVariations: variations.length,
     validVariations: persistable.length,
     skippedVariations: skipped,
@@ -803,6 +814,7 @@ async function syncAllProducts(): Promise<SyncResult> {
           productId: product.id,
           productWooId: '—',
           productName: product.name ?? null,
+          requestCurl: 'No disponible (producto sin id_woo).',
           fetchedVariations: 0,
           validVariations: 0,
           skippedVariations: 0,
@@ -858,6 +870,7 @@ async function syncAllProducts(): Promise<SyncResult> {
           productId: product.id,
           productWooId: productWooIdString,
           productName: product.name ?? null,
+          requestCurl: buildWooVariationsCurl(productWooId),
           fetchedVariations: 0,
           validVariations: 0,
           skippedVariations: 0,
