@@ -369,10 +369,12 @@ function normalizeSedeLabel(value: string | null | undefined): string | null {
 
 const PIPELINES_ALLOW_PLANIFICADA_WITHOUT_DATES = new Set([
   'gep services',
+  'preventivos',
+  'pci',
   'formacion empresas',
   'formacion empresa',
 ]);
-const PIPELINES_ALLOW_PLANIFICADA_WITHOUT_ROOM = new Set(['gep services']);
+const PIPELINES_ALLOW_PLANIFICADA_WITHOUT_ROOM = new Set(['gep services', 'preventivos', 'pci']);
 
 function normalizePipelineLabel(value: string | null | undefined): string | null {
   if (value == null) return null;
