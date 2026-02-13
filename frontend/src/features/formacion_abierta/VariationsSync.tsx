@@ -20,6 +20,7 @@ export type VariationsSyncProductReport = {
   productId: string;
   productWooId: string;
   productName: string | null;
+  requestCurl: string;
   fetchedVariations: number;
   validVariations: number;
   skippedVariations: number;
@@ -220,6 +221,11 @@ export default function VariationsSync() {
                     <div className="d-flex flex-column">
                       <span className="fw-semibold">{product.productName ?? 'Producto sin nombre'}</span>
                       <span className="text-muted small">ID Woo: {product.productWooId}</span>
+                    </div>
+
+                    <div className="small">
+                      <div className="fw-semibold mb-1">cURL de la petición</div>
+                      <code className="d-block text-break">{product.requestCurl}</code>
                     </div>
 
                     {product.error ? (
