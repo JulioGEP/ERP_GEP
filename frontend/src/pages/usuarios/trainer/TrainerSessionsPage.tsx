@@ -144,6 +144,12 @@ function formatTrainerName(trainer: TrainerSessionTrainer): string {
   return trainer.trainerId;
 }
 
+function getGepServiceLabel(session: TrainerSessionDetail): 'PCI' | 'Preventivo' | null {
+  if (!session.isGepServices) return null;
+  const template = (session.formationTemplate ?? '').trim().toLowerCase();
+  return template.includes('pci') ? 'PCI' : 'Preventivo';
+}
+
 type InfoFieldProps = {
   label: string;
   children: ReactNode;
@@ -3344,13 +3350,18 @@ export default function TrainerSessionsPage() {
                           if (session.isCompanyTraining) {
                             acc.company += 1;
                           } else if (session.isGepServices) {
-                            acc.services += 1;
+                            const serviceLabel = getGepServiceLabel(session);
+                            if (serviceLabel === 'PCI') {
+                              acc.pci += 1;
+                            } else {
+                              acc.preventive += 1;
+                            }
                           } else {
                             acc.other += 1;
                           }
                           return acc;
                         },
-                        { company: 0, services: 0, other: 0 },
+                        { company: 0, pci: 0, preventive: 0, other: 0 },
                       );
 
                       if (sessionCounts.company) {
@@ -3359,9 +3370,15 @@ export default function TrainerSessionsPage() {
                         );
                       }
 
-                      if (sessionCounts.services) {
+                      if (sessionCounts.pci) {
                         suffixParts.push(
-                          `${sessionCounts.services} sesión${sessionCounts.services === 1 ? '' : 'es'} Services`,
+                          `${sessionCounts.pci} sesión${sessionCounts.pci === 1 ? '' : 'es'} PCI`,
+                        );
+                      }
+
+                      if (sessionCounts.preventive) {
+                        suffixParts.push(
+                          `${sessionCounts.preventive} sesión${sessionCounts.preventive === 1 ? '' : 'es'} Preventivo`,
                         );
                       }
 
