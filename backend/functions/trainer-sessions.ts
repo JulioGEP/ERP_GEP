@@ -17,6 +17,7 @@ type SessionRecord = {
   deals: {
     deal_id: string | null;
     pipeline_id: string | null;
+    pipeline_label: string | null;
     training_address: string | null;
     caes_val: boolean | null;
     caes_label: string | null;
@@ -182,7 +183,7 @@ const PIPELINE_LABELS_COMPANY = [
   'formación empresas',
 ];
 
-const PIPELINE_LABELS_GEP_SERVICES = ['gep services'];
+const PIPELINE_LABELS_GEP_SERVICES = ['gep services', 'preventivos', 'pci'];
 
 function normalizePipeline(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -344,6 +345,7 @@ export const handler = createHttpHandler(async (request) => {
         select: {
           deal_id: true,
           pipeline_id: true,
+          pipeline_label: true,
           training_address: true,
           caes_val: true,
           caes_label: true,
@@ -518,7 +520,7 @@ export const handler = createHttpHandler(async (request) => {
             .filter((unit): unit is { id: string; name: string | null; plate: string | null } => unit !== null)
         : [];
 
-      const pipeline = deal?.pipeline_id ?? null;
+      const pipeline = deal?.pipeline_label ?? deal?.pipeline_id ?? null;
       const isCompanyTraining = isCompanyPipeline(pipeline);
       const isGepServices = isGepServicesPipeline(pipeline);
 
