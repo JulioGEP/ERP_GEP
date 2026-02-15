@@ -68,6 +68,31 @@ function formatDuration(totalMinutes: number): string {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
+function splitEntryMinutes(checkIn: string, checkOut: string): { dayMinutes: number; nightMinutes: number } {
+  const start = new Date(checkIn);
+  const end = new Date(checkOut);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end.getTime() <= start.getTime()) {
+    return { dayMinutes: 0, nightMinutes: 0 };
+  }
+
+  let cursor = new Date(start);
+  let dayMinutes = 0;
+  let nightMinutes = 0;
+
+  while (cursor.getTime() < end.getTime()) {
+    const minuteEnd = new Date(Math.min(end.getTime(), cursor.getTime() + 60_000));
+    const hour = cursor.getHours();
+    if (hour >= 6 && hour < 22) {
+      dayMinutes += 1;
+    } else {
+      nightMinutes += 1;
+    }
+    cursor = minuteEnd;
+  }
+
+  return { dayMinutes, nightMinutes };
+}
+
 function getIsoWeekInfo(date: Date): { week: number; year: number } {
   const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const dayNr = (target.getUTCDay() + 6) % 7;
@@ -233,13 +258,29 @@ export default function ControlHorarioPage() {
   const rowsWithTotals = useMemo(
     () =>
       rows.map((row) => {
-        const totalMinutes = row.entries.reduce((acc, entry) => {
-          if (!entry.checkIn || !entry.checkOut) return acc;
-          return acc + diffMinutes(entry.checkIn, entry.checkOut);
-        }, 0);
+        const totals = row.entries.reduce(
+          (acc, entry) => {
+            if (!entry.checkIn || !entry.checkOut) return acc;
+            const totalMinutes = diffMinutes(entry.checkIn, entry.checkOut);
+            const { dayMinutes, nightMinutes } = splitEntryMinutes(entry.checkIn, entry.checkOut);
+            acc.totalMinutes += totalMinutes;
+            acc.dayMinutes += dayMinutes;
+            acc.nightMinutes += nightMinutes;
+            if (entry.holidayType === 'A') acc.regionalHolidayMinutes += totalMinutes;
+            if (entry.holidayType === 'N') acc.nationalHolidayMinutes += totalMinutes;
+            return acc;
+          },
+          {
+            totalMinutes: 0,
+            dayMinutes: 0,
+            nightMinutes: 0,
+            regionalHolidayMinutes: 0,
+            nationalHolidayMinutes: 0,
+          },
+        );
         return {
           ...row,
-          totalMinutes,
+          ...totals,
         };
       }),
     [rows],
@@ -299,6 +340,10 @@ export default function ControlHorarioPage() {
       label: string;
       rows: typeof rowsWithTotalsFiltered;
       totalMinutes: number;
+      dayMinutes: number;
+      nightMinutes: number;
+      regionalHolidayMinutes: number;
+      nationalHolidayMinutes: number;
     }> = [];
     const groupMap = new Map<string, typeof groups[number]>();
     rowsWithTotalsFiltered.forEach((row) => {
@@ -311,18 +356,42 @@ export default function ControlHorarioPage() {
           label: `Semana ${week} (${year})`,
           rows: [],
           totalMinutes: 0,
+          dayMinutes: 0,
+          nightMinutes: 0,
+          regionalHolidayMinutes: 0,
+          nationalHolidayMinutes: 0,
         };
         groupMap.set(key, group);
         groups.push(group);
       }
       group.rows.push(row);
       group.totalMinutes += row.totalMinutes;
+      group.dayMinutes += row.dayMinutes;
+      group.nightMinutes += row.nightMinutes;
+      group.regionalHolidayMinutes += row.regionalHolidayMinutes;
+      group.nationalHolidayMinutes += row.nationalHolidayMinutes;
     });
     return groups;
   }, [rowsWithTotalsFiltered]);
 
   const monthlyTotalMinutes = useMemo(
     () => rowsWithTotalsFiltered.reduce((acc, row) => acc + row.totalMinutes, 0),
+    [rowsWithTotalsFiltered],
+  );
+  const monthlyDayMinutes = useMemo(
+    () => rowsWithTotalsFiltered.reduce((acc, row) => acc + row.dayMinutes, 0),
+    [rowsWithTotalsFiltered],
+  );
+  const monthlyNightMinutes = useMemo(
+    () => rowsWithTotalsFiltered.reduce((acc, row) => acc + row.nightMinutes, 0),
+    [rowsWithTotalsFiltered],
+  );
+  const monthlyRegionalHolidayMinutes = useMemo(
+    () => rowsWithTotalsFiltered.reduce((acc, row) => acc + row.regionalHolidayMinutes, 0),
+    [rowsWithTotalsFiltered],
+  );
+  const monthlyNationalHolidayMinutes = useMemo(
+    () => rowsWithTotalsFiltered.reduce((acc, row) => acc + row.nationalHolidayMinutes, 0),
     [rowsWithTotalsFiltered],
   );
 
@@ -365,7 +434,17 @@ export default function ControlHorarioPage() {
 
   const handleDownload = () => {
     if (!rowsWithTotalsFiltered.length) return;
-    const headers = ['Usuario', 'Rol', 'Fecha', 'Fichajes', 'Total'];
+    const headers = [
+      'Usuario',
+      'Rol',
+      'Fecha',
+      'Fichajes',
+      'Total',
+      'Horas diurnas',
+      'Horas nocturnas',
+      'Horas festivo autonómico',
+      'Horas festivo nacional',
+    ];
     const lines = rowsWithTotalsFiltered.map((row) => {
       const totalMinutes = row.entries.reduce((acc, entry) => {
         if (!entry.checkIn || !entry.checkOut) return acc;
@@ -386,6 +465,10 @@ export default function ControlHorarioPage() {
         escapeCsvValue(dateFormatter.format(new Date(`${row.date}T00:00:00`))),
         escapeCsvValue(entriesLabel),
         escapeCsvValue(totalMinutes ? formatDuration(totalMinutes) : '—'),
+        escapeCsvValue(row.dayMinutes ? formatDuration(row.dayMinutes) : '—'),
+        escapeCsvValue(row.nightMinutes ? formatDuration(row.nightMinutes) : '—'),
+        escapeCsvValue(row.regionalHolidayMinutes ? formatDuration(row.regionalHolidayMinutes) : '—'),
+        escapeCsvValue(row.nationalHolidayMinutes ? formatDuration(row.nationalHolidayMinutes) : '—'),
       ].join(',');
     });
     const csv = [headers.map(escapeCsvValue).join(','), ...lines].join('\n');
@@ -432,6 +515,10 @@ export default function ControlHorarioPage() {
               <th>Fecha</th>
               <th>Fichajes</th>
               <th style={{ width: '12%' }}>Total</th>
+              <th style={{ width: '10%' }}>Diurnas</th>
+              <th style={{ width: '10%' }}>Nocturnas</th>
+              <th style={{ width: '12%' }}>Festivo autonómico</th>
+              <th style={{ width: '12%' }}>Festivo nacional</th>
               <th style={{ width: '16%' }}>Acciones</th>
             </tr>
           </thead>
@@ -439,7 +526,7 @@ export default function ControlHorarioPage() {
             {weekGroups.map((group) => (
               <Fragment key={group.key}>
                 <tr className="table-light">
-                  <td colSpan={5} className="fw-semibold">
+                  <td colSpan={9} className="fw-semibold">
                     {group.label}
                   </td>
                 </tr>
@@ -490,6 +577,10 @@ export default function ControlHorarioPage() {
                       <td className={totalClassName}>
                         {row.totalMinutes ? formatDuration(row.totalMinutes) : '—'}
                       </td>
+                      <td>{row.dayMinutes ? formatDuration(row.dayMinutes) : '—'}</td>
+                      <td>{row.nightMinutes ? formatDuration(row.nightMinutes) : '—'}</td>
+                      <td>{row.regionalHolidayMinutes ? formatDuration(row.regionalHolidayMinutes) : '—'}</td>
+                      <td>{row.nationalHolidayMinutes ? formatDuration(row.nationalHolidayMinutes) : '—'}</td>
                       <td>
                         <Button size="sm" variant="outline-primary" onClick={() => handleOpenModal(row.person, row.date)}>
                           Añadir fichaje
@@ -504,6 +595,14 @@ export default function ControlHorarioPage() {
                   </td>
                   <td className="fw-semibold">
                     {group.totalMinutes ? formatDuration(group.totalMinutes) : '—'}
+                  </td>
+                  <td className="fw-semibold">{group.dayMinutes ? formatDuration(group.dayMinutes) : '—'}</td>
+                  <td className="fw-semibold">{group.nightMinutes ? formatDuration(group.nightMinutes) : '—'}</td>
+                  <td className="fw-semibold">
+                    {group.regionalHolidayMinutes ? formatDuration(group.regionalHolidayMinutes) : '—'}
+                  </td>
+                  <td className="fw-semibold">
+                    {group.nationalHolidayMinutes ? formatDuration(group.nationalHolidayMinutes) : '—'}
                   </td>
                   <td />
                 </tr>
@@ -645,6 +744,26 @@ export default function ControlHorarioPage() {
                 <div className="text-end">
                   <div className="text-muted small">Total periodo</div>
                   <div className="fw-semibold">{monthlyTotalMinutes ? formatDuration(monthlyTotalMinutes) : '—'}</div>
+                </div>
+                <div className="text-end">
+                  <div className="text-muted small">Diurnas</div>
+                  <div className="fw-semibold">{monthlyDayMinutes ? formatDuration(monthlyDayMinutes) : '—'}</div>
+                </div>
+                <div className="text-end">
+                  <div className="text-muted small">Nocturnas</div>
+                  <div className="fw-semibold">{monthlyNightMinutes ? formatDuration(monthlyNightMinutes) : '—'}</div>
+                </div>
+                <div className="text-end">
+                  <div className="text-muted small">Festivo autonómico</div>
+                  <div className="fw-semibold">
+                    {monthlyRegionalHolidayMinutes ? formatDuration(monthlyRegionalHolidayMinutes) : '—'}
+                  </div>
+                </div>
+                <div className="text-end">
+                  <div className="text-muted small">Festivo nacional</div>
+                  <div className="fw-semibold">
+                    {monthlyNationalHolidayMinutes ? formatDuration(monthlyNationalHolidayMinutes) : '—'}
+                  </div>
                 </div>
                 <Button variant="success" onClick={handleDownload} disabled={!rowsWithTotalsFiltered.length}>
                   Descargar

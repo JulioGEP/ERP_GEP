@@ -12,6 +12,8 @@ type ControlHorarioEntryPayload = {
   checkOutTime?: string | null;
 };
 
+type HolidayType = 'A' | 'N';
+
 function getTodayDateString(): string {
   return nowInMadridISO().slice(0, 10);
 }
@@ -97,6 +99,28 @@ export const handler = createHttpHandler(async (request) => {
       orderBy: [{ log_date: 'asc' }, { check_in_utc: 'asc' }],
     });
 
+    const holidayDays = await prisma.user_vacation_days.findMany({
+      where: {
+        user_id: { in: userIds },
+        type: { in: ['A', 'N'] },
+        date: {
+          gte: new Date(`${range.start}T00:00:00Z`),
+          lte: new Date(`${range.end}T00:00:00Z`),
+        },
+      },
+      select: {
+        user_id: true,
+        date: true,
+        type: true,
+      },
+    });
+
+    const holidayMap = new Map<string, HolidayType>();
+    holidayDays.forEach((holiday) => {
+      const holidayDate = holiday.date.toISOString().slice(0, 10);
+      holidayMap.set(`${holiday.user_id}-${holidayDate}`, holiday.type === 'N' ? 'N' : 'A');
+    });
+
     return successResponse({
       range,
       people: people.map((person) => ({
@@ -112,6 +136,7 @@ export const handler = createHttpHandler(async (request) => {
         date: log.log_date.toISOString().slice(0, 10),
         checkIn: toMadridISOString(log.check_in_utc),
         checkOut: toMadridISOString(log.check_out_utc),
+        holidayType: holidayMap.get(`${log.user_id}-${log.log_date.toISOString().slice(0, 10)}`) ?? null,
       })),
     });
   }

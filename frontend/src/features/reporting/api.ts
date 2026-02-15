@@ -211,6 +211,7 @@ export type ReportingControlHorarioEntry = {
   date: string;
   checkIn: string | null;
   checkOut: string | null;
+  holidayType: 'A' | 'N' | null;
 };
 
 export type ReportingControlHorarioResponse = {
@@ -269,6 +270,11 @@ function sanitizeReportingEntry(entry: unknown): ReportingControlHorarioEntry | 
     date,
     checkIn: sanitizeDate(raw.checkIn ?? raw.check_in),
     checkOut: sanitizeDate(raw.checkOut ?? raw.check_out),
+    holidayType: raw.holidayType === 'N' || raw.holiday_type === 'N'
+      ? 'N'
+      : raw.holidayType === 'A' || raw.holiday_type === 'A'
+        ? 'A'
+        : null,
   };
 }
 
