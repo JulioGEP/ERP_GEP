@@ -122,6 +122,81 @@ export async function fetchTrainerSelfHours(
   return getJson<TrainerSelfHoursResponse>(url);
 }
 
+export type ReportingTrainerControlHoursItem = {
+  trainerId: string;
+  trainerName: string;
+  sessionId: string;
+  sessionName: string;
+  sessionDate: string | null;
+  assignedHours: number;
+  loggedHours: number;
+  dayHours: number;
+  nightHours: number;
+  regionalHolidayHours: number;
+  nationalHolidayHours: number;
+  hasTimeLog: boolean;
+};
+
+export type ReportingTrainerControlHoursResponse = {
+  items: ReportingTrainerControlHoursItem[];
+};
+
+function sanitizeReportingTrainerControlHoursItem(entry: unknown): ReportingTrainerControlHoursItem | null {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const raw = entry as Record<string, unknown>;
+  const trainerId = sanitizeText(raw.trainerId);
+  const trainerName = sanitizeText(raw.trainerName);
+  const sessionId = sanitizeText(raw.sessionId);
+  const sessionName = sanitizeText(raw.sessionName);
+
+  if (!trainerId || !trainerName || !sessionId || !sessionName) {
+    return null;
+  }
+
+  return {
+    trainerId,
+    trainerName,
+    sessionId,
+    sessionName,
+    sessionDate: sanitizeDate(raw.sessionDate),
+    assignedHours: sanitizeNumber(raw.assignedHours),
+    loggedHours: sanitizeNumber(raw.loggedHours),
+    dayHours: sanitizeNumber(raw.dayHours),
+    nightHours: sanitizeNumber(raw.nightHours),
+    regionalHolidayHours: sanitizeNumber(raw.regionalHolidayHours),
+    nationalHolidayHours: sanitizeNumber(raw.nationalHolidayHours),
+    hasTimeLog: Boolean(raw.hasTimeLog),
+  };
+}
+
+export async function fetchReportingTrainerControlHours(
+  filters: TrainerHoursFilters = {},
+): Promise<ReportingTrainerControlHoursResponse> {
+  const params = new URLSearchParams();
+  if (filters.startDate) {
+    params.set('startDate', filters.startDate);
+  }
+  if (filters.endDate) {
+    params.set('endDate', filters.endDate);
+  }
+
+  const query = params.toString();
+  const url = query.length
+    ? `/reporting-control-horas-formadores?${query}`
+    : '/reporting-control-horas-formadores';
+  const data = await getJson<{ items?: unknown }>(url);
+  const items = Array.isArray(data?.items)
+    ? data.items
+        .map(sanitizeReportingTrainerControlHoursItem)
+        .filter((item): item is ReportingTrainerControlHoursItem => item !== null)
+    : [];
+
+  return { items };
+}
+
 export type ReportingControlHorarioPerson = {
   id: string;
   name: string;
