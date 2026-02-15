@@ -264,7 +264,7 @@ export default function ControlHorasFormadoresPage() {
     <section className="py-3">
       <Card className="shadow-sm">
         <Card.Header as="h1" className="h4 mb-0">
-          Control horas formadores externos
+          Control horario discontinuos
         </Card.Header>
         <Card.Body>
           <p className="text-muted">

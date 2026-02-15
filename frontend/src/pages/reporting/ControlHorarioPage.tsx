@@ -629,7 +629,7 @@ export default function ControlHorarioPage() {
     <section className="py-3">
       <Card className="shadow-sm">
         <Card.Header as="h1" className="h4 mb-0">
-          Control horario
+          Control horario fijos
         </Card.Header>
         <Card.Body>
           <p className="text-muted">

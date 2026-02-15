@@ -186,13 +186,13 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     children: [
       {
         key: 'Reporting/ControlHorasFormadores',
-        label: 'Control horas formadores',
-        path: '/reporting/control_horas_formadores',
+        label: 'Control horario discontinuos',
+        path: '/reporting/control_horario_discontinuos',
       },
       {
         key: 'Reporting/ControlHorario',
-        label: 'Control horario',
-        path: '/reporting/control_horario',
+        label: 'Control horario fijos',
+        path: '/reporting/control_horario_fijos',
       },
       {
         key: 'Reporting/Comparativa',
