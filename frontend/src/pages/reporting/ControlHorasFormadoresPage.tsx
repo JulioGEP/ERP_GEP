@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Alert, Card, Form, Spinner, Table } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
 import { isApiError } from '../../api/client';
 import {
   fetchReportingTrainerControlHours,
@@ -169,6 +170,20 @@ export default function ControlHorasFormadoresPage() {
       });
   }, [rows]);
 
+  const buildExtraCostsLink = (item: ReportingTrainerControlHoursItem) => {
+    const params = new URLSearchParams();
+    params.set('trainerId', item.trainerId);
+
+    if (filters.startDate) {
+      params.set('startDate', filters.startDate);
+    }
+    if (filters.endDate) {
+      params.set('endDate', filters.endDate);
+    }
+
+    return `/usuarios/costes_extra?${params.toString()}`;
+  };
+
   let content: JSX.Element;
   if (hasInvalidRange) {
     content = <Alert variant="warning">La fecha de inicio no puede ser posterior a la fecha de fin.</Alert>;
@@ -223,7 +238,9 @@ export default function ControlHorasFormadoresPage() {
                   {weekGroup.rows.map((item: ReportingTrainerControlHoursItem) => (
                     <tr key={`${item.trainerId}-${item.sessionId}-${item.sessionDate ?? 'no-date'}`}>
                       <td>{item.sessionDate ?? '—'}</td>
-                      <td>{item.trainerName}</td>
+                      <td>
+                        <Link to={buildExtraCostsLink(item)}>{item.trainerName}</Link>
+                      </td>
                       <td>{item.sessionName}</td>
                       <td className="text-end">{numberFormatter.format(item.assignedHours)}</td>
                       <td className="text-end">{numberFormatter.format(item.loggedHours)}</td>
