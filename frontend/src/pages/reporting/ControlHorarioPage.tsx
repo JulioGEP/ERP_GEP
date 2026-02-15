@@ -509,17 +509,28 @@ export default function ControlHorarioPage() {
     content = (
       <div className="table-responsive">
         <Table striped bordered hover className="align-middle">
+          <colgroup>
+            <col style={{ width: '20%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '22%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '10%' }} />
+          </colgroup>
           <thead>
             <tr>
               <th>Usuario</th>
               <th>Fecha</th>
               <th>Fichajes</th>
-              <th style={{ width: '12%' }}>Total</th>
-              <th style={{ width: '10%' }}>Diurnas</th>
-              <th style={{ width: '10%' }}>Nocturnas</th>
-              <th style={{ width: '12%' }}>Festivo autonómico</th>
-              <th style={{ width: '12%' }}>Festivo nacional</th>
-              <th style={{ width: '16%' }}>Acciones</th>
+              <th>Total</th>
+              <th>Diurnas</th>
+              <th>Nocturnas</th>
+              <th>Festivo autonómico</th>
+              <th>Festivo nacional</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
