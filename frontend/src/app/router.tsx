@@ -102,6 +102,7 @@ const ControlHorasPage = lazy(() => import('../pages/perfil/ControlHorasPage'));
 const ControlHorarioUserPage = lazy(() => import('../pages/controlHorario/ControlHorarioPage'));
 const ForbiddenPage = lazy(() => import('../pages/system/ForbiddenPage'));
 const HorasFormadoresPage = lazy(() => import('../pages/reporting/HorasFormadoresPage'));
+const ControlHorasFormadoresPage = lazy(() => import('../pages/reporting/ControlHorasFormadoresPage'));
 const ControlHorarioPage = lazy(() => import('../pages/reporting/ControlHorarioPage'));
 const CostesExtraPage = lazy(() => import('../pages/reporting/CostesExtraPage'));
 const LogsPage = lazy(() => import('../pages/reporting/LogsPage'));
@@ -709,7 +710,7 @@ export function AppRouter({
             <GuardedRoute
               path="/reporting/control_horas_formadores"
               roles={['Admin']}
-              element={<HorasFormadoresPage />}
+              element={<ControlHorasFormadoresPage />}
             />
           }
         />
