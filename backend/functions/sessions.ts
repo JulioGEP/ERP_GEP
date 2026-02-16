@@ -1005,6 +1005,8 @@ export const handler = async (event: any) => {
       normalizePipelineKey('Formación Empresa'),
       normalizePipelineKey('Formación Empresas'),
       normalizePipelineKey('GEP Services'),
+      normalizePipelineKey('Preventivos'),
+      normalizePipelineKey('PCI'),
     ]);
 
     const isAllowedPipeline = (label: unknown, id: unknown): boolean => {
