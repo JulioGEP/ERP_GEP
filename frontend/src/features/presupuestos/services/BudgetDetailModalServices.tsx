@@ -95,6 +95,19 @@ function mergeDealDetailData(current: DealDetail | undefined, next: DealDetail):
 const EMPTY_DOCUMENTS: DealDocument[] = [];
 const FALLBACK_PIPELINE_LABEL = 'Preventivos';
 
+function normalizeComparableValue(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase();
+}
+
+function isPciCategoryProduct(product: DealDetailViewModel['products'][number]): boolean {
+  return normalizeComparableValue(product?.categoryLabel) === 'pci';
+}
+
+function isLegacyExtraProduct(product: DealDetailViewModel['products'][number]): boolean {
+  const normalizedCode = normalizeComparableValue(product?.code ?? null);
+  return normalizedCode.startsWith('ext-') || normalizedCode.startsWith('ces-');
+}
+
 interface Props {
   dealId: string | null;
   summary?: DealSummary | null;
@@ -607,15 +620,15 @@ export function BudgetDetailModalServices({
       : deal?.training_address ?? summary?.training_address ?? null;
 
   const trainingProducts = useMemo(
-    () =>
-      detailProducts.filter((product) => {
-        const code = product?.code ?? '';
-        if (typeof code !== 'string') return true;
+    () => {
+      const isPciPipeline = normalizeComparableValue(pipelineLabel) === 'pci';
+      if (isPciPipeline) {
+        return detailProducts.filter((product) => isPciCategoryProduct(product));
+      }
 
-        const normalized = code.toLowerCase();
-        return !normalized.startsWith('ext-') && !normalized.startsWith('ces-');
-      }),
-    [detailProducts]
+      return detailProducts.filter((product) => !isLegacyExtraProduct(product));
+    },
+    [detailProducts, pipelineLabel]
   );
 
   const dirtyDeal = !!initialEditable && !!form && JSON.stringify(initialEditable) !== JSON.stringify(form);
@@ -635,13 +648,14 @@ export function BudgetDetailModalServices({
   const clientEmailDisplay = detailView.clientEmail ?? '';
   const comercialDisplay = detailView.comercial ?? deal?.comercial ?? summary?.comercial ?? '';
 
-  const extraProducts = detailProducts.filter((product) => {
-    const code = product?.code ?? '';
-    if (typeof code !== 'string') return false;
+  const extraProducts = useMemo(() => {
+    const isPciPipeline = normalizeComparableValue(pipelineLabel) === 'pci';
+    if (isPciPipeline) {
+      return detailProducts.filter((product) => !isPciCategoryProduct(product));
+    }
 
-    const normalized = code.toLowerCase();
-    return normalized.startsWith('ext-') || normalized.startsWith('ces-');
-  });
+    return detailProducts.filter((product) => isLegacyExtraProduct(product));
+  }, [detailProducts, pipelineLabel]);
 
   const modalTitle = organizationDisplay || 'Detalle presupuesto';
   const truncatedModalTitle = truncateText(modalTitle, 60);

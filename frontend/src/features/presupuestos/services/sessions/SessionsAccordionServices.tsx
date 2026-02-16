@@ -831,6 +831,11 @@ function matchesSessionPrefix(value: unknown): boolean {
   return value.trim().toLowerCase().startsWith(SESSION_PRODUCT_PREFIX);
 }
 
+function matchesPciCategory(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  return value.trim().toLowerCase() === 'pci';
+}
+
 type ApplicableProductInfo = {
   id: string;
   name: string | null;
@@ -844,7 +849,8 @@ function isApplicableProduct(product: DealProduct): product is DealProduct & { i
   if (!id) return false;
   const codeMatches = matchesSessionPrefix(product?.code ?? null);
   const nameMatches = matchesSessionPrefix(product?.name ?? null);
-  return codeMatches || nameMatches;
+  const categoryMatches = matchesPciCategory(product?.categoryLabel ?? null);
+  return codeMatches || nameMatches || categoryMatches;
 }
 
 function formatDateForInput(iso: string | null): string | null {
