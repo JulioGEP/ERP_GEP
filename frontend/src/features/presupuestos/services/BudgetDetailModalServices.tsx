@@ -99,8 +99,9 @@ function normalizeComparableValue(value: string | null | undefined): string {
   return (value ?? '').trim().toLowerCase();
 }
 
-function isPciCategoryProduct(product: DealDetailViewModel['products'][number]): boolean {
-  return normalizeComparableValue(product?.categoryLabel) === 'pci';
+function isSessionCategoryProduct(product: DealDetailViewModel['products'][number]): boolean {
+  const normalizedCategory = normalizeComparableValue(product?.categoryLabel);
+  return normalizedCategory === 'pci' || normalizedCategory === 'pau';
 }
 
 function isLegacyExtraProduct(product: DealDetailViewModel['products'][number]): boolean {
@@ -623,7 +624,7 @@ export function BudgetDetailModalServices({
     () => {
       const isPciPipeline = normalizeComparableValue(pipelineLabel) === 'pci';
       if (isPciPipeline) {
-        return detailProducts.filter((product) => isPciCategoryProduct(product));
+        return detailProducts.filter((product) => isSessionCategoryProduct(product));
       }
 
       return detailProducts.filter((product) => !isLegacyExtraProduct(product));
@@ -651,7 +652,7 @@ export function BudgetDetailModalServices({
   const extraProducts = useMemo(() => {
     const isPciPipeline = normalizeComparableValue(pipelineLabel) === 'pci';
     if (isPciPipeline) {
-      return detailProducts.filter((product) => !isPciCategoryProduct(product));
+      return detailProducts.filter((product) => !isSessionCategoryProduct(product));
     }
 
     return detailProducts.filter((product) => isLegacyExtraProduct(product));

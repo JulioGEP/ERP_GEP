@@ -831,9 +831,10 @@ function matchesSessionPrefix(value: unknown): boolean {
   return value.trim().toLowerCase().startsWith(SESSION_PRODUCT_PREFIX);
 }
 
-function matchesPciCategory(value: unknown): boolean {
+function matchesSessionCategory(value: unknown): boolean {
   if (typeof value !== 'string') return false;
-  return value.trim().toLowerCase() === 'pci';
+  const normalizedCategory = value.trim().toLowerCase();
+  return normalizedCategory === 'pci' || normalizedCategory === 'pau';
 }
 
 type ApplicableProductInfo = {
@@ -849,7 +850,7 @@ function isApplicableProduct(product: DealProduct): product is DealProduct & { i
   if (!id) return false;
   const codeMatches = matchesSessionPrefix(product?.code ?? null);
   const nameMatches = matchesSessionPrefix(product?.name ?? null);
-  const categoryMatches = matchesPciCategory(product?.categoryLabel ?? null);
+  const categoryMatches = matchesSessionCategory(product?.categoryLabel ?? null);
   return codeMatches || nameMatches || categoryMatches;
 }
 
