@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { isApiError } from '../../api/client';
 import {
   createReportingControlHorarioEntry,
+  deleteReportingControlHorarioEntry,
   fetchReportingControlHorario,
   updateReportingControlHorarioEntry,
   type ReportingControlHorarioEntry,
@@ -197,6 +198,13 @@ export default function ControlHorarioPage() {
       setModalState(null);
       setCheckInTime('');
       setCheckOutTime('');
+      queryClient.invalidateQueries({ queryKey: ['reporting-control-horario'] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (entryId: string) => deleteReportingControlHorarioEntry(entryId),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reporting-control-horario'] });
     },
   });
@@ -432,6 +440,12 @@ export default function ControlHorarioPage() {
     setCheckOutTime(toTimeInputValue(entry?.checkOut ?? null));
   };
 
+  const handleDeleteEntry = (entry: ReportingControlHorarioEntry) => {
+    const confirmed = window.confirm('¿Seguro que quieres eliminar este fichaje? Esta acción no se puede deshacer.');
+    if (!confirmed) return;
+    deleteMutation.mutate(entry.id);
+  };
+
   const handleDownload = () => {
     if (!rowsWithTotalsFiltered.length) return;
     const headers = [
@@ -577,6 +591,14 @@ export default function ControlHorarioPage() {
                                   onClick={() => handleOpenModal(row.person, row.date, entry)}
                                 >
                                   Editar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline-danger"
+                                  onClick={() => handleDeleteEntry(entry)}
+                                  disabled={deleteMutation.isPending}
+                                >
+                                  Eliminar
                                 </Button>
                               </div>
                             ))}

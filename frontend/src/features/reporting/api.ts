@@ -1,4 +1,4 @@
-import { getJson, postJson, putJson } from '../../api/client';
+import { delJson, getJson, postJson, putJson } from '../../api/client';
 
 function sanitizeText(value: unknown): string | null {
   if (typeof value !== 'string') {
@@ -343,6 +343,12 @@ export async function updateReportingControlHorarioEntry(
     throw new Error('Respuesta inválida del servidor.');
   }
   return entry;
+}
+
+export async function deleteReportingControlHorarioEntry(id: string): Promise<void> {
+  await delJson(`/reporting-control-horario`, { id }, {
+    method: 'DELETE',
+  });
 }
 
 function sanitizeAuditLogEntry(entry: unknown): AuditLogEntry | null {
