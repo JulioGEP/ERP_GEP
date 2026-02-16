@@ -315,6 +315,7 @@ export function BudgetDetailModal({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
+  const [isPoDocument, setIsPoDocument] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -412,6 +413,7 @@ export function BudgetDetailModal({
     if (!canUploadDocument) return;
     setPendingUploadFile(null);
     setIsDragActive(false);
+    setIsPoDocument(false);
     setShowUploadDialog(true);
   };
 
@@ -420,6 +422,7 @@ export function BudgetDetailModal({
     setShowUploadDialog(false);
     setPendingUploadFile(null);
     setIsDragActive(false);
+    setIsPoDocument(false);
   };
 
   const toFileArray = (files: FileList | File[] | null | undefined): File[] =>
@@ -500,11 +503,17 @@ export function BudgetDetailModal({
     if (!deal?.deal_id || !pendingUploadFile) return;
     try {
       setUploadingDocument(true);
-      await uploadManualDocument(deal.deal_id, pendingUploadFile, { id: userId, name: userName });
+      await uploadManualDocument(
+        deal.deal_id,
+        pendingUploadFile,
+        { id: userId, name: userName },
+        { isPoDocument },
+      );
       await qc.invalidateQueries({ queryKey: detailQueryKey });
       setShowUploadDialog(false);
       setPendingUploadFile(null);
       setIsDragActive(false);
+      setIsPoDocument(false);
     } catch (error: unknown) {
       console.error('[BudgetDetailModal] Error al subir documento del presupuesto', error);
       const fallbackMessage = 'No se pudo subir el documento';
@@ -1644,6 +1653,15 @@ export function BudgetDetailModal({
             )}
           </div>
         </div>
+        <Form.Check
+          className="mt-3"
+          id="upload-po-document"
+          type="checkbox"
+          label="¿Es un documento de PO?"
+          checked={isPoDocument}
+          onChange={(event) => setIsPoDocument(event.target.checked)}
+          disabled={uploadingDocument}
+        />
       </Modal.Body>
       <Modal.Footer>
         <Button

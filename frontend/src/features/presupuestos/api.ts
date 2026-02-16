@@ -1563,10 +1563,24 @@ async function uploadFileToUrl(uploadUrl: string, file: File): Promise<void> {
   }
 }
 
+const PO_DOCUMENT_PREFIX = 'PO - DOC - ';
+
+function buildCategorizedFileName(fileName: string, isPoDocument?: boolean): string {
+  const normalizedName = String(fileName ?? '').trim();
+  if (!isPoDocument || !normalizedName.length) {
+    return normalizedName;
+  }
+
+  return normalizedName.startsWith(PO_DOCUMENT_PREFIX)
+    ? normalizedName
+    : `${PO_DOCUMENT_PREFIX}${normalizedName}`;
+}
+
 export async function uploadManualDocument(
   dealId: string,
   file: File,
-  user?: { id: string; name?: string }
+  user?: { id: string; name?: string },
+  options?: { isPoDocument?: boolean },
 ): Promise<void> {
   const normalizedId = String(dealId ?? "").trim();
   if (!normalizedId) {
@@ -1576,17 +1590,20 @@ export async function uploadManualDocument(
   const headers: Record<string, string> = {};
   if (user?.id) headers["X-User-Id"] = user.id;
   if (user?.name) headers["X-User-Name"] = user.name;
+  const categorizedFileName = buildCategorizedFileName(file.name, options?.isPoDocument);
 
   if (file.size > MANUAL_INLINE_UPLOAD_MAX_BYTES) {
     try {
-      const { uploadUrl, storageKey } = await prepareDealDocumentUpload(normalizedId, file, headers);
+      const fileForUploadUrl =
+        categorizedFileName === file.name ? file : new File([file], categorizedFileName, { type: file.type });
+      const { uploadUrl, storageKey } = await prepareDealDocumentUpload(normalizedId, fileForUploadUrl, headers);
       await uploadFileToUrl(uploadUrl, file);
 
       await request(`/deal_documents/${encodeURIComponent(normalizedId)}/manual`, {
         method: "POST",
         headers,
         body: JSON.stringify({
-          fileName: file.name,
+          fileName: categorizedFileName,
           mimeType: file.type,
           fileSize: file.size,
           storageKey,
@@ -1606,7 +1623,7 @@ export async function uploadManualDocument(
     method: "POST",
     headers,
     body: JSON.stringify({
-      fileName: file.name,
+      fileName: categorizedFileName,
       mimeType: file.type,
       fileSize: file.size,
       contentBase64: base64,
@@ -2164,6 +2181,7 @@ export async function uploadSessionDocuments(params: {
   sessionId: string;
   files: File[];
   shareWithTrainer: boolean;
+  isPoDocument?: boolean;
   trainerExpense?: boolean;
   trainerName?: string | null;
   expenseFolderName?: string | null;
@@ -2196,7 +2214,7 @@ export async function uploadSessionDocuments(params: {
 
   const payloadFiles = await Promise.all(
     files.map(async (file) => ({
-      fileName: file.name,
+      fileName: buildCategorizedFileName(file.name, params.isPoDocument),
       mimeType: file.type,
       fileSize: file.size,
       contentBase64: await blobOrFileToBase64(file),

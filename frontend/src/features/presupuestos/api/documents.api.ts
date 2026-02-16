@@ -11,6 +11,19 @@ export const SESSION_DOCUMENT_SIZE_LIMIT_BYTES = 4 * 1024 * 1024;
 export const SESSION_DOCUMENT_SIZE_LIMIT_LABEL = '4 MB';
 export const SESSION_DOCUMENT_SIZE_LIMIT_MESSAGE = `Archivo demasiado pesado, máximo ${SESSION_DOCUMENT_SIZE_LIMIT_LABEL}`;
 
+const PO_DOCUMENT_PREFIX = 'PO - DOC - ';
+
+function buildCategorizedFileName(fileName: string, isPoDocument?: boolean): string {
+  const normalizedName = String(fileName ?? '').trim();
+  if (!isPoDocument || !normalizedName.length) {
+    return normalizedName;
+  }
+
+  return normalizedName.startsWith(PO_DOCUMENT_PREFIX)
+    ? normalizedName
+    : `${PO_DOCUMENT_PREFIX}${normalizedName}`;
+}
+
 export async function fetchSessionDocuments(
   dealId: string,
   sessionId: string,
@@ -38,6 +51,7 @@ export async function uploadSessionDocuments(params: {
   sessionId: string;
   files: File[];
   shareWithTrainer: boolean;
+  isPoDocument?: boolean;
   trainerExpense?: boolean;
   trainerId?: string | null;
   trainerName?: string | null;
@@ -72,7 +86,7 @@ export async function uploadSessionDocuments(params: {
 
   const payloadFiles = await Promise.all(
     files.map(async (file) => ({
-      fileName: file.name,
+      fileName: buildCategorizedFileName(file.name, params.isPoDocument),
       mimeType: file.type,
       fileSize: file.size,
       contentBase64: await blobOrFileToBase64(file),

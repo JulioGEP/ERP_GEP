@@ -985,6 +985,7 @@ function SessionDocumentsAccordionItem({
   const [updatingDocumentId, setUpdatingDocumentId] = useState<string | null>(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [isPoDocument, setIsPoDocument] = useState(false);
   const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
   const [driveUrl, setDriveUrl] = useState<string | null>(normalizeDriveUrlValue(initialDriveUrl));
@@ -1009,12 +1010,13 @@ function SessionDocumentsAccordionItem({
   }, [documentsQuery.data]);
 
   const uploadMutation = useMutation({
-    mutationFn: (input: { files: File[]; shareWithTrainer: boolean }) =>
+    mutationFn: (input: { files: File[]; shareWithTrainer: boolean; isPoDocument: boolean }) =>
       uploadSessionDocuments({
         dealId,
         sessionId,
         files: input.files,
         shareWithTrainer: input.shareWithTrainer,
+        isPoDocument: input.isPoDocument,
       }),
   });
 
@@ -1091,6 +1093,7 @@ function SessionDocumentsAccordionItem({
     setPendingUploadFiles([]);
     setIsDragActive(false);
     setDocumentError(null);
+    setIsPoDocument(false);
     setShowUploadDialog(true);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -1103,6 +1106,7 @@ function SessionDocumentsAccordionItem({
     setPendingUploadFiles([]);
     setIsDragActive(false);
     setDocumentError(null);
+    setIsPoDocument(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -1149,7 +1153,11 @@ function SessionDocumentsAccordionItem({
     if (!files.length) return;
     setDocumentError(null);
     try {
-      const result = await uploadMutation.mutateAsync({ files, shareWithTrainer: false });
+      const result = await uploadMutation.mutateAsync({
+        files,
+        shareWithTrainer: false,
+        isPoDocument,
+      });
       const normalizedLink = normalizeDriveUrlValue(result?.driveUrl ?? null);
       setDriveUrl(normalizedLink);
       onNotify?.({
@@ -1162,6 +1170,7 @@ function SessionDocumentsAccordionItem({
       setShowUploadDialog(false);
       setPendingUploadFiles([]);
       setIsDragActive(false);
+      setIsPoDocument(false);
     } catch (error: unknown) {
       const message = formatErrorMessage(error, 'No se pudo subir el documento');
       console.error('[SessionDocumentsAccordionItem] Error al subir documentos de sesión', error);
@@ -1512,6 +1521,15 @@ function SessionDocumentsAccordionItem({
             Tamaño máximo total permitido: {SESSION_DOCUMENT_SIZE_LIMIT_LABEL}
           </p>
         </div>
+        <Form.Check
+          className="mt-3"
+          id={`upload-po-session-document-${sessionId}`}
+          type="checkbox"
+          label="¿Es un documento de PO?"
+          checked={isPoDocument}
+          onChange={(event) => setIsPoDocument(event.target.checked)}
+          disabled={uploadPending}
+        />
       </Modal.Body>
       <Modal.Footer>
         <Button
