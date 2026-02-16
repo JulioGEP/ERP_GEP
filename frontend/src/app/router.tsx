@@ -38,6 +38,7 @@ const BudgetsPage = lazy(() => import('../pages/presupuestos/BudgetsPage'));
 const AllBudgetsPage = lazy(() => import('../pages/presupuestos/AllBudgetsPage'));
 const UnworkedBudgetsPage = lazy(() => import('../pages/presupuestos/UnworkedBudgetsPage'));
 const UnplannedSessionsPage = lazy(() => import('../pages/presupuestos/UnplannedSessionsPage'));
+const PosDocumentsPage = lazy(() => import('../pages/presupuestos/PosDocumentsPage'));
 const MaterialsBudgetsPage = lazy(() => import('../pages/materiales/MaterialsBudgetsPage'));
 const MaterialsBoardPage = lazy(() => import('../pages/materiales/MaterialsBoardPage'));
 const MaterialsPendingProductsPage = lazy(
@@ -238,6 +239,11 @@ export function AppRouter({
               element={<UnplannedSessionsPage {...unplannedSessionsPageProps} />}
             />
           }
+        />
+
+        <Route
+          path="/presupuestos/pos"
+          element={<GuardedRoute path="/presupuestos/pos" element={<PosDocumentsPage />} />}
         />
 
         <Route
