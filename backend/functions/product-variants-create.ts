@@ -9,7 +9,25 @@ import { errorResponse, preflightResponse, successResponse } from './_shared/res
 import { toMadridISOString } from './_shared/timezone';
 import { getWooStockStatusFromDb } from './_shared/variant-defaults';
 
-const WOO_BASE = (process.env.WOO_BASE_URL || '').replace(/\/$/, '');
+function resolveWooBaseUrl(): string {
+  const raw = (process.env.WOO_BASE_URL || '').trim();
+  if (!raw) return '';
+
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return raw.replace(/\/$/, '');
+  }
+
+  if (parsed.hostname.toLowerCase() === 'www.gepcoformacion.es') {
+    parsed.hostname = 'gepcoformacion.es';
+  }
+
+  return parsed.toString().replace(/\/$/, '');
+}
+
+const WOO_BASE = resolveWooBaseUrl();
 const WOO_KEY = process.env.WOO_KEY || '';
 const WOO_SECRET = process.env.WOO_SECRET || '';
 
