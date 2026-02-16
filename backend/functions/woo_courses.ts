@@ -106,6 +106,7 @@ const WOO_KEY = process.env.WOO_KEY || '';
 const WOO_SECRET = process.env.WOO_SECRET || '';
 
 const DEFAULT_SYNC_CONCURRENCY = 3;
+const DEFAULT_WOO_TIMEOUT_MS = 20000;
 
 const ESSENTIAL_VARIATION_FIELDS = new Set([
   'id',
@@ -499,6 +500,115 @@ function buildWooUrl(resource: string, params: Record<string, string | number | 
   return url;
 }
 
+type WooAuthMode = 'header' | 'query';
+
+function buildWooRequestUrl(
+  resource: string,
+  params: Record<string, string | number | undefined>,
+  authMode: WooAuthMode,
+) {
+  const url = buildWooUrl(resource, params);
+  if (authMode === 'query') {
+    url.searchParams.set('consumer_key', WOO_KEY);
+    url.searchParams.set('consumer_secret', WOO_SECRET);
+  }
+  return url;
+}
+
+function buildWooAuthHeaders(authMode: WooAuthMode): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  };
+
+  if (authMode === 'header') {
+    const authToken = Buffer.from(`${WOO_KEY}:${WOO_SECRET}`).toString('base64');
+    headers.Authorization = `Basic ${authToken}`;
+  }
+
+  return headers;
+}
+
+async function requestWooWithAuthFallback(
+  resource: string,
+  params: Record<string, string | number | undefined>,
+  productIdForLog: string,
+): Promise<{ response: Response; data: unknown; authMode: WooAuthMode }> {
+  const authModes: WooAuthMode[] = ['header', 'query'];
+  let lastError: Error | null = null;
+
+  for (const authMode of authModes) {
+    const url = buildWooRequestUrl(resource, params, authMode);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), DEFAULT_WOO_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url.toString(), {
+        headers: buildWooAuthHeaders(authMode),
+        signal: controller.signal,
+      });
+
+      const text = await response.text();
+      let data: unknown = null;
+
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch (error) {
+          console.error('[woo_courses] invalid JSON response', {
+            url: url.toString(),
+            authMode,
+            error,
+          });
+          throw new Error('Respuesta JSON inválida de WooCommerce');
+        }
+      }
+
+      if (!response.ok) {
+        const shouldTryNextAuthMode = authMode === 'header' && (response.status === 401 || response.status === 403);
+
+        if (shouldTryNextAuthMode) {
+          console.warn('[woo_courses] retrying WooCommerce request with query auth', {
+            productId: productIdForLog,
+            status: response.status,
+          });
+          continue;
+        }
+
+        throw new Error(formatWooErrorMessage('Error al consultar WooCommerce', response.status, data));
+      }
+
+      return { response, data, authMode };
+    } catch (error) {
+      const isAbort = error instanceof Error && error.name === 'AbortError';
+      const message = isAbort ? 'La petición a WooCommerce ha excedido el tiempo máximo de espera' : null;
+
+      lastError = error instanceof Error ? error : new Error('Error inesperado al consultar WooCommerce');
+
+      console.error('[woo_courses] network/error while fetching variations', {
+        productId: productIdForLog,
+        authMode,
+        error,
+      });
+
+      if (message) {
+        lastError = new Error(message);
+      }
+
+      if (authMode === 'query') {
+        break;
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  throw new Error('No se pudo conectar con WooCommerce');
+}
+
 function buildWooVariationsCurl(productId: bigint): string {
   const resource = `products/${productId.toString()}/variations`;
   const url = buildWooUrl(resource, { per_page: 100, page: 1 });
@@ -513,49 +623,39 @@ async function fetchWooVariations(productId: bigint): Promise<SanitizedVariation
   const resource = `products/${productId.toString()}/variations`;
   const perPage = 100;
   const all: SanitizedVariation[] = [];
-  const authToken = Buffer.from(`${WOO_KEY}:${WOO_SECRET}`).toString('base64');
+  let totalPagesFromHeader: number | null = null;
 
   for (let page = 1; ; page += 1) {
-    const url = buildWooUrl(resource, { per_page: perPage, page });
-    let response: Response;
-
-    try {
-      response = await fetch(url.toString(), {
-        headers: {
-          Authorization: `Basic ${authToken}`,
-        },
-      });
-    } catch (error) {
-      console.error('[woo_courses] network error while fetching variations', {
-        productId: productId.toString(),
-        error,
-      });
-      throw new Error('No se pudo conectar con WooCommerce');
-    }
-
-    const text = await response.text();
-    let data: unknown = null;
-
-    if (text) {
-      try {
-        data = JSON.parse(text);
-      } catch (error) {
-        console.error('[woo_courses] invalid JSON response', { url: url.toString(), error });
-        throw new Error('Respuesta JSON inválida de WooCommerce');
-      }
-    }
-
-    if (!response.ok) {
-      throw new Error(
-        formatWooErrorMessage('Error al consultar WooCommerce', response.status, data),
-      );
-    }
+    const { response, data, authMode } = await requestWooWithAuthFallback(
+      resource,
+      { per_page: perPage, page },
+      productId.toString(),
+    );
 
     const rawArray = Array.isArray(data) ? data : [];
     const sanitized = sanitizeVariationList(rawArray);
     all.push(...sanitized);
 
-    if (!Array.isArray(data) || rawArray.length < perPage) break;
+    if (totalPagesFromHeader === null) {
+      const totalPagesHeader = response.headers.get('x-wp-totalpages') ?? response.headers.get('X-WP-TotalPages');
+      const parsedTotalPages = totalPagesHeader ? Number.parseInt(totalPagesHeader, 10) : Number.NaN;
+      totalPagesFromHeader = Number.isFinite(parsedTotalPages) && parsedTotalPages > 0 ? parsedTotalPages : null;
+
+      if (totalPagesFromHeader !== null) {
+        console.info('[woo_courses] WooCommerce pagination metadata detected', {
+          productId: productId.toString(),
+          authMode,
+          totalPages: totalPagesFromHeader,
+        });
+      }
+    }
+
+    if (!Array.isArray(data)) break;
+    if (totalPagesFromHeader !== null) {
+      if (page >= totalPagesFromHeader) break;
+      continue;
+    }
+    if (rawArray.length < perPage) break;
   }
 
   return all;
