@@ -109,6 +109,8 @@ const MADRID_TIMEZONE = 'Europe/Madrid';
 
 const PIPELINE_KEYS_ALLOWED = new Set([
   'gep services',
+  'preventivos',
+  'pci',
   'formacion empresa',
   'formacion empresas',
 ]);
