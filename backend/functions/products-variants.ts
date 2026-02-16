@@ -730,12 +730,9 @@ async function ensureVariantResourcesAvailable(
   return null;
 }
 
-const WOO_BASE = (process.env.WOO_BASE_URL || '').trim().replace(/\/$/, '');
+const WOO_BASE = (process.env.WOO_BASE_URL || '').replace(/\/$/, '');
 const WOO_KEY = process.env.WOO_KEY || '';
 const WOO_SECRET = process.env.WOO_SECRET || '';
-const WOO_ALLOW_QUERY_AUTH_FALLBACK =
-  String(process.env.WOO_ALLOW_QUERY_AUTH_FALLBACK || 'true').trim().toLowerCase() !== 'false';
-let wooConfigLogPrinted = false;
 
 type VariantDeletionResult = { success: boolean; message?: string };
 
@@ -748,88 +745,6 @@ type WooVariationAttribute = {
 
 function ensureWooConfigured() {
   if (!WOO_BASE || !WOO_KEY || !WOO_SECRET) throw new Error('WooCommerce configuration missing');
-}
-
-function summarizeWooCredential(rawValue: string, expectedPrefix: string) {
-  const trimmed = String(rawValue || '').trim();
-  const hasPlaceholder = /[<>]/.test(trimmed);
-  return {
-    length: trimmed.length,
-    prefix: trimmed.slice(0, 5),
-    hasExpectedPrefix: trimmed.startsWith(expectedPrefix),
-    hadTrimSpaces: trimmed !== rawValue,
-    hasPlaceholder,
-  };
-}
-
-function logWooConfigurationSummary() {
-  if (wooConfigLogPrinted) return;
-  wooConfigLogPrinted = true;
-
-  const host = (() => {
-    if (!WOO_BASE) return null;
-    try {
-      return new URL(WOO_BASE).host;
-    } catch {
-      return null;
-    }
-  })();
-
-  const keySummary = summarizeWooCredential(WOO_KEY, 'ck_');
-  const secretSummary = summarizeWooCredential(WOO_SECRET, 'cs_');
-  console.info('[products-variants] Woo config summary', {
-    baseHost: host,
-    baseConfigured: Boolean(WOO_BASE),
-    allowQueryAuthFallback: WOO_ALLOW_QUERY_AUTH_FALLBACK,
-    key: keySummary,
-    secret: secretSummary,
-  });
-}
-
-function getNormalizedWooCredentials() {
-  logWooConfigurationSummary();
-
-  const key = String(WOO_KEY || '').trim();
-  const secret = String(WOO_SECRET || '').trim();
-
-  if (!key || !secret) {
-    throw new Error('WooCommerce configuration missing');
-  }
-  if (/[<>]/.test(key) || /[<>]/.test(secret)) {
-    throw new Error('WooCommerce credentials include placeholder markers');
-  }
-  if (!key.startsWith('ck_') || !secret.startsWith('cs_')) {
-    throw new Error('WooCommerce credentials format is invalid');
-  }
-
-  return { key, secret };
-}
-
-function buildWooBasicAuthorizationHeader(): string {
-  const { key, secret } = getNormalizedWooCredentials();
-  const token = Buffer.from(`${key}:${secret}`).toString('base64');
-  return `Basic ${token}`;
-}
-
-function withWooQueryAuth(url: string): string {
-  const { key, secret } = getNormalizedWooCredentials();
-  const parsed = new URL(url);
-  parsed.searchParams.set('consumer_key', key);
-  parsed.searchParams.set('consumer_secret', secret);
-  return parsed.toString();
-}
-
-function parseWooErrorCode(data: unknown): string | null {
-  if (!data || typeof data !== 'object') return null;
-  const value = (data as Record<string, unknown>).code;
-  if (typeof value !== 'string') return null;
-  return value.trim() || null;
-}
-
-function shouldRetryWithQueryAuth(status: number, data: unknown): boolean {
-  if (!WOO_ALLOW_QUERY_AUTH_FALLBACK || status !== 401) return false;
-  const code = parseWooErrorCode(data);
-  return code === 'woocommerce_rest_cannot_view' || code === 'woocommerce_rest_authentication_error';
 }
 
 function parseVariantIdFromPath(path: string): string | null {
@@ -883,18 +798,17 @@ type VariantWooUpdateInput = Pick<
 async function fetchWooVariation(
   productWooId: bigint,
   variantWooId: bigint,
-  authHeader: string,
+  authToken: string,
 ): Promise<{ attributes: WooVariationAttribute[] }> {
   const productId = productWooId.toString();
   const variationId = variantWooId.toString();
   const url = `${WOO_BASE}/wp-json/wc/v3/products/${productId}/variations/${variationId}`;
 
   let response: FetchResponse;
-  let usedQueryAuthFallback = false;
   try {
     response = await fetch(url, {
       headers: {
-        Authorization: authHeader,
+        Authorization: `Basic ${authToken}`,
         Accept: 'application/json',
       },
     });
@@ -923,38 +837,12 @@ async function fetchWooVariation(
     }
   }
 
-  if (!response.ok && shouldRetryWithQueryAuth(response.status, data)) {
-    try {
-      const fallbackUrl = withWooQueryAuth(url);
-      response = await fetch(fallbackUrl, {
-        headers: { Accept: 'application/json' },
-      });
-      usedQueryAuthFallback = true;
-      const fallbackText = await response.text();
-      data = fallbackText ? JSON.parse(fallbackText) : {};
-    } catch (fallbackError) {
-      console.error('[products-variants] Woo query-auth fallback failed while fetching variation', {
-        productId,
-        variationId,
-        fallbackError,
-      });
-      throw new Error('No se pudo autenticar con WooCommerce');
-    }
-  }
-
   if (!response.ok) {
     const message =
       data && typeof data === 'object' && typeof data.message === 'string'
         ? data.message
         : `Error al consultar WooCommerce (status ${response.status})`;
     throw new Error(message);
-  }
-
-  if (usedQueryAuthFallback) {
-    console.warn('[products-variants] Woo query-auth fallback used while fetching variation', {
-      productId,
-      variationId,
-    });
   }
 
   const attributes = Array.isArray(data?.attributes) ? (data.attributes as WooVariationAttribute[]) : [];
@@ -968,7 +856,7 @@ async function updateVariantInWooCommerce(
 ): Promise<void> {
   ensureWooConfigured();
 
-  const token = buildWooBasicAuthorizationHeader();
+  const token = Buffer.from(`${WOO_KEY}:${WOO_SECRET}`).toString('base64');
   const productId = productWooId.toString();
   const variationId = variantWooId.toString();
   const url = `${WOO_BASE}/wp-json/wc/v3/products/${productId}/variations/${variationId}`;
@@ -1053,12 +941,11 @@ async function updateVariantInWooCommerce(
   if (!Object.keys(body).length) return;
 
   let response: FetchResponse;
-  let usedQueryAuthFallback = false;
   try {
     response = await fetch(url, {
       method: 'PUT',
       headers: {
-        Authorization: token,
+        Authorization: `Basic ${token}`,
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
@@ -1091,44 +978,12 @@ async function updateVariantInWooCommerce(
     }
   }
 
-  if (!response.ok && shouldRetryWithQueryAuth(response.status, data)) {
-    try {
-      const fallbackUrl = withWooQueryAuth(url);
-      response = await fetch(fallbackUrl, {
-        method: 'PUT',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-      usedQueryAuthFallback = true;
-      const fallbackText = await response.text();
-      data = fallbackText ? JSON.parse(fallbackText) : {};
-    } catch (fallbackError) {
-      console.error('[products-variants] Woo query-auth fallback failed while updating variation', {
-        productId,
-        variationId,
-        updates,
-        fallbackError,
-      });
-      throw new Error('No se pudo autenticar con WooCommerce');
-    }
-  }
-
   if (!response.ok) {
     const message =
       data && typeof data === 'object' && typeof data.message === 'string'
         ? data.message
         : `Error al actualizar la variante en WooCommerce (status ${response.status})`;
     throw new Error(message);
-  }
-
-  if (usedQueryAuthFallback) {
-    console.warn('[products-variants] Woo query-auth fallback used while updating variation', {
-      productId,
-      variationId,
-    });
   }
 }
 
@@ -1138,18 +993,17 @@ async function deleteVariantFromWooCommerce(
 ): Promise<VariantDeletionResult> {
   ensureWooConfigured();
 
-  const token = buildWooBasicAuthorizationHeader();
+  const token = Buffer.from(`${WOO_KEY}:${WOO_SECRET}`).toString('base64');
   const productId = productWooId.toString();
   const variationId = variantWooId.toString();
   const url = `${WOO_BASE}/wp-json/wc/v3/products/${productId}/variations/${variationId}?force=true`;
 
   let response: FetchResponse;
-  let usedQueryAuthFallback = false;
   try {
     response = await fetch(url, {
       method: 'DELETE',
       headers: {
-        Authorization: token,
+        Authorization: `Basic ${token}`,
         Accept: 'application/json',
       },
     });
@@ -1169,10 +1023,9 @@ async function deleteVariantFromWooCommerce(
   if (!response.ok) {
     const text = await response.text();
     let message = `Error al eliminar la variante en WooCommerce (status ${response.status})`;
-    let data: any = {};
     if (text) {
       try {
-        data = JSON.parse(text);
+        const data = JSON.parse(text);
         if (data && typeof data === 'object' && typeof data.message === 'string') {
           message = data.message;
         }
@@ -1184,50 +1037,7 @@ async function deleteVariantFromWooCommerce(
         });
       }
     }
-    if (shouldRetryWithQueryAuth(response.status, data)) {
-      try {
-        const fallbackUrl = withWooQueryAuth(url);
-        response = await fetch(fallbackUrl, {
-          method: 'DELETE',
-          headers: { Accept: 'application/json' },
-        });
-        usedQueryAuthFallback = true;
-      } catch (fallbackError) {
-        console.error('[products-variants] Woo query-auth fallback failed while deleting variation', {
-          productId,
-          variationId,
-          fallbackError,
-        });
-        throw new Error('No se pudo autenticar con WooCommerce');
-      }
-
-      if (response.status === 404) {
-        return { success: true, message: 'La variante no existe en WooCommerce, se eliminará localmente.' };
-      }
-      if (!response.ok) {
-        const fallbackText = await response.text();
-        if (fallbackText) {
-          try {
-            const fallbackData = JSON.parse(fallbackText);
-            if (fallbackData && typeof fallbackData === 'object' && typeof fallbackData.message === 'string') {
-              message = fallbackData.message;
-            }
-          } catch {
-            // noop
-          }
-        }
-        throw new Error(message);
-      }
-    } else {
-      throw new Error(message);
-    }
-  }
-
-  if (usedQueryAuthFallback) {
-    console.warn('[products-variants] Woo query-auth fallback used while deleting variation', {
-      productId,
-      variationId,
-    });
+    throw new Error(message);
   }
 
   return { success: true };

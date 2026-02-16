@@ -4,8 +4,6 @@
 
 [build.environment]
   NODE_VERSION = "22"
-  # Evita ruido en logs de funciones por DEP0040 (punycode legado en dependencias transitivas).
-  NODE_OPTIONS = "--disable-warning=DEP0040"
   NPM_FLAGS = "--no-audit --fund=false --progress=false --prefer-offline"
   # Aumentamos el timeout de bloqueo para Prisma en builds de Netlify; el pooler de Neon
   # puede tardar más de 10s en dar el advisory lock y fallaba el deploy (P1002).
