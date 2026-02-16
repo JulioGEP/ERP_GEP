@@ -10,8 +10,43 @@ type Event = {
 };
 
 type WooErrorBody = {
+  code?: string;
   message?: string;
+  data?: {
+    status?: number;
+    [key: string]: unknown;
+  };
 };
+
+function formatWooErrorMessage(
+  fallbackMessage: string,
+  responseStatus: number,
+  data: unknown,
+): string {
+  const payload = (data && typeof data === 'object' ? data : {}) as WooErrorBody;
+  const message =
+    typeof payload.message === 'string' && payload.message.trim().length > 0
+      ? payload.message.trim()
+      : fallbackMessage;
+  const code = typeof payload.code === 'string' && payload.code.trim().length > 0 ? payload.code.trim() : null;
+  const status = typeof payload.data?.status === 'number' ? payload.data.status : responseStatus;
+
+  const suffix = [`status ${status}`, code ? `code ${code}` : null].filter(Boolean).join(', ');
+
+  const permissionHintCodes = new Set([
+    'woocommerce_rest_cannot_view',
+    'woocommerce_rest_cannot_list',
+    'woocommerce_rest_cannot_create',
+    'rest_cannot_view',
+    'rest_cannot_list',
+    'rest_cannot_create',
+  ]);
+  const hint = code && permissionHintCodes.has(code)
+    ? ' Revisa que la API key de WooCommerce tenga permisos Read/Write y que el usuario asociado pueda gestionar productos.'
+    : '';
+
+  return `${message} (${suffix}).${hint}`;
+}
 
 type ProductWithWooId = {
   id: string;
@@ -511,11 +546,9 @@ async function fetchWooVariations(productId: bigint): Promise<SanitizedVariation
     }
 
     if (!response.ok) {
-      const message =
-        data && typeof data === 'object' && typeof (data as WooErrorBody).message === 'string'
-          ? (data as WooErrorBody).message!
-          : `Error al consultar WooCommerce (status ${response.status})`;
-      throw new Error(message);
+      throw new Error(
+        formatWooErrorMessage('Error al consultar WooCommerce', response.status, data),
+      );
     }
 
     const rawArray = Array.isArray(data) ? data : [];

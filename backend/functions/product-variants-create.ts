@@ -54,6 +54,15 @@ type WooProductAttribute = {
   options?: string[];
 };
 
+type WooErrorPayload = {
+  code?: string;
+  message?: string;
+  data?: {
+    status?: number;
+    [key: string]: unknown;
+  };
+};
+
 type WooVariationResponse = {
   id?: number;
   name?: string;
@@ -76,6 +85,35 @@ type VariantCombo = {
   sede: string;
   date: ParsedDate;
 };
+
+function formatWooErrorMessage(
+  fallbackMessage: string,
+  responseStatus: number,
+  payload: unknown,
+): string {
+  const data = (payload && typeof payload === 'object' ? payload : {}) as WooErrorPayload;
+  const message =
+    typeof data.message === 'string' && data.message.trim().length > 0
+      ? data.message.trim()
+      : fallbackMessage;
+  const code = typeof data.code === 'string' && data.code.trim().length > 0 ? data.code.trim() : null;
+  const status = typeof data.data?.status === 'number' ? data.data.status : responseStatus;
+
+  const suffix = [`status ${status}`, code ? `code ${code}` : null].filter(Boolean).join(', ');
+  const permissionHintCodes = new Set([
+    'woocommerce_rest_cannot_view',
+    'woocommerce_rest_cannot_list',
+    'woocommerce_rest_cannot_create',
+    'rest_cannot_view',
+    'rest_cannot_list',
+    'rest_cannot_create',
+  ]);
+  const hint = code && permissionHintCodes.has(code)
+    ? ' Revisa que la API key de WooCommerce tenga permisos Read/Write y que el usuario asociado pueda gestionar productos.'
+    : '';
+
+  return `${message} (${suffix}).${hint}`;
+}
 
 function parseSingleDate(value: string): ParsedDate {
   const match = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -275,8 +313,9 @@ async function fetchWooProductAttributes(productWooId: bigint, token: string): P
   }
 
   if (!response.ok) {
-    const message = typeof data?.message === 'string' ? data.message : `Error al consultar WooCommerce (status ${response.status})`;
-    throw new Error(message);
+    throw new Error(
+      formatWooErrorMessage('Error al consultar WooCommerce', response.status, data),
+    );
   }
 
   return Array.isArray(data?.attributes) ? (data.attributes as WooProductAttribute[]) : [];
@@ -451,11 +490,9 @@ async function updateWooProductAttributes(
   }
 
   if (!response.ok) {
-    const message =
-      typeof data?.message === 'string'
-        ? data.message
-        : `Error al actualizar los atributos en WooCommerce (status ${response.status})`;
-    throw new Error(message);
+    throw new Error(
+      formatWooErrorMessage('Error al actualizar los atributos en WooCommerce', response.status, data),
+    );
   }
 
   return Array.isArray(data?.attributes) ? (data.attributes as WooProductAttribute[]) : attributes;
@@ -516,8 +553,9 @@ async function createWooVariation(
   }
 
   if (!response.ok) {
-    const message = typeof data?.message === 'string' ? data.message : `Error al crear variante en WooCommerce (status ${response.status})`;
-    throw new Error(message);
+    throw new Error(
+      formatWooErrorMessage('Error al crear variante en WooCommerce', response.status, data),
+    );
   }
 
   return data as WooVariationResponse;
@@ -789,13 +827,7 @@ export const handler = async (event: any) => {
       if (error.message === 'WooCommerce configuration missing') {
         return errorResponse('CONFIG_ERROR', 'Configuración de WooCommerce incompleta', 500);
       }
-      if (
-        error.message.startsWith('No se pudo conectar con WooCommerce') ||
-        error.message.startsWith('Respuesta inválida de WooCommerce') ||
-        error.message.startsWith('Error al crear variante en WooCommerce') ||
-        error.message.startsWith('Error al consultar WooCommerce') ||
-        error.message.startsWith('WooCommerce no devolvió')
-      ) {
+      if (error.message.includes('WooCommerce')) {
         return errorResponse('WOO_ERROR', error.message, 502);
       }
       return errorResponse('CREATE_ERROR', error.message, 400);
