@@ -65,7 +65,9 @@ export type TrainerHoursFilters = {
   endDate?: string;
 };
 
-export async function fetchTrainerHours(filters: TrainerHoursFilters = {}): Promise<TrainerHoursResponse> {
+export async function fetchTrainerHours(
+  filters: TrainerHoursFilters = {}
+): Promise<TrainerHoursResponse> {
   const params = new URLSearchParams();
   if (filters.startDate) {
     params.set('startDate', filters.startDate);
@@ -88,6 +90,9 @@ export type TrainerSelfHoursItem = {
   extraCost: number;
   payrollCost: number;
   hasTimeLog: boolean;
+  timeLogId: string | null;
+  checkIn: string | null;
+  checkOut: string | null;
 };
 
 export type TrainerSelfHoursResponse = {
@@ -107,7 +112,7 @@ export type TrainerSelfHoursResponse = {
 };
 
 export async function fetchTrainerSelfHours(
-  filters: TrainerHoursFilters = {},
+  filters: TrainerHoursFilters = {}
 ): Promise<TrainerSelfHoursResponse> {
   const params = new URLSearchParams();
   if (filters.startDate) {
@@ -135,13 +140,18 @@ export type ReportingTrainerControlHoursItem = {
   regionalHolidayHours: number;
   nationalHolidayHours: number;
   hasTimeLog: boolean;
+  timeLogId: string | null;
+  checkIn: string | null;
+  checkOut: string | null;
 };
 
 export type ReportingTrainerControlHoursResponse = {
   items: ReportingTrainerControlHoursItem[];
 };
 
-function sanitizeReportingTrainerControlHoursItem(entry: unknown): ReportingTrainerControlHoursItem | null {
+function sanitizeReportingTrainerControlHoursItem(
+  entry: unknown
+): ReportingTrainerControlHoursItem | null {
   if (!entry || typeof entry !== 'object') {
     return null;
   }
@@ -169,11 +179,14 @@ function sanitizeReportingTrainerControlHoursItem(entry: unknown): ReportingTrai
     regionalHolidayHours: sanitizeNumber(raw.regionalHolidayHours),
     nationalHolidayHours: sanitizeNumber(raw.nationalHolidayHours),
     hasTimeLog: Boolean(raw.hasTimeLog),
+    timeLogId: sanitizeText(raw.timeLogId),
+    checkIn: sanitizeDate(raw.checkIn),
+    checkOut: sanitizeDate(raw.checkOut)
   };
 }
 
 export async function fetchReportingTrainerControlHours(
-  filters: TrainerHoursFilters = {},
+  filters: TrainerHoursFilters = {}
 ): Promise<ReportingTrainerControlHoursResponse> {
   const params = new URLSearchParams();
   if (filters.startDate) {
@@ -195,6 +208,38 @@ export async function fetchReportingTrainerControlHours(
     : [];
 
   return { items };
+}
+
+export type ReportingTrainerControlHoursUpsertPayload = {
+  trainerId: string;
+  sessionId: string;
+  date: string;
+  checkInTime: string;
+  checkOutTime?: string | null;
+};
+
+export async function createReportingTrainerControlHoursEntry(
+  payload: ReportingTrainerControlHoursUpsertPayload
+): Promise<void> {
+  await postJson(`/reporting-control-horas-formadores`, payload);
+}
+
+export async function updateReportingTrainerControlHoursEntry(
+  payload: ReportingTrainerControlHoursUpsertPayload
+): Promise<void> {
+  await putJson(`/reporting-control-horas-formadores`, payload, {
+    method: 'PUT'
+  });
+}
+
+export async function deleteReportingTrainerControlHoursEntry(id: string): Promise<void> {
+  await delJson(
+    `/reporting-control-horas-formadores`,
+    { id },
+    {
+      method: 'DELETE'
+    }
+  );
 }
 
 export type ReportingControlHorarioPerson = {
@@ -249,7 +294,7 @@ function sanitizeReportingPerson(entry: unknown): ReportingControlHorarioPerson 
     name,
     email: sanitizeText(raw.email),
     role: sanitizeText(raw.role) ?? 'Desconocido',
-    isFixedTrainer: Boolean(raw.isFixedTrainer ?? raw.is_fixed_trainer),
+    isFixedTrainer: Boolean(raw.isFixedTrainer ?? raw.is_fixed_trainer)
   };
 }
 
@@ -270,11 +315,12 @@ function sanitizeReportingEntry(entry: unknown): ReportingControlHorarioEntry | 
     date,
     checkIn: sanitizeDate(raw.checkIn ?? raw.check_in),
     checkOut: sanitizeDate(raw.checkOut ?? raw.check_out),
-    holidayType: raw.holidayType === 'N' || raw.holiday_type === 'N'
-      ? 'N'
-      : raw.holidayType === 'A' || raw.holiday_type === 'A'
-        ? 'A'
-        : null,
+    holidayType:
+      raw.holidayType === 'N' || raw.holiday_type === 'N'
+        ? 'N'
+        : raw.holidayType === 'A' || raw.holiday_type === 'A'
+          ? 'A'
+          : null
   };
 }
 
@@ -284,7 +330,7 @@ export type ReportingControlHorarioFilters = {
 };
 
 export async function fetchReportingControlHorario(
-  filters: ReportingControlHorarioFilters = {},
+  filters: ReportingControlHorarioFilters = {}
 ): Promise<ReportingControlHorarioResponse> {
   const params = new URLSearchParams();
   if (filters.startDate) {
@@ -297,19 +343,23 @@ export async function fetchReportingControlHorario(
   const url = query.length ? `/reporting-control-horario?${query}` : '/reporting-control-horario';
   const data = await getJson<{ range?: unknown; people?: unknown; entries?: unknown }>(url);
   const people = Array.isArray(data?.people)
-    ? data.people.map(sanitizeReportingPerson).filter((item): item is ReportingControlHorarioPerson => item !== null)
+    ? data.people
+        .map(sanitizeReportingPerson)
+        .filter((item): item is ReportingControlHorarioPerson => item !== null)
     : [];
   const entries = Array.isArray(data?.entries)
-    ? data.entries.map(sanitizeReportingEntry).filter((item): item is ReportingControlHorarioEntry => item !== null)
+    ? data.entries
+        .map(sanitizeReportingEntry)
+        .filter((item): item is ReportingControlHorarioEntry => item !== null)
     : [];
   const range = (data?.range ?? {}) as { start?: string; end?: string };
   return {
     range: {
       start: sanitizeText(range.start) ?? '',
-      end: sanitizeText(range.end) ?? '',
+      end: sanitizeText(range.end) ?? ''
     },
     people,
-    entries,
+    entries
   };
 }
 
@@ -322,7 +372,7 @@ export type ReportingControlHorarioUpsertPayload = {
 };
 
 export async function createReportingControlHorarioEntry(
-  payload: ReportingControlHorarioUpsertPayload,
+  payload: ReportingControlHorarioUpsertPayload
 ): Promise<ReportingControlHorarioEntry> {
   const data = await postJson<{ entry?: unknown }>(`/reporting-control-horario`, payload);
   const entry = sanitizeReportingEntry(data?.entry);
@@ -333,10 +383,10 @@ export async function createReportingControlHorarioEntry(
 }
 
 export async function updateReportingControlHorarioEntry(
-  payload: ReportingControlHorarioUpsertPayload,
+  payload: ReportingControlHorarioUpsertPayload
 ): Promise<ReportingControlHorarioEntry> {
   const data = await putJson<{ entry?: unknown }>(`/reporting-control-horario`, payload, {
-    method: 'PUT',
+    method: 'PUT'
   });
   const entry = sanitizeReportingEntry(data?.entry);
   if (!entry) {
@@ -346,9 +396,13 @@ export async function updateReportingControlHorarioEntry(
 }
 
 export async function deleteReportingControlHorarioEntry(id: string): Promise<void> {
-  await delJson(`/reporting-control-horario`, { id }, {
-    method: 'DELETE',
-  });
+  await delJson(
+    `/reporting-control-horario`,
+    { id },
+    {
+      method: 'DELETE'
+    }
+  );
 }
 
 function sanitizeAuditLogEntry(entry: unknown): AuditLogEntry | null {
@@ -372,7 +426,7 @@ function sanitizeAuditLogEntry(entry: unknown): AuditLogEntry | null {
     userName: sanitizeText(raw.userName ?? raw.user_name),
     userEmail: sanitizeText(raw.userEmail ?? raw.user_email),
     before: raw.before ?? null,
-    after: raw.after ?? null,
+    after: raw.after ?? null
   } satisfies AuditLogEntry;
 }
 
@@ -380,7 +434,9 @@ export type FetchAuditLogsOptions = {
   limit?: number;
 };
 
-export async function fetchAuditLogs(options: FetchAuditLogsOptions = {}): Promise<AuditLogEntry[]> {
+export async function fetchAuditLogs(
+  options: FetchAuditLogsOptions = {}
+): Promise<AuditLogEntry[]> {
   const params = new URLSearchParams();
   const limit = options.limit;
   if (typeof limit === 'number' && Number.isFinite(limit) && limit > 0) {
@@ -433,8 +489,11 @@ function sanitizeRecord(record: unknown): PipedriveWebhookEvent | null {
     objectId: sanitizeInteger(raw.objectId ?? raw.object_id),
     retry: sanitizeInteger(raw.retry),
     webhookToken: sanitizeText(raw.webhookToken ?? raw.webhook_token),
-    headers: typeof raw.headers === 'object' && raw.headers !== null ? (raw.headers as Record<string, unknown>) : null,
-    payload: raw.payload ?? null,
+    headers:
+      typeof raw.headers === 'object' && raw.headers !== null
+        ? (raw.headers as Record<string, unknown>)
+        : null,
+    payload: raw.payload ?? null
   } satisfies PipedriveWebhookEvent;
 }
 
@@ -443,7 +502,7 @@ export type FetchPipedriveWebhookEventsOptions = {
 };
 
 export async function fetchPipedriveWebhookEvents(
-  options: FetchPipedriveWebhookEventsOptions = {},
+  options: FetchPipedriveWebhookEventsOptions = {}
 ): Promise<PipedriveWebhookEvent[]> {
   const params = new URLSearchParams();
   const limit = options.limit;
@@ -452,7 +511,9 @@ export async function fetchPipedriveWebhookEvents(
   }
 
   const query = params.toString();
-  const url = query.length ? `/reporting-pipedrive-webhooks?${query}` : '/reporting-pipedrive-webhooks';
+  const url = query.length
+    ? `/reporting-pipedrive-webhooks?${query}`
+    : '/reporting-pipedrive-webhooks';
 
   const data = await getJson<{ events?: unknown }>(url);
   const events = Array.isArray(data?.events) ? data.events : [];
@@ -470,17 +531,16 @@ const EXTRA_COST_FIELD_KEYS = [
   'nocturnidad',
   'festivo',
   'horasExtras',
-  'gastosExtras',
+  'gastosExtras'
 ] as const;
 
 export type TrainerExtraCostFieldKey = (typeof EXTRA_COST_FIELD_KEYS)[number];
 
-export const DEFAULT_TRAINER_EXTRA_COST_VALUES: Partial<
-  Record<TrainerExtraCostFieldKey, number>
-> = {
-  precioCosteFormacion: 15,
-  precioCostePreventivo: 15,
-};
+export const DEFAULT_TRAINER_EXTRA_COST_VALUES: Partial<Record<TrainerExtraCostFieldKey, number>> =
+  {
+    precioCosteFormacion: 15,
+    precioCostePreventivo: 15
+  };
 
 export type TrainerExpenseDocument = {
   id: string;
@@ -567,7 +627,8 @@ function sanitizeTrainerExpenseDocument(entry: unknown): TrainerExpenseDocument 
   const id = sanitizeText(raw.id);
   const sessionId =
     sanitizeText(raw.sessionId ?? raw.session_id ?? raw.sesionId ?? raw.sesion_id) ?? null;
-  const trainerId = sanitizeText(raw.trainerId ?? raw.trainer_id ?? raw.trainerExpenseTrainerId) ?? null;
+  const trainerId =
+    sanitizeText(raw.trainerId ?? raw.trainer_id ?? raw.trainerExpenseTrainerId) ?? null;
 
   if (!id || !sessionId) {
     return null;
@@ -580,7 +641,7 @@ function sanitizeTrainerExpenseDocument(entry: unknown): TrainerExpenseDocument 
     name:
       sanitizeText(raw.name ?? raw.fileName ?? raw.drive_file_name ?? raw.driveFileName) ?? null,
     url: sanitizeText(raw.url ?? raw.drive_web_view_link ?? raw.webUrl) ?? null,
-    addedAt: sanitizeDate(raw.addedAt ?? raw.added_at),
+    addedAt: sanitizeDate(raw.addedAt ?? raw.added_at)
   } satisfies TrainerExpenseDocument;
 }
 
@@ -604,9 +665,10 @@ function sanitizeExtraCostItem(entry: unknown): TrainerExtraCostRecord | null {
     number
   >;
   for (const field of EXTRA_COST_FIELD_KEYS) {
-    const value = costsInput && typeof costsInput === 'object'
-      ? (costsInput as Record<string, unknown>)[field]
-      : undefined;
+    const value =
+      costsInput && typeof costsInput === 'object'
+        ? (costsInput as Record<string, unknown>)[field]
+        : undefined;
     if (value === undefined) {
       costs[field] = DEFAULT_TRAINER_EXTRA_COST_VALUES[field] ?? 0;
       continue;
@@ -639,21 +701,22 @@ function sanitizeExtraCostItem(entry: unknown): TrainerExtraCostRecord | null {
     site: sanitizeText(raw.site),
     scheduledStart: sanitizeDate(raw.scheduledStart ?? raw.scheduled_start),
     scheduledEnd: sanitizeDate(raw.scheduledEnd ?? raw.scheduled_end),
-    workedHours: typeof raw.workedHours === 'number' && Number.isFinite(raw.workedHours)
-      ? raw.workedHours
-      : null,
+    workedHours:
+      typeof raw.workedHours === 'number' && Number.isFinite(raw.workedHours)
+        ? raw.workedHours
+        : null,
     costs,
     notes: sanitizeText(raw.notes) ?? null,
     createdAt: sanitizeDate(raw.createdAt ?? raw.created_at),
     updatedAt: sanitizeDate(raw.updatedAt ?? raw.updated_at),
-    trainerExpenseDocuments,
+    trainerExpenseDocuments
   };
 
   return record;
 }
 
 export async function fetchTrainerExtraCosts(
-  filters: TrainerExtraCostFilters = {},
+  filters: TrainerExtraCostFilters = {}
 ): Promise<TrainerExtraCostRecord[]> {
   const params = new URLSearchParams();
   if (filters.startDate) {
@@ -673,7 +736,7 @@ export async function fetchTrainerExtraCosts(
 }
 
 export async function saveTrainerExtraCost(
-  payload: TrainerExtraCostSavePayload,
+  payload: TrainerExtraCostSavePayload
 ): Promise<TrainerExtraCostRecord> {
   const response = await putJson<{ item?: unknown }>('/reporting-costes-extra', payload);
   const sanitized = sanitizeExtraCostItem(response?.item);
@@ -825,7 +888,7 @@ export type ComparativaDashboardResponse = {
 };
 
 export async function fetchComparativaDashboard(
-  filters: ComparativaFilters,
+  filters: ComparativaFilters
 ): Promise<ComparativaDashboardResponse> {
   const params = new URLSearchParams();
 
@@ -920,7 +983,7 @@ export async function fetchOfficePayrolls(year?: number | null): Promise<OfficeP
   return {
     entries: response.entries,
     availableYears: Array.isArray(response.availableYears) ? response.availableYears : [],
-    latestMonth: response.latestMonth ?? null,
+    latestMonth: response.latestMonth ?? null
   };
 }
 
@@ -954,11 +1017,11 @@ export type OfficePayrollUpsertPayload = {
 };
 
 export async function saveOfficePayroll(
-  payload: OfficePayrollUpsertPayload,
+  payload: OfficePayrollUpsertPayload
 ): Promise<OfficePayrollRecord> {
   const response = await putJson<{ entry?: OfficePayrollRecord }>(
     '/reporting-nominas-oficina',
-    payload,
+    payload
   );
   if (response?.entry) {
     return response.entry;
@@ -979,7 +1042,7 @@ export type SlackChannelsResponse = {
 
 export async function fetchSlackChannels(): Promise<SlackChannelsResponse> {
   const response = await getJson<{ channels?: SlackChannel[]; warning?: unknown }>(
-    '/reporting-slack-messages',
+    '/reporting-slack-messages'
   );
 
   const channels = Array.isArray(response?.channels)
@@ -988,13 +1051,13 @@ export async function fetchSlackChannels(): Promise<SlackChannelsResponse> {
         .map((channel) => ({
           id: channel.id,
           name: channel.name,
-          isPrivate: Boolean(channel.isPrivate),
+          isPrivate: Boolean(channel.isPrivate)
         }))
     : [];
 
   return {
     channels,
-    warning: sanitizeText(response?.warning),
+    warning: sanitizeText(response?.warning)
   };
 }
 
@@ -1004,11 +1067,11 @@ export async function sendSlackChannelMessage(payload: {
 }): Promise<{ channelId: string | null; messageTs: string | null }> {
   const response = await postJson<{ channelId?: unknown; messageTs?: unknown }>(
     '/reporting-slack-messages',
-    payload,
+    payload
   );
 
   return {
     channelId: sanitizeText(response?.channelId),
-    messageTs: sanitizeText(response?.messageTs),
+    messageTs: sanitizeText(response?.messageTs)
   };
 }
