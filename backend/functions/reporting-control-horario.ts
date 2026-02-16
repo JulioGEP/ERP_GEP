@@ -141,11 +141,27 @@ export const handler = createHttpHandler(async (request) => {
     });
   }
 
-  if (request.method !== 'POST' && request.method !== 'PUT') {
+  if (request.method !== 'POST' && request.method !== 'PUT' && request.method !== 'DELETE') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
   }
 
   const payload = (request.body ?? {}) as ControlHorarioEntryPayload;
+
+  if (request.method === 'DELETE') {
+    const entryId = typeof payload.id === 'string' ? payload.id.trim() : '';
+    if (!entryId) {
+      return errorResponse('INVALID_ID', 'El fichaje indicado no es válido.', 400);
+    }
+
+    const existing = await prisma.user_time_logs.findUnique({ where: { id: entryId } });
+    if (!existing) {
+      return errorResponse('NOT_FOUND', 'No se encontró el fichaje indicado.', 404);
+    }
+
+    await prisma.user_time_logs.delete({ where: { id: entryId } });
+    return successResponse({ deleted: true, id: entryId });
+  }
+
   const checkInTime = normalizeTimeString(payload.checkInTime);
   const checkOutTime = payload.checkOutTime === null ? null : normalizeTimeString(payload.checkOutTime);
 
