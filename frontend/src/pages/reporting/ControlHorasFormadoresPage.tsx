@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { Alert, Card, Form, Spinner, Table } from 'react-bootstrap';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Alert, Button, Card, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { isApiError } from '../../api/client';
 import {
+  createReportingTrainerControlHoursEntry,
+  deleteReportingTrainerControlHoursEntry,
   fetchReportingTrainerControlHours,
+  updateReportingTrainerControlHoursEntry,
   type ReportingTrainerControlHoursItem,
-  type TrainerHoursFilters,
+  type TrainerHoursFilters
 } from '../../features/reporting/api';
 
 function getIsoWeekInfo(sessionDate: string | null): { weekKey: string; label: string } {
@@ -23,13 +26,13 @@ function getIsoWeekInfo(sessionDate: string | null): { weekKey: string; label: s
   const dayNumber = workingDate.getUTCDay() || 7;
   workingDate.setUTCDate(workingDate.getUTCDate() + 4 - dayNumber);
   const yearStart = new Date(Date.UTC(workingDate.getUTCFullYear(), 0, 1));
-  const weekNumber = Math.ceil((((workingDate.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  const weekNumber = Math.ceil(((workingDate.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
   const isoYear = workingDate.getUTCFullYear();
   const normalizedWeek = String(weekNumber).padStart(2, '0');
 
   return {
     weekKey: `${isoYear}-W${normalizedWeek}`,
-    label: `Semana ISO ${normalizedWeek} (${isoYear})`,
+    label: `Semana ISO ${normalizedWeek} (${isoYear})`
   };
 }
 
@@ -37,19 +40,38 @@ function getCurrentMonthRange(): { startDate: string; endDate: string } {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const format = (value: Date) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  const format = (value: Date) =>
+    `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
   return { startDate: format(start), endDate: format(end) };
 }
 
+function toTimeInputValue(value: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+type ModalState = {
+  row: ReportingTrainerControlHoursItem;
+  mode: 'create' | 'edit';
+};
+
 export default function ControlHorasFormadoresPage() {
+  const queryClient = useQueryClient();
   const [filters, setFilters] = useState(() => ({
     ...getCurrentMonthRange(),
     trainerSearch: '',
     status: 'all' as 'all' | 'logged' | 'pending',
-    isoWeek: 'all',
+    isoWeek: 'all'
   }));
+  const [modalState, setModalState] = useState<ModalState | null>(null);
+  const [checkInTime, setCheckInTime] = useState('');
+  const [checkOutTime, setCheckOutTime] = useState('');
 
-  const hasInvalidRange = Boolean(filters.startDate && filters.endDate && filters.startDate > filters.endDate);
+  const hasInvalidRange = Boolean(
+    filters.startDate && filters.endDate && filters.startDate > filters.endDate
+  );
 
   const appliedFilters = useMemo<TrainerHoursFilters>(
     () =>
@@ -57,29 +79,86 @@ export default function ControlHorasFormadoresPage() {
         ? {}
         : {
             startDate: filters.startDate || undefined,
-            endDate: filters.endDate || undefined,
+            endDate: filters.endDate || undefined
           },
-    [filters.endDate, filters.startDate, hasInvalidRange],
+    [filters.endDate, filters.startDate, hasInvalidRange]
   );
 
   const reportQuery = useQuery({
-    queryKey: ['reporting-control-horas-formadores', appliedFilters.startDate ?? null, appliedFilters.endDate ?? null],
+    queryKey: [
+      'reporting-control-horas-formadores',
+      appliedFilters.startDate ?? null,
+      appliedFilters.endDate ?? null
+    ],
     queryFn: () => fetchReportingTrainerControlHours(appliedFilters),
     enabled: !hasInvalidRange,
     placeholderData: keepPreviousData,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 5 * 60 * 1000
   });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!modalState || !modalState.row.sessionDate) {
+        throw new Error('Faltan datos para guardar el fichaje.');
+      }
+      const payload = {
+        trainerId: modalState.row.trainerId,
+        sessionId: modalState.row.sessionId,
+        date: modalState.row.sessionDate,
+        checkInTime,
+        checkOutTime: checkOutTime || null
+      };
+
+      if (modalState.mode === 'edit') {
+        await updateReportingTrainerControlHoursEntry(payload);
+        return;
+      }
+      await createReportingTrainerControlHoursEntry(payload);
+    },
+    onSuccess: () => {
+      setModalState(null);
+      setCheckInTime('');
+      setCheckOutTime('');
+      queryClient.invalidateQueries({ queryKey: ['reporting-control-horas-formadores'] });
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteReportingTrainerControlHoursEntry(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reporting-control-horas-formadores'] });
+    }
+  });
+
+  const handleOpenModal = (row: ReportingTrainerControlHoursItem, mode: 'create' | 'edit') => {
+    setModalState({ row, mode });
+    setCheckInTime(mode === 'edit' ? toTimeInputValue(row.checkIn) : '');
+    setCheckOutTime(mode === 'edit' ? toTimeInputValue(row.checkOut) : '');
+  };
+
+  const handleDelete = (row: ReportingTrainerControlHoursItem) => {
+    if (!row.timeLogId) return;
+    const confirmed = window.confirm(
+      '¿Seguro que quieres eliminar este fichaje? Esta acción no se puede deshacer.'
+    );
+    if (!confirmed) return;
+    deleteMutation.mutate(row.timeLogId);
+  };
 
   const numberFormatter = useMemo(
     () => new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-    [],
+    []
   );
 
   const rowsMatchingTextAndStatus = useMemo(() => {
     const baseRows = reportQuery.data?.items ?? [];
     return baseRows.filter((item) => {
       const search = filters.trainerSearch.trim().toLowerCase();
-      if (search.length && !item.trainerName.toLowerCase().includes(search) && !item.sessionName.toLowerCase().includes(search)) {
+      if (
+        search.length &&
+        !item.trainerName.toLowerCase().includes(search) &&
+        !item.sessionName.toLowerCase().includes(search)
+      ) {
         return false;
       }
       if (filters.status === 'logged') {
@@ -99,19 +178,21 @@ export default function ControlHorasFormadoresPage() {
           rowsMatchingTextAndStatus.map((item) => {
             const weekInfo = getIsoWeekInfo(item.sessionDate);
             return [weekInfo.weekKey, weekInfo.label] as const;
-          }),
-        ).entries(),
+          })
+        ).entries()
       )
         .map(([weekKey, label]) => ({ weekKey, label }))
         .sort((a, b) => b.weekKey.localeCompare(a.weekKey)),
-    [rowsMatchingTextAndStatus],
+    [rowsMatchingTextAndStatus]
   );
 
   const rows = useMemo(() => {
     if (filters.isoWeek === 'all') {
       return rowsMatchingTextAndStatus;
     }
-    return rowsMatchingTextAndStatus.filter((item) => getIsoWeekInfo(item.sessionDate).weekKey === filters.isoWeek);
+    return rowsMatchingTextAndStatus.filter(
+      (item) => getIsoWeekInfo(item.sessionDate).weekKey === filters.isoWeek
+    );
   }, [filters.isoWeek, rowsMatchingTextAndStatus]);
 
   const summary = useMemo(
@@ -127,13 +208,16 @@ export default function ControlHorasFormadoresPage() {
           }
           return acc;
         },
-        { assigned: 0, logged: 0, loggedSessions: 0, pendingSessions: 0 },
+        { assigned: 0, logged: 0, loggedSessions: 0, pendingSessions: 0 }
       ),
-    [rows],
+    [rows]
   );
 
   const groupedByIsoWeek = useMemo(() => {
-    const groupedRows = new Map<string, { label: string; rows: ReportingTrainerControlHoursItem[] }>();
+    const groupedRows = new Map<
+      string,
+      { label: string; rows: ReportingTrainerControlHoursItem[] }
+    >();
     rows.forEach((item) => {
       const weekInfo = getIsoWeekInfo(item.sessionDate);
       const existingWeekGroup = groupedRows.get(weekInfo.weekKey);
@@ -158,14 +242,14 @@ export default function ControlHorasFormadoresPage() {
             }
             return acc;
           },
-          { assigned: 0, logged: 0, loggedSessions: 0, pendingSessions: 0 },
+          { assigned: 0, logged: 0, loggedSessions: 0, pendingSessions: 0 }
         );
 
         return {
           weekKey,
           label: value.label,
           rows: value.rows,
-          summary: weeklySummary,
+          summary: weeklySummary
         };
       });
   }, [rows]);
@@ -186,7 +270,9 @@ export default function ControlHorasFormadoresPage() {
 
   let content: JSX.Element;
   if (hasInvalidRange) {
-    content = <Alert variant="warning">La fecha de inicio no puede ser posterior a la fecha de fin.</Alert>;
+    content = (
+      <Alert variant="warning">La fecha de inicio no puede ser posterior a la fecha de fin.</Alert>
+    );
   } else if (reportQuery.isLoading) {
     content = (
       <div className="py-5 d-flex justify-content-center">
@@ -202,7 +288,9 @@ export default function ControlHorasFormadoresPage() {
       </Alert>
     );
   } else if (!rows.length) {
-    content = <Alert variant="info">No hay sesiones asignadas para los filtros seleccionados.</Alert>;
+    content = (
+      <Alert variant="info">No hay sesiones asignadas para los filtros seleccionados.</Alert>
+    );
   } else {
     content = (
       <div className="d-flex flex-column gap-4">
@@ -211,10 +299,26 @@ export default function ControlHorasFormadoresPage() {
             <div className="d-flex justify-content-between flex-wrap gap-3 mb-2">
               <h2 className="h6 mb-0">{weekGroup.label}</h2>
               <div className="d-flex gap-3 flex-wrap">
-                <span className="small text-muted">Sesiones fichadas: <strong className="text-body">{weekGroup.summary.loggedSessions}</strong></span>
-                <span className="small text-muted">Sesiones sin fichar: <strong className="text-body">{weekGroup.summary.pendingSessions}</strong></span>
-                <span className="small text-muted">Horas asignadas: <strong className="text-body">{numberFormatter.format(weekGroup.summary.assigned)}</strong></span>
-                <span className="small text-muted">Horas fichadas: <strong className="text-body">{numberFormatter.format(weekGroup.summary.logged)}</strong></span>
+                <span className="small text-muted">
+                  Sesiones fichadas:{' '}
+                  <strong className="text-body">{weekGroup.summary.loggedSessions}</strong>
+                </span>
+                <span className="small text-muted">
+                  Sesiones sin fichar:{' '}
+                  <strong className="text-body">{weekGroup.summary.pendingSessions}</strong>
+                </span>
+                <span className="small text-muted">
+                  Horas asignadas:{' '}
+                  <strong className="text-body">
+                    {numberFormatter.format(weekGroup.summary.assigned)}
+                  </strong>
+                </span>
+                <span className="small text-muted">
+                  Horas fichadas:{' '}
+                  <strong className="text-body">
+                    {numberFormatter.format(weekGroup.summary.logged)}
+                  </strong>
+                </span>
               </div>
             </div>
 
@@ -232,11 +336,14 @@ export default function ControlHorasFormadoresPage() {
                     <th className="text-end">Festivo autonómico</th>
                     <th className="text-end">Festivo nacional</th>
                     <th>Estado</th>
+                    <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {weekGroup.rows.map((item: ReportingTrainerControlHoursItem) => (
-                    <tr key={`${item.trainerId}-${item.sessionId}-${item.sessionDate ?? 'no-date'}`}>
+                    <tr
+                      key={`${item.trainerId}-${item.sessionId}-${item.sessionDate ?? 'no-date'}`}
+                    >
                       <td>{item.sessionDate ?? '—'}</td>
                       <td>
                         <Link to={buildExtraCostsLink(item)}>{item.trainerName}</Link>
@@ -246,9 +353,37 @@ export default function ControlHorasFormadoresPage() {
                       <td className="text-end">{numberFormatter.format(item.loggedHours)}</td>
                       <td className="text-end">{numberFormatter.format(item.dayHours)}</td>
                       <td className="text-end">{numberFormatter.format(item.nightHours)}</td>
-                      <td className="text-end">{numberFormatter.format(item.regionalHolidayHours)}</td>
-                      <td className="text-end">{numberFormatter.format(item.nationalHolidayHours)}</td>
+                      <td className="text-end">
+                        {numberFormatter.format(item.regionalHolidayHours)}
+                      </td>
+                      <td className="text-end">
+                        {numberFormatter.format(item.nationalHolidayHours)}
+                      </td>
                       <td>{item.hasTimeLog ? 'Fichada' : 'Sin fichar'}</td>
+                      <td>
+                        <div className="d-flex gap-2 flex-wrap">
+                          <Button
+                            size="sm"
+                            variant="outline-primary"
+                            onClick={() =>
+                              handleOpenModal(item, item.hasTimeLog ? 'edit' : 'create')
+                            }
+                            disabled={!item.sessionDate}
+                          >
+                            {item.hasTimeLog ? 'Editar fichaje' : 'Añadir fichaje'}
+                          </Button>
+                          {item.hasTimeLog ? (
+                            <Button
+                              size="sm"
+                              variant="outline-danger"
+                              onClick={() => handleDelete(item)}
+                              disabled={deleteMutation.isPending}
+                            >
+                              Eliminar fichaje
+                            </Button>
+                          ) : null}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -268,7 +403,8 @@ export default function ControlHorasFormadoresPage() {
         </Card.Header>
         <Card.Body>
           <p className="text-muted">
-            Vista diaria de sesiones asignadas para formadores discontinuos, mostrando sesiones fichadas y pendientes.
+            Vista diaria de sesiones asignadas para formadores discontinuos, mostrando sesiones
+            fichadas y pendientes.
           </p>
 
           <Form className="mb-3">
@@ -354,7 +490,9 @@ export default function ControlHorasFormadoresPage() {
             </div>
             <div>
               <span className="text-muted d-block small">Horas asignadas</span>
-              <span className="fw-semibold h5 mb-0">{numberFormatter.format(summary.assigned)}</span>
+              <span className="fw-semibold h5 mb-0">
+                {numberFormatter.format(summary.assigned)}
+              </span>
             </div>
             <div>
               <span className="text-muted d-block small">Horas fichadas</span>
@@ -365,6 +503,69 @@ export default function ControlHorasFormadoresPage() {
           {content}
         </Card.Body>
       </Card>
+
+      <Modal show={Boolean(modalState)} onHide={() => setModalState(null)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>
+            {modalState?.mode === 'edit' ? 'Editar fichaje' : 'Añadir fichaje'}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form className="d-grid gap-3">
+            <Form.Group>
+              <Form.Label>Formador</Form.Label>
+              <Form.Control value={modalState?.row.trainerName ?? ''} disabled />
+            </Form.Group>
+            <Form.Group>
+              <Form.Label>Sesión</Form.Label>
+              <Form.Control value={modalState?.row.sessionName ?? ''} disabled />
+            </Form.Group>
+            <Form.Group>
+              <Form.Label>Fecha</Form.Label>
+              <Form.Control value={modalState?.row.sessionDate ?? ''} disabled />
+            </Form.Group>
+            <Form.Group>
+              <Form.Label>Hora de entrada</Form.Label>
+              <Form.Control
+                type="time"
+                value={checkInTime}
+                onChange={(event) => setCheckInTime(event.currentTarget.value)}
+              />
+            </Form.Group>
+            <Form.Group>
+              <Form.Label>Hora de salida</Form.Label>
+              <Form.Control
+                type="time"
+                value={checkOutTime}
+                onChange={(event) => setCheckOutTime(event.currentTarget.value)}
+              />
+            </Form.Group>
+          </Form>
+          {saveMutation.isError ? (
+            <Alert variant="danger" className="mt-3 mb-0">
+              {isApiError(saveMutation.error)
+                ? saveMutation.error.message
+                : 'No se pudo guardar el fichaje.'}
+            </Alert>
+          ) : null}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setModalState(null)}
+            disabled={saveMutation.isPending}
+          >
+            Cancelar
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => saveMutation.mutate()}
+            disabled={!checkInTime || saveMutation.isPending}
+          >
+            {saveMutation.isPending ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </section>
   );
 }
