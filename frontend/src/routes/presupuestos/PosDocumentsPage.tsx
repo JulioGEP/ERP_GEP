@@ -22,6 +22,7 @@ function toDateInputValue(dateIso: string | null): string {
 
 export function PosDocumentsPage() {
   const [documentFilter, setDocumentFilter] = useState('');
+  const [budgetNumberFilter, setBudgetNumberFilter] = useState('');
   const [companyFilter, setCompanyFilter] = useState('');
   const [sessionFilter, setSessionFilter] = useState('');
   const [sessionDateFilter, setSessionDateFilter] = useState('');
@@ -35,11 +36,17 @@ export function PosDocumentsPage() {
 
   const filteredDocuments = useMemo(() => {
     const normalizedDocument = documentFilter.trim().toLowerCase();
+    const normalizedBudgetNumber = budgetNumberFilter.trim().toLowerCase();
     const normalizedCompany = companyFilter.trim().toLowerCase();
     const normalizedSession = sessionFilter.trim().toLowerCase();
 
     return documents.filter((document) => {
       if (normalizedDocument && !document.name.toLowerCase().includes(normalizedDocument)) {
+        return false;
+      }
+
+      const dealIdText = String(document.dealId ?? '').toLowerCase();
+      if (normalizedBudgetNumber && !dealIdText.includes(normalizedBudgetNumber)) {
         return false;
       }
 
@@ -62,7 +69,7 @@ export function PosDocumentsPage() {
 
       return true;
     });
-  }, [companyFilter, documentFilter, documents, sessionDateFilter, sessionFilter]);
+  }, [budgetNumberFilter, companyFilter, documentFilter, documents, sessionDateFilter, sessionFilter]);
 
   return (
     <div className="d-grid gap-4">
@@ -100,6 +107,17 @@ export function PosDocumentsPage() {
               value={companyFilter}
               onChange={(event) => setCompanyFilter(event.target.value)}
               placeholder="Filtrar por empresa"
+            />
+          </div>
+          <div className="col-12 col-md-6 col-xl-3">
+            <Form.Label htmlFor="pos-filter-presupuesto" className="fw-semibold">
+              Nº presupuesto
+            </Form.Label>
+            <Form.Control
+              id="pos-filter-presupuesto"
+              value={budgetNumberFilter}
+              onChange={(event) => setBudgetNumberFilter(event.target.value)}
+              placeholder="Filtrar por nº"
             />
           </div>
           <div className="col-12 col-md-6 col-xl-3">
