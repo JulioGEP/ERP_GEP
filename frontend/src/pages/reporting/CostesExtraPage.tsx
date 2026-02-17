@@ -40,6 +40,11 @@ const NON_HIGHLIGHT_COST_KEYS = new Set<TrainerExtraCostFieldKey>([
   'precioCostePreventivo',
 ]);
 
+const AVERAGE_COST_KEYS = new Set<TrainerExtraCostFieldKey>([
+  'precioCosteFormacion',
+  'precioCostePreventivo',
+]);
+
 function formatDateForInput(date: Date): string {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
@@ -492,6 +497,46 @@ export default function CostesExtraPage() {
     !extraCostsQuery.isError &&
     items.length > 0;
 
+  const tableSummary = useMemo(() => {
+    const totals = {} as Record<TrainerExtraCostFieldKey, number>;
+    const counts = {} as Record<TrainerExtraCostFieldKey, number>;
+    for (const definition of COST_FIELD_DEFINITIONS) {
+      totals[definition.key] = 0;
+      counts[definition.key] = 0;
+    }
+
+    let workedHoursTotal = 0;
+
+    for (const item of items) {
+      if (typeof item.workedHours === 'number' && Number.isFinite(item.workedHours)) {
+        workedHoursTotal += item.workedHours;
+      }
+
+      const draft = drafts[item.key] ?? createDraftFromItem(item);
+      for (const definition of COST_FIELD_DEFINITIONS) {
+        const parsed = parseInputToNumber(draft.fields[definition.key]);
+        const value = parsed ?? 0;
+        totals[definition.key] += value;
+        counts[definition.key] += 1;
+      }
+    }
+
+    return {
+      workedHoursTotal,
+      costValues: COST_FIELD_DEFINITIONS.reduce(
+        (acc, definition) => {
+          if (AVERAGE_COST_KEYS.has(definition.key)) {
+            acc[definition.key] = counts[definition.key] ? totals[definition.key] / counts[definition.key] : 0;
+          } else {
+            acc[definition.key] = totals[definition.key];
+          }
+          return acc;
+        },
+        {} as Record<TrainerExtraCostFieldKey, number>,
+      ),
+    };
+  }, [drafts, items]);
+
   const handleDownload = () => {
     if (!canDownload) {
       return;
@@ -791,6 +836,20 @@ export default function CostesExtraPage() {
               );
             })}
           </tbody>
+          <tfoot>
+            <tr className="table-light fw-semibold">
+              <td colSpan={4} className="text-end align-middle">
+                Totales / medias
+              </td>
+              <td className="text-end align-middle">{hoursFormatter.format(tableSummary.workedHoursTotal)}</td>
+              {COST_FIELD_DEFINITIONS.map((definition) => (
+                <td key={definition.key} className="text-end align-middle">
+                  {hoursFormatter.format(tableSummary.costValues[definition.key] ?? 0)}
+                </td>
+              ))}
+              <td className="align-middle text-muted small">—</td>
+            </tr>
+          </tfoot>
         </Table>
       </div>
     );
