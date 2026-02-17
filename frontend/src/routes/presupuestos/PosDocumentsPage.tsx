@@ -139,6 +139,7 @@ export function PosDocumentsPage() {
             <thead>
               <tr>
                 <th>Documento</th>
+                <th>Nº presupuesto</th>
                 <th>Origen</th>
                 <th>Sesión</th>
                 <th>Fecha de sesión</th>
@@ -148,13 +149,13 @@ export function PosDocumentsPage() {
             <tbody>
               {documentsQuery.isLoading ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-4">
+                  <td colSpan={6} className="text-center py-4">
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
               ) : filteredDocuments.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-4 text-muted">
+                  <td colSpan={6} className="text-center py-4 text-muted">
                     No hay documentos que coincidan con los filtros.
                   </td>
                 </tr>
@@ -170,6 +171,7 @@ export function PosDocumentsPage() {
                         document.name
                       )}
                     </td>
+                    <td>{document.dealId ?? '—'}</td>
                     <td>{document.kind === 'sesion' ? 'Sesión' : 'Presupuesto'}</td>
                     <td>{document.sessionName ?? '—'}</td>
                     <td>{formatDate(document.sessionDate)}</td>
