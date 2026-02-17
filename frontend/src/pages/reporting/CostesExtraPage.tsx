@@ -24,15 +24,15 @@ const COST_FIELD_DEFINITIONS: ReadonlyArray<{
   key: TrainerExtraCostFieldKey;
   label: string;
 }> = [
-  { key: 'precioCosteFormacion', label: 'Coste formación (€)' },
-  { key: 'precioCostePreventivo', label: 'Coste preventivo (€)' },
-  { key: 'dietas', label: 'Dietas (€)' },
-  { key: 'kilometraje', label: 'Kilometraje (€)' },
-  { key: 'pernocta', label: 'Pernocta (€)' },
-  { key: 'nocturnidad', label: 'Nocturnidad (€)' },
-  { key: 'festivo', label: 'Festivo (€)' },
-  { key: 'horasExtras', label: 'Horas extras (€)' },
-  { key: 'gastosExtras', label: 'Otros gastos (€)' },
+  { key: 'precioCosteFormacion', label: 'Coste formación' },
+  { key: 'precioCostePreventivo', label: 'Coste preventivo' },
+  { key: 'dietas', label: 'Dietas' },
+  { key: 'kilometraje', label: 'Kilometraje' },
+  { key: 'pernocta', label: 'Pernocta' },
+  { key: 'nocturnidad', label: 'Nocturnidad' },
+  { key: 'festivo', label: 'Festivo' },
+  { key: 'horasExtras', label: 'Horas extras' },
+  { key: 'gastosExtras', label: 'Otros gastos' },
 ];
 
 const NON_HIGHLIGHT_COST_KEYS = new Set<TrainerExtraCostFieldKey>([
