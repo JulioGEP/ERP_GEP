@@ -316,6 +316,7 @@ export function BudgetDetailModal({
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
   const [isPoDocument, setIsPoDocument] = useState(false);
+  const [poDocumentReference, setPoDocumentReference] = useState('');
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -414,6 +415,7 @@ export function BudgetDetailModal({
     setPendingUploadFile(null);
     setIsDragActive(false);
     setIsPoDocument(false);
+    setPoDocumentReference('');
     setShowUploadDialog(true);
   };
 
@@ -423,6 +425,7 @@ export function BudgetDetailModal({
     setPendingUploadFile(null);
     setIsDragActive(false);
     setIsPoDocument(false);
+    setPoDocumentReference('');
   };
 
   const toFileArray = (files: FileList | File[] | null | undefined): File[] =>
@@ -501,19 +504,28 @@ export function BudgetDetailModal({
 
   const handleUploadDocument = async () => {
     if (!deal?.deal_id || !pendingUploadFile) return;
+
+    const normalizedPoDocumentReference = poDocumentReference.trim();
+    if (isPoDocument && !normalizedPoDocumentReference) {
+      const message = 'Indica la referencia alfanumérica para el documento PO';
+      onNotify?.({ variant: 'danger', message });
+      return;
+    }
+
     try {
       setUploadingDocument(true);
       await uploadManualDocument(
         deal.deal_id,
         pendingUploadFile,
         { id: userId, name: userName },
-        { isPoDocument },
+        { isPoDocument, poDocumentReference: normalizedPoDocumentReference },
       );
       await qc.invalidateQueries({ queryKey: detailQueryKey });
       setShowUploadDialog(false);
       setPendingUploadFile(null);
       setIsDragActive(false);
       setIsPoDocument(false);
+      setPoDocumentReference('');
     } catch (error: unknown) {
       console.error('[BudgetDetailModal] Error al subir documento del presupuesto', error);
       const fallbackMessage = 'No se pudo subir el documento';
@@ -1659,9 +1671,27 @@ export function BudgetDetailModal({
           type="checkbox"
           label="¿Es un documento de PO?"
           checked={isPoDocument}
-          onChange={(event) => setIsPoDocument(event.target.checked)}
+          onChange={(event) => {
+            const checked = event.target.checked;
+            setIsPoDocument(checked);
+            if (!checked) {
+              setPoDocumentReference('');
+            }
+          }}
           disabled={uploadingDocument}
         />
+        {isPoDocument ? (
+          <Form.Group className="mt-3" controlId="upload-po-reference">
+            <Form.Label className="mb-1">Referencia PO (alfanumérica)</Form.Label>
+            <Form.Control
+              type="text"
+              value={poDocumentReference}
+              onChange={(event) => setPoDocumentReference(event.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
+              placeholder="Ej: 66gh36986"
+              disabled={uploadingDocument}
+            />
+          </Form.Group>
+        ) : null}
       </Modal.Body>
       <Modal.Footer>
         <Button
