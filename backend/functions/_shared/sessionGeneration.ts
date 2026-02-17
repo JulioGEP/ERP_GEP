@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { errorResponse } from './response';
 
-const APPLICABLE_PREFIXES = ['form-', 'prev-', 'pci-'];
+const APPLICABLE_PREFIXES = ['form-', 'prev-', 'pci-', 'pau-'];
 const SINGLE_SESSION_PIPE_IDS = new Set(['1', '240', '241']);
 
 type DealProductRecord = {

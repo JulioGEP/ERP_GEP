@@ -104,7 +104,7 @@ type DeleteDialogState = {
   error: string | null;
 };
 
-const SESSION_PRODUCT_PREFIX = 'prev-';
+const SESSION_PRODUCT_PREFIXES = ['prev-', 'pau-'] as const;
 const SESSION_ESTADO_LABELS: Record<SessionEstado, string> = {
   BORRADOR: 'Borrador',
   PLANIFICADA: 'Planificada',
@@ -846,7 +846,8 @@ type SaveStatus = {
 
 function matchesSessionPrefix(value: unknown): boolean {
   if (typeof value !== 'string') return false;
-  return value.trim().toLowerCase().startsWith(SESSION_PRODUCT_PREFIX);
+  const normalizedValue = value.trim().toLowerCase();
+  return SESSION_PRODUCT_PREFIXES.some((prefix) => normalizedValue.startsWith(prefix));
 }
 
 function matchesSessionCategory(value: unknown): boolean {
