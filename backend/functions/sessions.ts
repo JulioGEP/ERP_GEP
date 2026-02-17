@@ -1017,6 +1017,21 @@ export const handler = async (event: any) => {
       return false;
     };
 
+    const isPciPipeline = (label: unknown, id: unknown): boolean => {
+      const normalizedLabel = normalizePipelineKey(label);
+      const normalizedId = normalizePipelineKey(id);
+      const pciPipelineKey = normalizePipelineKey('PCI');
+      return normalizedLabel === pciPipelineKey || normalizedId === pciPipelineKey;
+    };
+
+    const hasPciProductCode = (products: unknown): boolean => {
+      if (!Array.isArray(products)) return false;
+      return products.some((product) => {
+        const code = String((product as { code?: unknown })?.code ?? '').trim().toLowerCase();
+        return code.startsWith('pci-');
+      });
+    };
+
     // Availability
     if (method === 'GET' && isAvailabilityRequest) {
       const startParam = toTrimmed(event.queryStringParameters?.start);
@@ -1151,12 +1166,15 @@ export const handler = async (event: any) => {
       });
 
       const sesiones = (rawSessions as any[])
-        .filter((session) =>
-          isAllowedPipeline(
-            session?.deals?.pipeline_label ?? null,
-            session?.deals?.pipeline_id ?? null,
-          ),
-        )
+        .filter((session) => {
+          const pipelineLabel = session?.deals?.pipeline_label ?? null;
+          const pipelineId = session?.deals?.pipeline_id ?? null;
+
+          if (!isAllowedPipeline(pipelineLabel, pipelineId)) return false;
+          if (!isPciPipeline(pipelineLabel, pipelineId)) return true;
+
+          return hasPciProductCode(session?.deal_products);
+        })
         .map((session) => {
           const dealId = toTrimmed(session?.deal_id);
           const pipeline =
