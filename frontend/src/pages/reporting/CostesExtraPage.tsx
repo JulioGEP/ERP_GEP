@@ -723,12 +723,6 @@ export default function CostesExtraPage() {
                         </Badge>
                       ) : null}
                     </div>
-                    {item.dealTitle ? (
-                      <div className="text-muted small">{item.dealTitle}</div>
-                    ) : null}
-                    {item.site ? (
-                      <div className="text-muted small">Ubicación: {item.site}</div>
-                    ) : null}
                     {scheduledStart ? (
                       <div className="small fw-semibold">
                         Inicio: {scheduledStart}
