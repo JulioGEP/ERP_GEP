@@ -86,8 +86,8 @@ export function PosDocumentsPage() {
       </section>
 
       <div className="bg-white rounded-3 shadow-sm border p-3">
-        <div className="row g-3">
-          <div className="col-12 col-md-6 col-xl-3">
+        <div className="row row-cols-1 row-cols-md-2 row-cols-xl-5 g-2">
+          <div className="col">
             <Form.Label htmlFor="pos-filter-documento" className="fw-semibold">
               Nombre del documento
             </Form.Label>
@@ -98,7 +98,7 @@ export function PosDocumentsPage() {
               placeholder="Filtrar por nombre"
             />
           </div>
-          <div className="col-12 col-md-6 col-xl-3">
+          <div className="col">
             <Form.Label htmlFor="pos-filter-empresa" className="fw-semibold">
               Empresa
             </Form.Label>
@@ -109,7 +109,7 @@ export function PosDocumentsPage() {
               placeholder="Filtrar por empresa"
             />
           </div>
-          <div className="col-12 col-md-6 col-xl-3">
+          <div className="col">
             <Form.Label htmlFor="pos-filter-presupuesto" className="fw-semibold">
               Nº presupuesto
             </Form.Label>
@@ -120,7 +120,7 @@ export function PosDocumentsPage() {
               placeholder="Filtrar por nº"
             />
           </div>
-          <div className="col-12 col-md-6 col-xl-3">
+          <div className="col">
             <Form.Label htmlFor="pos-filter-sesion" className="fw-semibold">
               Sesión
             </Form.Label>
@@ -131,7 +131,7 @@ export function PosDocumentsPage() {
               placeholder="Filtrar por sesión"
             />
           </div>
-          <div className="col-12 col-md-6 col-xl-3">
+          <div className="col">
             <Form.Label htmlFor="pos-filter-fecha" className="fw-semibold">
               Fecha de sesión
             </Form.Label>
