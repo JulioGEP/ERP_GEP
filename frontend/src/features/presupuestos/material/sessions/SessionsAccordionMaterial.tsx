@@ -927,6 +927,7 @@ function SessionDocumentsAccordionItem({
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [isPoDocument, setIsPoDocument] = useState(false);
+  const [poDocumentReference, setPoDocumentReference] = useState('');
   const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
   const [driveUrl, setDriveUrl] = useState<string | null>(normalizeDriveUrlValue(initialDriveUrl));
@@ -951,13 +952,19 @@ function SessionDocumentsAccordionItem({
   }, [documentsQuery.data]);
 
   const uploadMutation = useMutation({
-    mutationFn: (input: { files: File[]; shareWithTrainer: boolean; isPoDocument: boolean }) =>
+    mutationFn: (input: {
+      files: File[];
+      shareWithTrainer: boolean;
+      isPoDocument: boolean;
+      poDocumentReference: string;
+    }) =>
       uploadSessionDocuments({
         dealId,
         sessionId,
         files: input.files,
         shareWithTrainer: input.shareWithTrainer,
         isPoDocument: input.isPoDocument,
+        poDocumentReference: input.poDocumentReference,
       }),
   });
 
@@ -1035,6 +1042,7 @@ function SessionDocumentsAccordionItem({
     setIsDragActive(false);
     setDocumentError(null);
     setIsPoDocument(false);
+    setPoDocumentReference('');
     setShowUploadDialog(true);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -1048,6 +1056,7 @@ function SessionDocumentsAccordionItem({
     setIsDragActive(false);
     setDocumentError(null);
     setIsPoDocument(false);
+    setPoDocumentReference('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -1094,10 +1103,19 @@ function SessionDocumentsAccordionItem({
     if (!files.length) return;
     setDocumentError(null);
     try {
+      const normalizedPoDocumentReference = poDocumentReference.trim();
+      if (isPoDocument && !normalizedPoDocumentReference) {
+        const message = 'Indica la referencia alfanumérica para el documento PO';
+        setDocumentError(message);
+        onNotify?.({ variant: 'danger', message });
+        return;
+      }
+
       const result = await uploadMutation.mutateAsync({
         files,
         shareWithTrainer: false,
         isPoDocument,
+        poDocumentReference: normalizedPoDocumentReference,
       });
       const normalizedLink = normalizeDriveUrlValue(result?.driveUrl ?? null);
       setDriveUrl(normalizedLink);
@@ -1112,6 +1130,7 @@ function SessionDocumentsAccordionItem({
       setPendingUploadFiles([]);
       setIsDragActive(false);
       setIsPoDocument(false);
+    setPoDocumentReference('');
     } catch (error: unknown) {
       const message = formatErrorMessage(error, 'No se pudo subir el documento');
       console.error('[SessionDocumentsAccordionItem] Error al subir documentos de sesión', error);
@@ -1458,9 +1477,27 @@ function SessionDocumentsAccordionItem({
           type="checkbox"
           label="¿Es un documento de PO?"
           checked={isPoDocument}
-          onChange={(event) => setIsPoDocument(event.target.checked)}
+          onChange={(event) => {
+            const checked = event.target.checked;
+            setIsPoDocument(checked);
+            if (!checked) {
+              setPoDocumentReference('');
+            }
+          }}
           disabled={uploadPending}
         />
+        {isPoDocument ? (
+          <Form.Group className="mt-3" controlId={`upload-po-reference-${sessionId}`}>
+            <Form.Label className="mb-1">Referencia PO (alfanumérica)</Form.Label>
+            <Form.Control
+              type="text"
+              value={poDocumentReference}
+              onChange={(event) => setPoDocumentReference(event.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
+              placeholder="Ej: 66gh36986"
+              disabled={uploadPending}
+            />
+          </Form.Group>
+        ) : null}
       </Modal.Body>
       <Modal.Footer>
         <Button
