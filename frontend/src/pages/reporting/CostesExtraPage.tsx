@@ -711,9 +711,6 @@ export default function CostesExtraPage() {
                   <td className="align-middle">{trainingDateLabel}</td>
                   <td className="align-middle">
                     <div className="fw-semibold">{trainerDisplayName}</div>
-                    {trainerDisplayName !== item.trainerId ? (
-                      <div className="text-muted small">ID: {item.trainerId}</div>
-                    ) : null}
                   </td>
                   <td className="align-middle">
                     <div className="fw-semibold d-flex align-items-center gap-2 flex-wrap">
@@ -729,15 +726,12 @@ export default function CostesExtraPage() {
                     {item.dealTitle ? (
                       <div className="text-muted small">{item.dealTitle}</div>
                     ) : null}
-                    {item.productName ? (
-                      <div className="text-muted small">Producto: {item.productName}</div>
-                    ) : null}
                     {item.site ? (
                       <div className="text-muted small">Ubicación: {item.site}</div>
                     ) : null}
                     {scheduledStart ? (
-                      <div className="text-muted small">
-                        Inicio planificado: {scheduledStart}
+                      <div className="small fw-semibold">
+                        Inicio: {scheduledStart}
                         {scheduledEnd ? ` · Fin: ${scheduledEnd}` : ''}
                       </div>
                     ) : null}
