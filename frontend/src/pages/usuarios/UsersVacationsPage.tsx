@@ -35,8 +35,17 @@ import {
   VACATION_TYPE_LABELS,
 } from '../../constants/vacations';
 import { VacationManagerModal } from './UsersPage';
+import pdfMake from 'pdfmake/build/pdfmake';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
 
 const MONTH_FORMATTER = new Intl.DateTimeFormat('es-ES', { month: 'long' });
+const PDF_VISIBLE_TYPES = new Set<VacationType>(['V', 'T', 'L', 'A', 'N', 'C', 'Y']);
+const PDF_PRIVATE_MARK = '■';
+const PDF_PRIVATE_COLOR = '#9ca3af';
+
+type PdfMakeWithVfs = typeof pdfMake & {
+  vfs?: Record<string, string>;
+};
 
 function buildIsoDate(year: number, monthIndex: number, day: number): string {
   return new Date(Date.UTC(year, monthIndex, day)).toISOString().slice(0, 10);
@@ -49,6 +58,50 @@ function isWeekend(year: number, monthIndex: number, day: number): boolean {
 
 function getDaysInMonth(year: number, monthIndex: number): number {
   return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+}
+
+function ensurePdfMakeFontsLoaded(): void {
+  const pdfMakeWithVfs = pdfMake as PdfMakeWithVfs;
+  if (pdfMakeWithVfs.vfs && Object.keys(pdfMakeWithVfs.vfs).length > 0) return;
+
+  const bundledFonts = pdfFonts as { pdfMake?: { vfs?: Record<string, string> } };
+  const bundledVfs = bundledFonts.pdfMake?.vfs;
+
+  if (bundledVfs) {
+    pdfMakeWithVfs.vfs = bundledVfs;
+  }
+}
+
+function getPdfCellDisplay(type: VacationType | ''): { label: string; color?: string; title?: string } {
+  if (!type) {
+    return { label: '' };
+  }
+
+  if (PDF_VISIBLE_TYPES.has(type)) {
+    return {
+      label: type,
+      color: VACATION_TYPE_COLORS[type],
+      title: `${VACATION_TYPE_FULL_LABELS[type]} (${type})`,
+    };
+  }
+
+  return {
+    label: PDF_PRIVATE_MARK,
+    color: PDF_PRIVATE_COLOR,
+    title: 'Ausencia privada',
+  };
+}
+
+function getCalendarCellDisplay(type: VacationType | ''): { label: string; color?: string; title?: string } {
+  if (!type) {
+    return { label: '' };
+  }
+
+  return {
+    label: type,
+    color: VACATION_TYPE_COLORS[type],
+    title: `${VACATION_TYPE_FULL_LABELS[type]} (${type})`,
+  };
 }
 
 function formatLocaleDateLabel(dateIso: string): string {
@@ -757,12 +810,118 @@ type VacationsCalendarModalProps = {
 };
 
 function VacationsCalendarModal({ show, onHide, users, year, userDayMap }: VacationsCalendarModalProps) {
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  const handleDownloadPdf = () => {
+    try {
+      setDownloadingPdf(true);
+      ensurePdfMakeFontsLoaded();
+
+      const monthSections: any[] = Array.from({ length: 12 }, (_, monthIndex) => {
+        const daysInMonth = getDaysInMonth(year, monthIndex);
+        const monthName = MONTH_FORMATTER.format(new Date(Date.UTC(year, monthIndex, 1)));
+        const dayHeaders = Array.from({ length: daysInMonth }, (_, index) => `${index + 1}`);
+
+        const body: any[] = [
+          [
+            { text: 'Persona', style: 'tableHeader', fillColor: '#f3f4f6', alignment: 'left' },
+            ...dayHeaders.map((day) => ({ text: day, style: 'tableHeader', fillColor: '#f3f4f6' })),
+          ],
+          ...users.map((user) => {
+            const dayMap = userDayMap.get(user.userId);
+            const userRow: any[] = [
+              {
+                text: `${user.fullName}\n${user.role}`,
+                style: 'personCell',
+                alignment: 'left',
+              },
+            ];
+
+            for (let day = 1; day <= daysInMonth; day += 1) {
+              const iso = buildIsoDate(year, monthIndex, day);
+              const type = dayMap?.get(iso) ?? '';
+              const display = getPdfCellDisplay(type);
+              userRow.push({
+                text: display.label,
+                style: 'dayCell',
+                fillColor: display.color,
+                color: display.color ? '#ffffff' : '#111827',
+                alignment: 'center',
+              });
+            }
+
+            return userRow;
+          }),
+        ];
+
+        return [
+          { text: `${monthName} ${year}`, style: 'monthTitle' },
+          {
+            table: {
+              headerRows: 1,
+              widths: [130, ...Array.from({ length: daysInMonth }, () => 16)],
+              body,
+            },
+            layout: {
+              hLineColor: () => '#d1d5db',
+              vLineColor: () => '#d1d5db',
+              paddingLeft: () => 2,
+              paddingRight: () => 2,
+              paddingTop: () => 2,
+              paddingBottom: () => 2,
+            },
+          },
+          {
+            text: 'Categorías visibles: V, T, L, A, N, C y Y. El resto de ausencias se anonimiza en gris.',
+            style: 'footnote',
+            margin: [0, 4, 0, 0],
+          },
+        ];
+      }).flat();
+
+      const docDefinition: any = {
+          pageOrientation: 'landscape',
+          pageSize: 'A4',
+          pageMargins: [14, 20, 14, 20],
+          content: [
+            { text: `Calendario de ausencias ${year}`, style: 'title' },
+            {
+              text: 'El resto de categorías personales se muestran en gris para preservar privacidad.',
+              style: 'subtitle',
+            },
+            ...monthSections,
+          ],
+          styles: {
+            title: { fontSize: 12, bold: true, margin: [0, 0, 0, 6] },
+            subtitle: { fontSize: 9, color: '#4b5563', margin: [0, 0, 0, 10] },
+            monthTitle: { fontSize: 10, bold: true, margin: [0, 10, 0, 4] },
+            tableHeader: { fontSize: 7, bold: true, color: '#111827' },
+            personCell: { fontSize: 7, color: '#111827' },
+            dayCell: { fontSize: 7, bold: true },
+            footnote: { fontSize: 7, color: '#6b7280' },
+          },
+          defaultStyle: {
+            fontSize: 8,
+          },
+        };
+
+      pdfMake.createPdf(docDefinition).download(`calendario-ausencias-${year}.pdf`);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
   return (
     <Modal show={show} onHide={onHide} size="xl" dialogClassName="vacations-calendar-modal" scrollable>
       <Modal.Header closeButton>
         <Modal.Title>Calendario de ausencias · {year}</Modal.Title>
       </Modal.Header>
       <Modal.Body className="d-grid gap-3">
+        <div className="d-flex justify-content-end">
+          <Button variant="outline-primary" size="sm" onClick={handleDownloadPdf} disabled={!users.length || downloadingPdf}>
+            {downloadingPdf ? 'Generando PDF…' : 'Descargar PDF'}
+          </Button>
+        </div>
         <div className="text-muted small">
           Vista anual para revisar de un vistazo las marcas diarias de todo el equipo. Inspirada en el Excel
           compartido, pero optimizada para la web.
@@ -850,7 +1009,7 @@ function VacationsCalendarModal({ show, onHide, users, year, userDayMap }: Vacat
                               </td>
                               {dayEntries.map(({ dayLabel, iso, isWeekend }) => {
                                 const type = dayMap?.get(iso) ?? '';
-                                const color = type ? VACATION_TYPE_COLORS[type as VacationType] : undefined;
+                                const display = getCalendarCellDisplay(type);
 
                                 return (
                                   <td
@@ -859,12 +1018,12 @@ function VacationsCalendarModal({ show, onHide, users, year, userDayMap }: Vacat
                                       isWeekend ? ' weekend' : ''
                                     }`}
                                     style={{
-                                      backgroundColor: color,
-                                      color: type ? '#ffffff' : undefined,
+                                      backgroundColor: display.color,
+                                      color: display.color ? '#ffffff' : undefined,
                                     }}
-                                    title={type ? `${VACATION_TYPE_FULL_LABELS[type as VacationType]} (${type})` : undefined}
+                                    title={display.title}
                                   >
-                                    {type || ''}
+                                    {display.label}
                                   </td>
                                 );
                               })}
