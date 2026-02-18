@@ -278,7 +278,10 @@ function mapRowToCertificateGenerationData(
     : pickNonEmptyString(context.session?.fecha_inicio_utc, row.fecha);
   const sessionDate = normaliseSessionDate(sessionDateSource);
   const sessionSecondDate = normaliseSessionDate(row.fecha2);
-  const sede = resolveCertificateLocation(toTrimmedString(context.deal?.sede_label ?? row.lugar));
+  const customLocation = toTrimmedString(row.lugar);
+  const defaultDealLocation = toTrimmedString(context.deal?.sede_label);
+  const locationSource = customLocation.length ? customLocation : defaultDealLocation;
+  const sede = resolveCertificateLocation(locationSource);
   const productName = toTrimmedString(context.session?.productName ?? row.formacion);
   const hours =
     parseHoursValue(context.session?.productHours ?? null) ?? parseHoursValue(row.horas ?? null);
