@@ -210,9 +210,16 @@ export function getPermissionsForRole(role: string | null | undefined): readonly
 
 export function getPermissionsForUser(user: UserRecord): readonly string[] {
   const permissions = new Set(getPermissionsForRole(user.role));
-  if (user.email?.toLowerCase() === 'carles@gepgroup.es') {
+  const normalizedEmail = user.email?.toLowerCase();
+
+  if (normalizedEmail === 'carles@gepgroup.es') {
     permissions.add('/calendario/*');
   }
+
+  if (normalizedEmail === 'noelia@gepgroup.es' || normalizedEmail === 'jan@gepgroup.es') {
+    permissions.add('/recursos/formaciones');
+  }
+
   return Array.from(permissions);
 }
 
