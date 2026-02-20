@@ -625,6 +625,7 @@ model trainers {
   updated_at                    DateTime  @updatedAt @db.Timestamptz(6)
   activo                        Boolean   @default(true)
   contrato_fijo                 Boolean   @default(false)
+  treintaytres                  Boolean   @default(false)
   nomina                        Decimal?  @db.Decimal(12, 2)
   irpf                          Decimal?  @db.Decimal(12, 2)
   ss                            Decimal?  @db.Decimal(12, 2)

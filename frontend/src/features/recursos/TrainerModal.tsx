@@ -46,6 +46,7 @@ export type TrainerFormValues = {
   especialidad: string;
   titulacion: string;
   contrato_fijo: boolean;
+  treintaytres: boolean;
   nomina: string;
   irpf: string;
   ss: string;
@@ -79,6 +80,7 @@ const EMPTY_FORM: TrainerFormValues = {
   especialidad: "",
   titulacion: "",
   contrato_fijo: false,
+  treintaytres: false,
   nomina: "",
   irpf: "",
   ss: "",
@@ -105,6 +107,7 @@ function trainerToFormValues(trainer?: Trainer | null): TrainerFormValues {
     especialidad: trainer.especialidad ?? "",
     titulacion: trainer.titulacion ?? "",
     contrato_fijo: Boolean(trainer.contrato_fijo),
+    treintaytres: Boolean(trainer.treintaytres),
     nomina:
       typeof trainer.nomina === "number" && Number.isFinite(trainer.nomina)
         ? String(trainer.nomina)
@@ -204,7 +207,7 @@ export function TrainerModal({
 
   const handleChange = (field: keyof TrainerFormValues) =>
     (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      const isBooleanField = field === "activo" || field === "contrato_fijo";
+      const isBooleanField = field === "activo" || field === "contrato_fijo" || field === "treintaytres";
       const value = isBooleanField ? (event.target as HTMLInputElement).checked : event.target.value;
       setFormValues((prev) => ({ ...prev, [field]: value }));
     };
@@ -294,6 +297,7 @@ export function TrainerModal({
       especialidad: formValues.especialidad.trim(),
       titulacion: formValues.titulacion.trim(),
       contrato_fijo: formValues.contrato_fijo,
+      treintaytres: formValues.treintaytres,
       nomina: formValues.contrato_fijo ? formValues.nomina.trim() : "",
       irpf: formValues.contrato_fijo ? formValues.irpf.trim() : "",
       ss: formValues.contrato_fijo ? formValues.ss.trim() : "",
@@ -497,6 +501,20 @@ export function TrainerModal({
                     label={formValues.contrato_fijo ? "Sí" : "No"}
                     checked={formValues.contrato_fijo}
                     onChange={handleChange("contrato_fijo")}
+                    disabled={isSaving}
+                  />
+                </div>
+              </Form.Group>
+            </Col>
+            <Col md={6}>
+              <Form.Group controlId="trainerTreintaYTres">
+                <Form.Label>33 días naturales</Form.Label>
+                <div>
+                  <Form.Check
+                    type="switch"
+                    label={formValues.treintaytres ? "Sí" : "No"}
+                    checked={formValues.treintaytres}
+                    onChange={handleChange("treintaytres")}
                     disabled={isSaving}
                   />
                 </div>
