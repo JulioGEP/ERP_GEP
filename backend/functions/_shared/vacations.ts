@@ -111,12 +111,16 @@ export async function buildVacationPayload(
   }
 
   const enjoyed = counts.V + counts.A + counts.Y;
-  const allowance =
+  const storedAllowance =
     typeof balance?.allowance_days === 'number'
       ? balance.allowance_days
       : specialTrainer
         ? SPECIAL_TRAINER_VACATION_ALLOWANCE
         : DEFAULT_VACATION_ALLOWANCE;
+  const allowance =
+    specialTrainer && enjoyed === 0 && storedAllowance === DEFAULT_VACATION_ALLOWANCE
+      ? SPECIAL_TRAINER_VACATION_ALLOWANCE
+      : storedAllowance;
   const anniversaryAllowance =
     typeof balance?.anniversary_days === 'number' ? balance.anniversary_days : DEFAULT_ANNIVERSARY_ALLOWANCE;
   const localHolidayAllowance =
