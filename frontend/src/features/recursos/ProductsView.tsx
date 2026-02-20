@@ -1,5 +1,5 @@
 // frontend/src/features/recursos/ProductsView.tsx
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
 import { Alert, Badge, Button, Form, Spinner, Table } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -8,7 +8,6 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Product } from '../../types/product';
 import {
   fetchProducts,
@@ -684,8 +683,6 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
     [setSearchValue],
   );
 
-  const tableContainerRef = useRef<HTMLDivElement | null>(null);
-
   const columns = useMemo<ColumnDef<Product, unknown>[]>(() => {
     const baseColumns: ColumnDef<Product, unknown>[] = [
       {
@@ -997,20 +994,6 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
   const rowModel = table.getRowModel();
   const rows = rowModel.rows;
 
-  const rowVirtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => tableContainerRef.current,
-    estimateSize: () => 72,
-    overscan: 8,
-  });
-
-  const virtualRows = rowVirtualizer.getVirtualItems();
-  const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0;
-  const paddingBottom =
-    virtualRows.length > 0
-      ? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end
-      : 0;
-
   const columnsCount = table.getAllColumns().length;
   const resultCount = filteredProducts.length;
   const noFilteredResults = !filteredProducts.length && products.length > 0;
@@ -1068,7 +1051,6 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
         <div
           className="table-responsive"
           style={{ maxHeight: '70vh' }}
-          ref={tableContainerRef}
         >
           <Table hover className="mb-0 align-middle">
             <thead>
@@ -1108,34 +1090,19 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
                   </td>
                 </tr>
               ) : (
-                <>
-                  {paddingTop > 0 && (
-                    <tr>
-                      <td colSpan={columnsCount} style={{ height: `${paddingTop}px` }} />
-                    </tr>
-                  )}
-                  {virtualRows.map((virtualRow) => {
-                    const row = rows[virtualRow.index];
-                    return (
-                      <tr key={row.id}>
-                        {row.getVisibleCells().map((cell) => {
-                          const meta = cell.column.columnDef.meta as { style?: CSSProperties } | undefined;
-                          const style = meta?.style;
-                          return (
-                            <td key={cell.id} style={style}>
-                              {cell.renderValue()}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                  {paddingBottom > 0 && (
-                    <tr>
-                      <td colSpan={columnsCount} style={{ height: `${paddingBottom}px` }} />
-                    </tr>
-                  )}
-                </>
+                rows.map((row) => (
+                  <tr key={row.id}>
+                    {row.getVisibleCells().map((cell) => {
+                      const meta = cell.column.columnDef.meta as { style?: CSSProperties } | undefined;
+                      const style = meta?.style;
+                      return (
+                        <td key={cell.id} style={style}>
+                          {cell.renderValue()}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))
               )}
             </tbody>
           </Table>
