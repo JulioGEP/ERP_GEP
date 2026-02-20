@@ -122,6 +122,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       fullName: `${user.first_name} ${user.last_name}`.trim(),
       role: user.role,
       active: user.active,
+      specialVacationTrainer: specialTrainerMap.get(user.id) === true,
       allowance,
       anniversaryAllowance,
       localHolidayAllowance,
