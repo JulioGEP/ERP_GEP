@@ -1244,21 +1244,42 @@ export const handler = async (event: any) => {
       dealRaw = normalizeDealRelations(dealRaw);
       if (!dealRaw) return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
 
-      const dealProductNames = (dealRaw.deal_products ?? [])
+      const dealProductsRaw = Array.isArray(dealRaw.deal_products) ? dealRaw.deal_products : [];
+      const dealProductIds = dealProductsRaw
+        .map((product: { product_id?: string | null }) =>
+          typeof product?.product_id === "string" ? product.product_id.trim() : "",
+        )
+        .filter((productId: string) => productId.length > 0);
+      const dealProductNames = dealProductsRaw
         .map((product: { name?: string | null }) =>
           typeof product?.name === "string" ? product.name.trim() : "",
         )
         .filter((name: string) => name.length > 0);
 
       let dealWithTemplates = dealRaw;
-      if (dealProductNames.length > 0) {
+      if (dealProductIds.length > 0 || dealProductNames.length > 0) {
+        const uniqueProductIds = Array.from(new Set(dealProductIds));
         const uniqueNames = Array.from(new Set(dealProductNames));
+
         const catalogProducts = await prisma.products.findMany({
-          where: { name: { in: uniqueNames } },
-          select: { name: true, template: true },
+          where: {
+            OR: [
+              ...(uniqueProductIds.length ? [{ id: { in: uniqueProductIds } }] : []),
+              ...(uniqueNames.length ? [{ name: { in: uniqueNames } }] : []),
+            ],
+          },
+          select: { id: true, name: true, template: true },
         });
+        const templateById = new Map<string, string | null>();
         const templateByName = new Map<string, string | null>();
+
         for (const catalogProduct of catalogProducts) {
+          if (typeof catalogProduct.id === "string" && catalogProduct.id.trim().length) {
+            if (!templateById.has(catalogProduct.id) || typeof catalogProduct.template === "string") {
+              templateById.set(catalogProduct.id, catalogProduct.template ?? null);
+            }
+          }
+
           const key =
             typeof catalogProduct.name === "string"
               ? catalogProduct.name.trim().toLowerCase()
@@ -1271,10 +1292,19 @@ export const handler = async (event: any) => {
 
         dealWithTemplates = {
           ...dealRaw,
-          deal_products: (dealRaw.deal_products ?? []).map((product: any) => {
+          deal_products: dealProductsRaw.map((product: any) => {
+            const productId =
+              typeof product?.product_id === "string" ? product.product_id.trim() : "";
             const key =
               typeof product?.name === "string" ? product.name.trim().toLowerCase() : "";
-            const template = key ? templateByName.get(key) ?? null : null;
+            const templateByForeignKey = productId ? templateById.get(productId) : undefined;
+            const template =
+              templateByForeignKey !== undefined
+                ? templateByForeignKey
+                : key
+                  ? templateByName.get(key) ?? null
+                  : null;
+
             return {
               ...product,
               template,

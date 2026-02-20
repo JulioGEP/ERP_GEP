@@ -491,6 +491,7 @@ export async function mapAndUpsertDealTree({
   const existingAutoProducts = existingProducts.filter((product) => !isLikelyManualId(product.id));
   const existingAutoIds = new Set<string>(existingAutoProducts.map((product) => product.id));
   const existingAutoByFingerprint = new Map<string, string>();
+  const catalogProductIdCache = new Map<string, string | null>();
 
   for (const product of existingAutoProducts) {
     const fingerprint = buildProductFingerprint(product.name, product.code);
@@ -526,6 +527,57 @@ export async function mapAndUpsertDealTree({
     }
 
     return `${dealId}_${Math.random().toString(36).slice(2)}`;
+  };
+
+  const resolveCatalogProductDbId = async (
+    productPipeId: unknown,
+    productName: string | null,
+    productCode: string | null,
+  ): Promise<string | null> => {
+    const pipeId =
+      productPipeId === null || productPipeId === undefined
+        ? null
+        : String(productPipeId).trim() || null;
+
+    if (pipeId) {
+      const cached = catalogProductIdCache.get(`pipe:${pipeId}`);
+      if (cached !== undefined) {
+        return cached;
+      }
+
+      const byPipe = await prisma.products.findUnique({
+        where: { id_pipe: pipeId },
+        select: { id: true },
+      });
+      const resolved = byPipe?.id ?? null;
+      catalogProductIdCache.set(`pipe:${pipeId}`, resolved);
+      return resolved;
+    }
+
+    const normalizedName = typeof productName === "string" ? productName.trim() : "";
+    if (!normalizedName.length) {
+      return null;
+    }
+
+    const codeValue = typeof productCode === "string" ? productCode.trim() : "";
+    const fallbackKey = `name:${normalizedName.toLowerCase()}|code:${codeValue.toLowerCase()}`;
+    const cachedFallback = catalogProductIdCache.get(fallbackKey);
+    if (cachedFallback !== undefined) {
+      return cachedFallback;
+    }
+
+    const byName = await prisma.products.findFirst({
+      where: {
+        name: { equals: normalizedName, mode: "insensitive" },
+        ...(codeValue.length ? { code: { equals: codeValue, mode: "insensitive" } } : {}),
+      },
+      select: { id: true },
+      orderBy: [{ updated_at: "desc" }, { created_at: "desc" }],
+    });
+
+    const resolved = byName?.id ?? null;
+    catalogProductIdCache.set(fallbackKey, resolved);
+    return resolved;
   };
 
   const now = new Date();
@@ -613,8 +665,15 @@ export async function mapAndUpsertDealTree({
     const productId = resolveProductId(dealId, p, fingerprint);
     incomingProductIds.add(productId);
 
+    const product_id = await resolveCatalogProductDbId(
+      p.product_id ?? p.id ?? p.product?.id ?? null,
+      baseName,
+      code,
+    );
+
     const data = {
       deal_id: dealId,
+      product_id,
       name: baseName,
       code,
       quantity,

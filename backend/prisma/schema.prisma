@@ -44,8 +44,8 @@ model users {
   reset_requested_at  DateTime? @db.Timestamptz(6)
 
   // relación recíproca 1:1 (FK vive en trainers.user_id)
-  trainer trainers?
-  payroll user_payrolls?
+  trainer         trainers?
+  payroll         user_payrolls?
   office_payrolls office_payrolls[]
 
   auth_sessions     auth_sessions[]
@@ -54,17 +54,17 @@ model users {
   vacation_days     user_vacation_days[]
   vacation_balances user_vacation_balances[]
   vacation_requests vacation_requests[]
-  time_logs        user_time_logs[]
+  time_logs         user_time_logs[]
 }
 
 model user_time_logs {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id       String   @db.Uuid
-  log_date      DateTime @db.Date
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String    @db.Uuid
+  log_date      DateTime  @db.Date
   check_in_utc  DateTime? @db.Timestamptz(6)
   check_out_utc DateTime? @db.Timestamptz(6)
-  created_at    DateTime @default(now()) @db.Timestamptz(6)
-  updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
 
   user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
@@ -74,25 +74,25 @@ model user_time_logs {
 }
 
 model user_payrolls {
-  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id                String    @unique @db.Uuid
-  convenio               String?
-  categoria              String?
-  antiguedad             DateTime? @db.Date
-  horas_semana           Decimal?  @db.Decimal(6, 2)
-  base_retencion         Decimal?  @db.Decimal(12, 2)
-  base_retencion_detalle String?
-  salario_bruto          Decimal?  @db.Decimal(12, 2)
-  salario_bruto_total    Decimal?  @db.Decimal(12, 2)
-  retencion              Decimal?  @db.Decimal(12, 2)
-  aportacion_ss_irpf     Decimal?  @db.Decimal(12, 2)
-  aportacion_ss_irpf_detalle String?
-  salario_limpio         Decimal?  @db.Decimal(12, 2)
-  contingencias_comunes  Decimal?  @db.Decimal(12, 2)
+  id                            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                       String    @unique @db.Uuid
+  convenio                      String?
+  categoria                     String?
+  antiguedad                    DateTime? @db.Date
+  horas_semana                  Decimal?  @db.Decimal(6, 2)
+  base_retencion                Decimal?  @db.Decimal(12, 2)
+  base_retencion_detalle        String?
+  salario_bruto                 Decimal?  @db.Decimal(12, 2)
+  salario_bruto_total           Decimal?  @db.Decimal(12, 2)
+  retencion                     Decimal?  @db.Decimal(12, 2)
+  aportacion_ss_irpf            Decimal?  @db.Decimal(12, 2)
+  aportacion_ss_irpf_detalle    String?
+  salario_limpio                Decimal?  @db.Decimal(12, 2)
+  contingencias_comunes         Decimal?  @db.Decimal(12, 2)
   contingencias_comunes_detalle String?
-  total_empresa          Decimal?  @db.Decimal(12, 2)
-  created_at             DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at             DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  total_empresa                 Decimal?  @db.Decimal(12, 2)
+  created_at                    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                    DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
 
   user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
@@ -100,35 +100,35 @@ model user_payrolls {
 }
 
 model office_payrolls {
-  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id            String    @db.Uuid
-  year               Int
-  month              Int
-  dietas             Decimal?  @db.Decimal(12, 2)
-  kilometrajes       Decimal?  @db.Decimal(12, 2)
-  pernocta           Decimal?  @db.Decimal(12, 2)
-  nocturnidad        Decimal?  @db.Decimal(12, 2)
-  festivo            Decimal?  @db.Decimal(12, 2)
-  horas_extras       Decimal?  @db.Decimal(12, 2)
-  otros_gastos       Decimal?  @db.Decimal(12, 2)
-  total_extras       Decimal?  @db.Decimal(12, 2)
-  convenio           String?
-  categoria          String?
-  antiguedad         DateTime? @db.Date
-  horas_semana       Decimal?  @db.Decimal(6, 2)
-  base_retencion     Decimal?  @db.Decimal(12, 2)
-  base_retencion_detalle String?
-  salario_bruto      Decimal?  @db.Decimal(12, 2)
-  salario_bruto_total Decimal?  @db.Decimal(12, 2)
-  retencion          Decimal?  @db.Decimal(12, 2)
-  aportacion_ss_irpf Decimal?  @db.Decimal(12, 2)
-  aportacion_ss_irpf_detalle String?
-  salario_limpio     Decimal?  @db.Decimal(12, 2)
-  contingencias_comunes Decimal?  @db.Decimal(12, 2)
+  id                            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                       String    @db.Uuid
+  year                          Int
+  month                         Int
+  dietas                        Decimal?  @db.Decimal(12, 2)
+  kilometrajes                  Decimal?  @db.Decimal(12, 2)
+  pernocta                      Decimal?  @db.Decimal(12, 2)
+  nocturnidad                   Decimal?  @db.Decimal(12, 2)
+  festivo                       Decimal?  @db.Decimal(12, 2)
+  horas_extras                  Decimal?  @db.Decimal(12, 2)
+  otros_gastos                  Decimal?  @db.Decimal(12, 2)
+  total_extras                  Decimal?  @db.Decimal(12, 2)
+  convenio                      String?
+  categoria                     String?
+  antiguedad                    DateTime? @db.Date
+  horas_semana                  Decimal?  @db.Decimal(6, 2)
+  base_retencion                Decimal?  @db.Decimal(12, 2)
+  base_retencion_detalle        String?
+  salario_bruto                 Decimal?  @db.Decimal(12, 2)
+  salario_bruto_total           Decimal?  @db.Decimal(12, 2)
+  retencion                     Decimal?  @db.Decimal(12, 2)
+  aportacion_ss_irpf            Decimal?  @db.Decimal(12, 2)
+  aportacion_ss_irpf_detalle    String?
+  salario_limpio                Decimal?  @db.Decimal(12, 2)
+  contingencias_comunes         Decimal?  @db.Decimal(12, 2)
   contingencias_comunes_detalle String?
-  total_empresa      Decimal?  @db.Decimal(12, 2)
-  created_at         DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at         DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  total_empresa                 Decimal?  @db.Decimal(12, 2)
+  created_at                    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                    DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
 
   user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
@@ -171,15 +171,15 @@ model user_vacation_days {
 }
 
 model user_vacation_balances {
-  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id              String   @db.Uuid
-  year                 Int
-  allowance_days       Int      @default(24)
-  anniversary_days     Int      @default(1)
-  local_holiday_days   Int      @default(2)
-  previous_year_days   Int      @default(0)
-  created_at           DateTime @default(now()) @db.Timestamptz(6)
-  updated_at           DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id            String   @db.Uuid
+  year               Int
+  allowance_days     Int      @default(24)
+  anniversary_days   Int      @default(1)
+  local_holiday_days Int      @default(2)
+  previous_year_days Int      @default(0)
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
@@ -248,9 +248,9 @@ model pipedrive_webhook_events {
 }
 
 model products {
-  id                     String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  id_pipe                String     @unique
-  id_woo                 BigInt?    @unique
+  id                     String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_pipe                String          @unique
+  id_woo                 BigInt?         @unique
   id_holded              String?
   name                   String?
   siglas                 String?
@@ -260,19 +260,20 @@ model products {
   template               String?
   url_formacion          String?
   atributos              Json?
-  active                 Boolean?   @default(true)
-  created_at             DateTime?  @default(now()) @db.Timestamp(6)
-  updated_at             DateTime?  @default(now()) @updatedAt @db.Timestamp(6)
+  active                 Boolean?        @default(true)
+  created_at             DateTime?       @default(now()) @db.Timestamp(6)
+  updated_at             DateTime?       @default(now()) @updatedAt @db.Timestamp(6)
   variant_stock_status   String?
   variant_stock_quantity Int?
-  variant_price          Decimal?   @db.Decimal(12, 2)
-  price                  Decimal?   @db.Decimal(12, 2)
-  hora_inicio            DateTime?  @db.Time(6)
-  hora_fin               DateTime?  @db.Time(6)
-  variant_start          DateTime?  @db.Date
-  variant_end            DateTime?  @db.Date
+  variant_price          Decimal?        @db.Decimal(12, 2)
+  price                  Decimal?        @db.Decimal(12, 2)
+  hora_inicio            DateTime?       @db.Time(6)
+  hora_fin               DateTime?       @db.Time(6)
+  variant_start          DateTime?       @db.Date
+  variant_end            DateTime?       @db.Date
   almacen_stock          Int?
-  provider_ids           Int[]      @default([])
+  provider_ids           Int[]           @default([])
+  deal_products          deal_products[]
   variants               variants[]
 }
 
@@ -426,6 +427,7 @@ model deal_notes {
 model deal_products {
   id               String     @id
   deal_id          String?
+  product_id       String?    @db.Uuid
   name             String?
   code             String?
   quantity         Decimal    @db.Decimal(10, 0)
@@ -437,11 +439,13 @@ model deal_products {
   product_comments String?
   category         String?
   deals            deals?     @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "deal_products_deal_fk")
+  products         products?  @relation(fields: [product_id], references: [id], onDelete: SetNull, map: "deal_products_product_fk")
   sesiones         sesiones[]
 
   @@index([deal_id])
   @@index([type])
   @@index([deal_id], map: "idx_deal_products_deal_id")
+  @@index([product_id], map: "idx_deal_products_product_id")
 }
 
 model organizations {
@@ -517,20 +521,20 @@ model salas {
 }
 
 model sesion_files {
-  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  deal_id             String
-  sesion_id           String   @db.Uuid
-  file_type           String   @db.VarChar(16)
-  compartir_formador  Boolean  @default(false)
-  trainer_expense     Boolean  @default(false)
-  trainer_expense_trainer_id String? @db.VarChar(255)
-  added_at            DateTime @default(now()) @db.Timestamptz(6)
-  created_at          DateTime @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime @default(now()) @db.Timestamptz(6)
-  drive_file_name     String
-  drive_web_view_link String?
-  deals               deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, onUpdate: NoAction)
-  sesiones            sesiones @relation(fields: [sesion_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deal_id                    String
+  sesion_id                  String   @db.Uuid
+  file_type                  String   @db.VarChar(16)
+  compartir_formador         Boolean  @default(false)
+  trainer_expense            Boolean  @default(false)
+  trainer_expense_trainer_id String?  @db.VarChar(255)
+  added_at                   DateTime @default(now()) @db.Timestamptz(6)
+  created_at                 DateTime @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime @default(now()) @db.Timestamptz(6)
+  drive_file_name            String
+  drive_web_view_link        String?
+  deals                      deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, onUpdate: NoAction)
+  sesiones                   sesiones @relation(fields: [sesion_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([added_at], map: "idx_sesion_files_added_at")
   @@index([deal_id], map: "idx_sesion_files_deal_id")
@@ -575,7 +579,7 @@ model sesiones {
   updated_at              DateTime                    @default(now()) @db.Timestamptz(6)
   estado                  SessionEstado               @default(BORRADOR)
   drive_url               String?
-  tiempo_parada           Decimal?                   @db.Decimal(3, 1)
+  tiempo_parada           Decimal?                    @db.Decimal(3, 1)
   alumnos                 alumnos[]
   sesion_files            sesion_files[]
   sesion_trainers         sesion_trainers[]

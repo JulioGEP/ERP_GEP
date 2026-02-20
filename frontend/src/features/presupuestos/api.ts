@@ -432,6 +432,7 @@ function normalizeProducts(
       const product: DealProduct = {
         id: item.id ?? null,
         deal_id: item.deal_id ?? null,
+        product_id: toStringValue(item.product_id) ?? null,
         name: toStringValue(item.name) ?? null,
         code: toStringValue(item.code) ?? null,
         quantity: toNumber(item.quantity),
