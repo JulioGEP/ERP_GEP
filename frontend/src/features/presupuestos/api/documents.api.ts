@@ -185,6 +185,7 @@ export async function uploadSessionCertificate(params: {
   fileName: string;
   file: Blob;
   mimeType?: string;
+  locationOverride?: string;
 }): Promise<SessionCertificateUploadResult> {
   const normalizedDealId = String(params.dealId ?? '').trim();
   const normalizedSessionId = String(params.sessionId ?? '').trim();
@@ -213,6 +214,10 @@ export async function uploadSessionCertificate(params: {
     dealId: normalizedDealId,
     sessionId: normalizedSessionId,
     studentId: normalizedStudentId,
+    locationOverride:
+      typeof params.locationOverride === 'string' && params.locationOverride.trim().length
+        ? params.locationOverride.trim()
+        : undefined,
     type: 'certificate',
     file: {
       fileName,
