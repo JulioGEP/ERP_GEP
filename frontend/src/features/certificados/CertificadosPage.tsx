@@ -383,6 +383,17 @@ function buildCertificateFileName(row: CertificateRow, session: CertificateSessi
   return `${fileName}.pdf`;
 }
 
+function resolveLocationOverride(row: CertificateRow, deal: DealDetail | null): string | undefined {
+  const customLocation = toTrimmedString(row.lugar);
+  const defaultLocation = toTrimmedString(deal?.sede_label);
+
+  if (!customLocation.length) {
+    return undefined;
+  }
+
+  return customLocation !== defaultLocation ? customLocation : undefined;
+}
+
 const CERTIFICATE_BATCH_SIZE = 5;
 const CERTIFICATE_MAX_RETRIES = 3;
 const CERTIFICATE_RETRY_DELAY_MS = 500;
@@ -1416,6 +1427,7 @@ export function CertificadosPage({ onSelectBudget }: CertificadosPageProps) {
               studentId: row.id,
               fileName,
               file: blob,
+              locationOverride: resolveLocationOverride(row, deal),
             });
             throwIfCancelled();
 

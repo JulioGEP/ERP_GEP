@@ -88,6 +88,42 @@ function extractProvince(address: string | null | undefined): string {
   return parts.length ? parts[parts.length - 1] : normalized;
 }
 
+async function resolveTrainingSiglas(params: {
+  prisma: ReturnType<typeof getPrisma>;
+  dealProductId?: string | null;
+  dealId: string;
+  dealProductName?: string | null;
+}): Promise<string | null> {
+  const { prisma, dealProductId, dealId, dealProductName } = params;
+
+  if (dealProductId) {
+    const dealProductWithProduct = await prisma.deal_products.findUnique({
+      where: { id: dealProductId },
+      select: { products: { select: { siglas: true } } },
+    });
+
+    const siglasByRelation = sanitizeFileNamePart(dealProductWithProduct?.products?.siglas);
+    if (siglasByRelation) {
+      return siglasByRelation;
+    }
+  }
+
+  if (!dealProductName) {
+    return null;
+  }
+
+  const byName = await prisma.deal_products.findFirst({
+    where: {
+      deal_id: dealId,
+      name: dealProductName,
+      products: { name: dealProductName },
+    },
+    select: { products: { select: { siglas: true } } },
+  });
+
+  return sanitizeFileNamePart(byName?.products?.siglas) || null;
+}
+
 function toBufferFromBase64(contentBase64: string): Buffer {
   return Buffer.from(String(contentBase64), 'base64');
 }
@@ -120,6 +156,7 @@ export const handler = async (event: any) => {
     const sessionId = toStringOrNull(payload?.sessionId ?? payload?.sesion_id);
     const studentId = toStringOrNull(payload?.studentId ?? payload?.alumno_id);
     const type = toStringOrNull(payload?.type ?? payload?.documentType);
+    const locationOverride = toStringOrNull(payload?.locationOverride ?? payload?.lugar);
 
     if (!dealId || !sessionId || !studentId) {
       return errorResponse(
@@ -222,11 +259,19 @@ export const handler = async (event: any) => {
         })
       : null;
 
+    const trainingSiglas = await resolveTrainingSiglas({
+      prisma,
+      dealProductId: resolvedSession.deal_product_id,
+      dealId,
+      dealProductName: dealProduct?.name ?? null,
+    });
+
     const organizationName =
       sanitizeFileNamePart(
         deal.organizations?.name ?? (deal as any)?.organizations?.name ?? (deal as any)?.organization?.name,
       ) || 'Empresa desconocida';
     const trainingType =
+      trainingSiglas ||
       sanitizeFileNamePart(dealProduct?.name) ||
       sanitizeFileNamePart(dealProduct?.type) ||
       sanitizeFileNamePart(dealProduct?.category) ||
@@ -238,7 +283,9 @@ export const handler = async (event: any) => {
     const provinceFromDeal = sanitizeFileNamePart(toStringOrNull((deal as any)?.sede_label));
     const provinceFromSession = extractProvince(resolvedSession.direccion);
     const provinceFromOrganization = extractProvince((deal as any)?.organizations?.address);
+    const provinceOverride = sanitizeFileNamePart(locationOverride);
     const province =
+      provinceOverride ||
       provinceFromDeal ||
       (provinceFromSession !== 'Provincia desconocida' ? provinceFromSession : null) ||
       (provinceFromOrganization !== 'Provincia desconocida' ? provinceFromOrganization : null) ||
