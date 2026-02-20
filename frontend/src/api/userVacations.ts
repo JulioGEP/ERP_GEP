@@ -10,6 +10,7 @@ export type UserVacationDay = {
 
 export type UserVacationsResponse = {
   year: number;
+  specialVacationTrainer: boolean;
   allowance: number;
   anniversaryAllowance: number;
   localHolidayAllowance: number;
@@ -27,6 +28,7 @@ export type VacationSummaryUser = {
   fullName: string;
   role: string;
   active: boolean;
+  specialVacationTrainer: boolean;
   allowance: number;
   anniversaryAllowance: number;
   localHolidayAllowance: number;

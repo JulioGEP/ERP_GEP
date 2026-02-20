@@ -49,10 +49,7 @@ export function expandVacationRangeForSpecialTrainer(startDate: Date, endDate: D
   const normalizedStart = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
   const normalizedEnd = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
 
-  const isMondayToFridayRange =
-    normalizedStart.getUTCDay() === 1 &&
-    normalizedEnd.getUTCDay() === 5 &&
-    Math.floor((normalizedEnd.getTime() - normalizedStart.getTime()) / 86400000) === 4;
+  const isMondayToFridayRange = normalizedStart.getUTCDay() === 1 && normalizedEnd.getUTCDay() === 5;
 
   const from = new Date(normalizedStart);
   const to = new Date(normalizedEnd);
@@ -74,6 +71,7 @@ export async function buildVacationPayload(
   year: number,
 ): Promise<{
   year: number;
+  specialVacationTrainer: boolean;
   allowance: number | null;
   anniversaryAllowance: number;
   localHolidayAllowance: number;
@@ -133,6 +131,7 @@ export async function buildVacationPayload(
 
   return {
     year,
+    specialVacationTrainer: specialTrainer,
     allowance,
     anniversaryAllowance,
     localHolidayAllowance,
