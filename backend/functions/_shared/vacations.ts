@@ -10,6 +10,49 @@ export const DEFAULT_ANNIVERSARY_ALLOWANCE = 1;
 export const DEFAULT_LOCAL_HOLIDAY_ALLOWANCE = 2;
 export const DEFAULT_PREVIOUS_YEAR_ALLOWANCE = 0;
 
+const HOLIDAY_TYPES = new Set(['L', 'N', 'C']);
+
+function isWeekday(date: Date): boolean {
+  const dayOfWeek = date.getUTCDay();
+  return dayOfWeek !== 0 && dayOfWeek !== 6;
+}
+
+export function getEffectiveVacationDays(
+  days: Array<{ date: Date; type: string }>,
+): { effectiveVacationDays: number; counts: VacationCounts } {
+  const counts: VacationCounts = { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0, N: 0, C: 0, Y: 0 };
+  const holidayDates = new Set<string>();
+
+  for (const day of days) {
+    if (HOLIDAY_TYPES.has(day.type)) {
+      holidayDates.add(formatDateOnly(day.date));
+    }
+  }
+
+  let effectiveVacationDays = 0;
+
+  for (const day of days) {
+    const key = day.type as keyof VacationCounts;
+    if (counts[key] === undefined) {
+      continue;
+    }
+
+    if (day.type !== 'V') {
+      counts[key] += 1;
+      continue;
+    }
+
+    const dateOnly = formatDateOnly(day.date);
+    const isBusinessVacationDay = isWeekday(day.date) && !holidayDates.has(dateOnly);
+    if (isBusinessVacationDay) {
+      counts.V += 1;
+      effectiveVacationDays += 1;
+    }
+  }
+
+  return { effectiveVacationDays, counts };
+}
+
 export function parseDateOnly(value: unknown): Date | null {
   if (!value) return null;
   const input = typeof value === 'string' ? value.trim() : String(value);
@@ -64,15 +107,8 @@ export async function buildVacationPayload(
     }),
   ]);
 
-  const counts: VacationCounts = { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0, N: 0, C: 0, Y: 0 };
-  for (const day of days) {
-    const key = day.type as keyof VacationCounts;
-    if (counts[key] !== undefined) {
-      counts[key] += 1;
-    }
-  }
-
-  const enjoyed = counts.V + counts.A + counts.Y;
+  const { effectiveVacationDays, counts } = getEffectiveVacationDays(days);
+  const enjoyed = effectiveVacationDays + counts.A + counts.Y;
   const allowance = typeof balance?.allowance_days === 'number' ? balance.allowance_days : DEFAULT_VACATION_ALLOWANCE;
   const anniversaryAllowance =
     typeof balance?.anniversary_days === 'number' ? balance.anniversary_days : DEFAULT_ANNIVERSARY_ALLOWANCE;

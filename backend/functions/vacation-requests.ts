@@ -410,19 +410,41 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
     return errorResponse('VALIDATION_ERROR', 'La solicitud tiene un rango de fechas inválido', 400);
   }
 
+  const holidayOverrides =
+    effectiveType === 'V'
+      ? await prisma.user_vacation_days.findMany({
+          where: {
+            user_id: existing.user_id,
+            date: { gte: start, lte: end },
+            type: { in: ['L', 'N', 'C'] },
+          },
+          select: { date: true },
+        })
+      : [];
+
+  const holidayDateSet = new Set(holidayOverrides.map((day) => formatDateOnly(day.date)));
+
   const appliedDates: string[] = [];
   const operations = [] as ReturnType<typeof prisma.user_vacation_days.upsert>[];
   const availabilityOperations = [] as ReturnType<typeof prisma.trainer_availability.upsert>[];
   for (let cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
     const dateOnly = new Date(cursor);
-    appliedDates.push(formatDateOnly(dateOnly));
-    operations.push(
-      prisma.user_vacation_days.upsert({
-        where: { user_id_date: { user_id: existing.user_id, date: dateOnly } },
-        update: { type: effectiveType },
-        create: { user_id: existing.user_id, date: dateOnly, type: effectiveType },
-      }),
-    );
+    const dayOfWeek = dateOnly.getUTCDay();
+    const isoDate = formatDateOnly(dateOnly);
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const isHoliday = holidayDateSet.has(isoDate);
+    const shouldApplyAsVacation = effectiveType !== 'V' || (!isWeekend && !isHoliday);
+
+    if (shouldApplyAsVacation) {
+      appliedDates.push(isoDate);
+      operations.push(
+        prisma.user_vacation_days.upsert({
+          where: { user_id_date: { user_id: existing.user_id, date: dateOnly } },
+          update: { type: effectiveType },
+          create: { user_id: existing.user_id, date: dateOnly, type: effectiveType },
+        }),
+      );
+    }
 
     if (fixedContractTrainer) {
       availabilityOperations.push(
