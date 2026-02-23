@@ -41,7 +41,6 @@ type TrainerRecord = {
   especialidad: string | null;
   titulacion: string | null;
   contrato_fijo: boolean;
-  treintaytres: boolean;
   nomina: Prisma.Decimal | number | string | null;
   irpf: Prisma.Decimal | number | string | null;
   ss: Prisma.Decimal | number | string | null;
@@ -105,7 +104,6 @@ function normalizeTrainer(row: TrainerRecord) {
     carnet_conducir_caducidad: toMadridISOString(row.carnet_conducir_caducidad),
     certificado_bombero_caducidad: toMadridISOString(row.certificado_bombero_caducidad),
     contrato_fijo: Boolean(row.contrato_fijo),
-    treintaytres: Boolean(row.treintaytres),
     nomina: salaryValue,
     irpf: irpfValue,
     ss: ssValue,
@@ -305,7 +303,6 @@ function buildCreateData(body: any) {
     name,
     activo: body?.activo === undefined || body?.activo === null ? true : Boolean(body.activo),
     contrato_fijo: Boolean(body?.contrato_fijo),
-    treintaytres: Boolean(body?.treintaytres),
   };
 
   for (const field of OPTIONAL_STRING_FIELDS) {
@@ -409,11 +406,6 @@ function buildUpdateData(body: any) {
     hasChanges = true;
   }
 
-  if (Object.prototype.hasOwnProperty.call(body, 'treintaytres')) {
-    data.treintaytres = Boolean(body.treintaytres);
-    hasChanges = true;
-  }
-
   for (const field of OPTIONAL_DECIMAL_FIELDS) {
     if (Object.prototype.hasOwnProperty.call(body, field)) {
       const decimalResult = parseDecimalField(field, body[field]);
@@ -489,7 +481,6 @@ export const handler = createHttpHandler<any>(async (request) => {
           especialidad: true,
           titulacion: true,
           contrato_fijo: true,
-          treintaytres: true,
           nomina: true,
           irpf: true,
           ss: true,

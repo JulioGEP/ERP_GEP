@@ -9,8 +9,6 @@ import {
   DEFAULT_PREVIOUS_YEAR_ALLOWANCE,
   DEFAULT_VACATION_ALLOWANCE,
   formatDateOnly,
-  SPECIAL_TRAINER_VACATION_ALLOWANCE,
-  isSpecialVacationTrainer,
   parseYear,
 } from './_shared/vacations';
 
@@ -71,11 +69,6 @@ export const handler = createHttpHandler<any>(async (request) => {
   }
 
   const todayIso = formatDateOnly(new Date());
-  const specialTrainerMap = new Map<string, boolean>();
-  for (const userId of userIds) {
-    specialTrainerMap.set(userId, await isSpecialVacationTrainer(prisma, userId));
-  }
-
   const userSummaries = users.map((user: (typeof users)[number]) => {
     const userDays = daysByUser.get(user.id) ?? [];
     const counts: Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'I' | 'N' | 'C' | 'Y', number> = {
@@ -101,9 +94,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     });
 
     const balance = balanceMap.get(user.id);
-    const allowance =
-      balance?.allowance_days ??
-      (specialTrainerMap.get(user.id) ? SPECIAL_TRAINER_VACATION_ALLOWANCE : DEFAULT_VACATION_ALLOWANCE);
+    const allowance = balance?.allowance_days ?? DEFAULT_VACATION_ALLOWANCE;
     const anniversaryAllowance = balance?.anniversary_days ?? DEFAULT_ANNIVERSARY_ALLOWANCE;
     const localHolidayAllowance = balance?.local_holiday_days ?? DEFAULT_LOCAL_HOLIDAY_ALLOWANCE;
     const previousYearAllowance = balance?.previous_year_days ?? DEFAULT_PREVIOUS_YEAR_ALLOWANCE;
@@ -122,7 +113,6 @@ export const handler = createHttpHandler<any>(async (request) => {
       fullName: `${user.first_name} ${user.last_name}`.trim(),
       role: user.role,
       active: user.active,
-      specialVacationTrainer: specialTrainerMap.get(user.id) === true,
       allowance,
       anniversaryAllowance,
       localHolidayAllowance,
