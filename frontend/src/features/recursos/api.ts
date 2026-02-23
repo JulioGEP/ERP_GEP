@@ -15,6 +15,7 @@ export type TrainerPayload = {
   especialidad?: string | null;
   titulacion?: string | null;
   contrato_fijo?: boolean | null;
+  treintaytres?: boolean | null;
   nomina?: number | null;
   irpf?: number | null;
   ss?: number | null;
@@ -155,6 +156,7 @@ function normalizeTrainer(row: any): Trainer {
     carnet_conducir_caducidad: carnetConducirCaducidad,
     certificado_bombero_caducidad: certificadoBomberoCaducidad,
     contrato_fijo: Boolean(row.contrato_fijo ?? false),
+    treintaytres: Boolean(row.treintaytres ?? false),
     nomina: Number.isNaN(nominaValue) ? null : nominaValue,
     irpf: Number.isNaN(irpfValue) ? null : irpfValue,
     ss: Number.isNaN(ssValue) ? null : ssValue,
@@ -224,6 +226,10 @@ function buildRequestBody(payload: TrainerPayload): Record<string, any> {
 
   if ("contrato_fijo" in payload) {
     body.contrato_fijo = Boolean(payload.contrato_fijo);
+  }
+
+  if ("treintaytres" in payload) {
+    body.treintaytres = Boolean(payload.treintaytres);
   }
 
   if ("nomina" in payload) {

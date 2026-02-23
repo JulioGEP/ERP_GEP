@@ -147,6 +147,37 @@ function parseJustification(payload: any): { error?: ReturnType<typeof errorResp
   };
 }
 
+function startOfWeekMonday(date: Date): Date {
+  const result = new Date(date);
+  const day = result.getUTCDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  result.setUTCDate(result.getUTCDate() + offset);
+  return result;
+}
+
+function endOfWeekSunday(date: Date): Date {
+  const result = new Date(date);
+  const day = result.getUTCDay();
+  const offset = day === 0 ? 0 : 7 - day;
+  result.setUTCDate(result.getUTCDate() + offset);
+  return result;
+}
+
+function resolveVacationApplicationRange(
+  start: Date,
+  end: Date,
+  options: { countNaturalVacationDays?: boolean; type: string },
+): { applicationStart: Date; applicationEnd: Date } {
+  if (options.type !== 'V' || options.countNaturalVacationDays !== true) {
+    return { applicationStart: start, applicationEnd: end };
+  }
+
+  return {
+    applicationStart: startOfWeekMonday(start),
+    applicationEnd: endOfWeekSunday(end),
+  };
+}
+
 export const handler = createHttpHandler<any>(async (request) => {
   const prisma = getPrisma();
   const auth = await requireAuth(request, prisma);
@@ -401,21 +432,27 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
   const end = new Date(existing.end_date);
   const effectiveType = existing.tag && VACATION_TYPES.has(existing.tag) ? existing.tag : 'V';
 
-  const fixedContractTrainer = await prisma.trainers.findFirst({
-    where: { user_id: existing.user_id, contrato_fijo: true },
-    select: { trainer_id: true },
+  const trainerSettings = await prisma.trainers.findFirst({
+    where: { user_id: existing.user_id },
+    select: { trainer_id: true, contrato_fijo: true, treintaytres: true },
   });
+  const fixedContractTrainer = trainerSettings?.contrato_fijo ? trainerSettings : null;
 
   if (end < start) {
     return errorResponse('VALIDATION_ERROR', 'La solicitud tiene un rango de fechas inválido', 400);
   }
 
+  const { applicationStart, applicationEnd } = resolveVacationApplicationRange(start, end, {
+    type: effectiveType,
+    countNaturalVacationDays: trainerSettings?.treintaytres === true,
+  });
+
   const holidayOverrides =
-    effectiveType === 'V'
+    effectiveType === 'V' && trainerSettings?.treintaytres !== true
       ? await prisma.user_vacation_days.findMany({
           where: {
             user_id: existing.user_id,
-            date: { gte: start, lte: end },
+            date: { gte: applicationStart, lte: applicationEnd },
             type: { in: ['L', 'N', 'C'] },
           },
           select: { date: true },
@@ -427,7 +464,11 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
   const appliedDates: string[] = [];
   const operations = [] as ReturnType<typeof prisma.user_vacation_days.upsert>[];
   const availabilityOperations = [] as ReturnType<typeof prisma.trainer_availability.upsert>[];
-  for (let cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+  for (
+    let cursor = new Date(applicationStart);
+    cursor <= applicationEnd;
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  ) {
     const dateOnly = new Date(cursor);
     const dayOfWeek = dateOnly.getUTCDay();
     const isoDate = formatDateOnly(dateOnly);
