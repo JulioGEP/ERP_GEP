@@ -7,11 +7,10 @@ import {
   DEFAULT_ANNIVERSARY_ALLOWANCE,
   DEFAULT_LOCAL_HOLIDAY_ALLOWANCE,
   DEFAULT_PREVIOUS_YEAR_ALLOWANCE,
-  DEFAULT_VACATION_ALLOWANCE,
-  THIRTY_THREE_DAYS_VACATION_ALLOWANCE,
   formatDateOnly,
   getEffectiveVacationDays,
   parseYear,
+  resolveVacationAllowance,
 } from './_shared/vacations';
 
 export const handler = createHttpHandler<any>(async (request) => {
@@ -93,9 +92,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     }));
 
     const balance = balanceMap.get(user.id);
-    const allowance =
-      balance?.allowance_days ??
-      (hasThirtyThreeDays ? THIRTY_THREE_DAYS_VACATION_ALLOWANCE : DEFAULT_VACATION_ALLOWANCE);
+    const allowance = resolveVacationAllowance(balance?.allowance_days, hasThirtyThreeDays);
     const anniversaryAllowance = balance?.anniversary_days ?? DEFAULT_ANNIVERSARY_ALLOWANCE;
     const localHolidayAllowance = balance?.local_holiday_days ?? DEFAULT_LOCAL_HOLIDAY_ALLOWANCE;
     const previousYearAllowance = balance?.previous_year_days ?? DEFAULT_PREVIOUS_YEAR_ALLOWANCE;

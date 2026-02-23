@@ -474,7 +474,8 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
     const isoDate = formatDateOnly(dateOnly);
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
     const isHoliday = holidayDateSet.has(isoDate);
-    const shouldApplyAsVacation = effectiveType !== 'V' || (!isWeekend && !isHoliday);
+    const shouldApplyAsVacation =
+      effectiveType !== 'V' || trainerSettings?.treintaytres === true || (!isWeekend && !isHoliday);
 
     if (shouldApplyAsVacation) {
       appliedDates.push(isoDate);

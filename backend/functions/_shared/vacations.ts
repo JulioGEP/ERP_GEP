@@ -56,6 +56,24 @@ export function getEffectiveVacationDays(
   return { effectiveVacationDays, counts };
 }
 
+export function resolveVacationAllowance(
+  allowanceDays: number | null | undefined,
+  hasThirtyThreeDays: boolean,
+): number {
+  if (hasThirtyThreeDays) {
+    if (typeof allowanceDays !== 'number') {
+      return THIRTY_THREE_DAYS_VACATION_ALLOWANCE;
+    }
+    return allowanceDays === DEFAULT_VACATION_ALLOWANCE ? THIRTY_THREE_DAYS_VACATION_ALLOWANCE : allowanceDays;
+  }
+
+  if (typeof allowanceDays === 'number') {
+    return allowanceDays;
+  }
+
+  return DEFAULT_VACATION_ALLOWANCE;
+}
+
 export function parseDateOnly(value: unknown): Date | null {
   if (!value) return null;
   const input = typeof value === 'string' ? value.trim() : String(value);
@@ -119,12 +137,7 @@ export async function buildVacationPayload(
     countNaturalVacationDays: hasThirtyThreeDays,
   });
   const enjoyed = effectiveVacationDays + counts.A + counts.Y;
-  const allowance =
-    typeof balance?.allowance_days === 'number'
-      ? balance.allowance_days
-      : hasThirtyThreeDays
-        ? THIRTY_THREE_DAYS_VACATION_ALLOWANCE
-        : DEFAULT_VACATION_ALLOWANCE;
+  const allowance = resolveVacationAllowance(balance?.allowance_days, hasThirtyThreeDays);
   const anniversaryAllowance =
     typeof balance?.anniversary_days === 'number' ? balance.anniversary_days : DEFAULT_ANNIVERSARY_ALLOWANCE;
   const localHolidayAllowance =
