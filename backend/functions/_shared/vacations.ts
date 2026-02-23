@@ -11,15 +11,6 @@ export const DEFAULT_ANNIVERSARY_ALLOWANCE = 1;
 export const DEFAULT_LOCAL_HOLIDAY_ALLOWANCE = 2;
 export const DEFAULT_PREVIOUS_YEAR_ALLOWANCE = 0;
 
-export function isTrueFlag(value: unknown): boolean {
-  if (value === true) return true;
-  if (typeof value === 'number') return value === 1;
-  if (typeof value !== 'string') return false;
-
-  const normalized = value.trim().toLowerCase();
-  return normalized === 'true' || normalized === '1' || normalized === 't' || normalized === 'yes' || normalized === 'si';
-}
-
 const HOLIDAY_TYPES = new Set(['L', 'N', 'C']);
 
 function isWeekday(date: Date): boolean {
@@ -141,7 +132,7 @@ export async function buildVacationPayload(
     }),
   ]);
 
-  const hasThirtyThreeDays = isTrueFlag(trainer?.treintaytres);
+  const hasThirtyThreeDays = trainer?.treintaytres === true;
   const { effectiveVacationDays, counts } = getEffectiveVacationDays(days, {
     countNaturalVacationDays: hasThirtyThreeDays,
   });

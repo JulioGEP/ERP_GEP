@@ -126,15 +126,6 @@ function parseLocaleNumber(value: string): number | null {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-function isTrueFlag(value: unknown): boolean {
-  if (value === true) return true;
-  if (typeof value === 'number') return value === 1;
-  if (typeof value !== 'string') return false;
-
-  const normalized = value.trim().toLowerCase();
-  return normalized === 'true' || normalized === '1' || normalized === 't' || normalized === 'yes' || normalized === 'si';
-}
-
 function normalizeNumber(value: string, fallback: number | null = null): number | null {
   const parsed = parseLocaleNumber(value);
   if (parsed === null) return fallback;
@@ -1335,7 +1326,7 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
 
   const userId = user?.id ?? null;
   const trainerId = user?.trainerId ?? null;
-  const useNaturalDays = isTrueFlag(user?.trainerThirtyThree);
+  const useNaturalDays = user?.trainerThirtyThree === true;
 
   const vacationsQuery = useQuery<UserVacationsResponse>({
     queryKey: ['user-vacations', userId, year],
