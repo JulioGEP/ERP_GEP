@@ -98,6 +98,7 @@ function serializeUser(user: any) {
     updatedAt: user.updated_at,
     trainerId: user.trainer?.trainer_id ?? null,
     trainerFixedContract: user.trainer?.contrato_fijo ?? null,
+    trainerThirtyThree: user.trainer?.treintaytres ?? null,
     payroll: serializePayroll(user.payroll),
   };
 }

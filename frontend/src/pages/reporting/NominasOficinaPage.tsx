@@ -597,6 +597,7 @@ function buildUserSummaryFromPayroll(entry: OfficePayrollRecord): UserSummary {
     updatedAt: '',
     trainerId: null,
     trainerFixedContract: null,
+    trainerThirtyThree: null,
     payroll: {
       convenio: entry.convenio ?? entry.defaultConvenio ?? '',
       categoria: entry.categoria ?? entry.defaultCategoria ?? '',

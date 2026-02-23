@@ -1326,6 +1326,7 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
 
   const userId = user?.id ?? null;
   const trainerId = user?.trainerId ?? null;
+  const useNaturalDays = user?.trainerThirtyThree === true;
 
   const vacationsQuery = useQuery<UserVacationsResponse>({
     queryKey: ['user-vacations', userId, year],
@@ -1470,6 +1471,7 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
       }),
     [holidayDays, selectedDates],
   );
+  const effectiveSelectedDates = useNaturalDays ? selectedDates : workingSelectedDates;
 
   const resolveUserDocumentUrl = (document: UserDocument) =>
     document.drive_web_view_link ?? document.drive_web_content_link ?? document.download_url;
@@ -1540,16 +1542,21 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
       return;
     }
 
-    if (!workingSelectedDates.length) {
-      onNotify?.({ variant: 'warning', message: 'Solo puedes guardar días laborables.' });
+    if (!effectiveSelectedDates.length) {
+      onNotify?.({
+        variant: 'warning',
+        message: useNaturalDays
+          ? 'Selecciona al menos un día para guardar.'
+          : 'Solo puedes guardar días laborables.',
+      });
       return;
     }
 
-    for (const date of workingSelectedDates) {
+    for (const date of effectiveSelectedDates) {
       await dayMutation.mutateAsync({ date, type: selectedType });
     }
 
-    if (workingSelectedDates.length < selectedDates.length) {
+    if (!useNaturalDays && workingSelectedDates.length < selectedDates.length) {
       onNotify?.({
         variant: 'info',
         message: 'Los fines de semana y los festivos se han excluido automáticamente.',
@@ -1768,10 +1775,16 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
               {selectedDates.length ? (
                 <div className="d-flex align-items-center gap-2 flex-wrap">
                   <Badge bg="secondary" className="text-uppercase">
-                    {workingSelectedDates.length}{' '}
-                    {workingSelectedDates.length === 1 ? 'día laborable' : 'días laborables'}
+                    {effectiveSelectedDates.length}{' '}
+                    {effectiveSelectedDates.length === 1
+                      ? useNaturalDays
+                        ? 'día natural'
+                        : 'día laborable'
+                      : useNaturalDays
+                        ? 'días naturales'
+                        : 'días laborables'}
                   </Badge>
-                  {selectedDates.length !== workingSelectedDates.length ? (
+                  {!useNaturalDays && selectedDates.length !== workingSelectedDates.length ? (
                     <Badge bg="light" text="dark" className="text-uppercase">
                       Excluye fines de semana y festivos
                     </Badge>
