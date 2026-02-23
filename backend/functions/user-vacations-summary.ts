@@ -9,6 +9,7 @@ import {
   DEFAULT_PREVIOUS_YEAR_ALLOWANCE,
   DEFAULT_VACATION_ALLOWANCE,
   formatDateOnly,
+  getEffectiveVacationDays,
   parseYear,
 } from './_shared/vacations';
 
@@ -71,27 +72,11 @@ export const handler = createHttpHandler<any>(async (request) => {
   const todayIso = formatDateOnly(new Date());
   const userSummaries = users.map((user: (typeof users)[number]) => {
     const userDays = daysByUser.get(user.id) ?? [];
-    const counts: Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'I' | 'N' | 'C' | 'Y', number> = {
-      V: 0,
-      L: 0,
-      A: 0,
-      T: 0,
-      M: 0,
-      H: 0,
-      F: 0,
-      R: 0,
-      P: 0,
-      I: 0,
-      N: 0,
-      C: 0,
-      Y: 0,
-    };
-
-    const normalizedDays = userDays.map((day: (typeof userDays)[number]) => {
-      const key = day.type as keyof typeof counts;
-      if (counts[key] !== undefined) counts[key] += 1;
-      return { date: formatDateOnly(day.date), type: day.type };
-    });
+    const { effectiveVacationDays, counts } = getEffectiveVacationDays(userDays);
+    const normalizedDays = userDays.map((day: (typeof userDays)[number]) => ({
+      date: formatDateOnly(day.date),
+      type: day.type,
+    }));
 
     const balance = balanceMap.get(user.id);
     const allowance = balance?.allowance_days ?? DEFAULT_VACATION_ALLOWANCE;
@@ -100,7 +85,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     const previousYearAllowance = balance?.previous_year_days ?? DEFAULT_PREVIOUS_YEAR_ALLOWANCE;
 
     const totalAllowance = allowance + anniversaryAllowance + previousYearAllowance;
-    const enjoyed = counts.V + counts.A + counts.Y;
+    const enjoyed = effectiveVacationDays + counts.A + counts.Y;
     const remaining = totalAllowance - enjoyed;
 
     const upcomingDates = normalizedDays
