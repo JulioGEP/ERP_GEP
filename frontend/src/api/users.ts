@@ -13,6 +13,7 @@ export type UserSummary = {
   updatedAt: string;
   trainerId: string | null;
   trainerFixedContract: boolean | null;
+  trainerThirtyThree: boolean | null;
   payroll: UserPayroll;
 };
 

@@ -353,6 +353,7 @@ export default function UsersVacationsPage() {
       updatedAt: '',
       trainerId: null,
       trainerFixedContract: null,
+      trainerThirtyThree: null,
       payroll: {
         convenio: '',
         categoria: '',
