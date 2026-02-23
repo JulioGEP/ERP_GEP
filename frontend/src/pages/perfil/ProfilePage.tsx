@@ -43,6 +43,7 @@ type ProfileUser = {
   bankAccount?: string | null;
   address?: string | null;
   trainerId?: string | null;
+  trainerThirtyThree?: boolean | null;
 };
 
 const VACATION_REQUEST_SECTION_TITLE = 'Petición de vacaciones y justificación de ausencias y Teletrabajo';
@@ -592,6 +593,7 @@ export default function ProfilePage() {
         .map((day) => day.date),
     );
   }, [vacationData?.days]);
+  const useNaturalDays = userDetails?.trainerThirtyThree === true;
   const selectedVacationDates = useMemo(() => {
     if (!vacationStart) return [] as string[];
 
@@ -618,6 +620,7 @@ export default function ProfilePage() {
       }),
     [holidayDays, selectedVacationDates],
   );
+  const effectiveSelectedVacationDates = useNaturalDays ? selectedVacationDates : workingSelectedVacationDates;
   const previousYearRemaining = Math.max(
     0,
     (vacationData?.previousYearAllowance ?? 0) - (vacationCounts.Y ?? 0),
@@ -984,10 +987,16 @@ export default function ProfilePage() {
               {selectedVacationDates.length ? (
                 <div className="d-flex align-items-center gap-2 flex-wrap">
                   <Badge bg="secondary" className="text-uppercase">
-                    {workingSelectedVacationDates.length}{' '}
-                    {workingSelectedVacationDates.length === 1 ? 'día laborable' : 'días laborables'}
+                    {effectiveSelectedVacationDates.length}{' '}
+                    {effectiveSelectedVacationDates.length === 1
+                      ? useNaturalDays
+                        ? 'día natural'
+                        : 'día laborable'
+                      : useNaturalDays
+                        ? 'días naturales'
+                        : 'días laborables'}
                   </Badge>
-                  {selectedVacationDates.length !== workingSelectedVacationDates.length ? (
+                  {!useNaturalDays && selectedVacationDates.length !== workingSelectedVacationDates.length ? (
                     <Badge bg="light" text="dark" className="text-uppercase">
                       Excluye fines de semana y festivos
                     </Badge>
