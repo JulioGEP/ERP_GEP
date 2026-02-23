@@ -4,7 +4,7 @@ import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
 import { normalizeRoleKey, requireAuth } from './_shared/auth';
 import { sendEmail } from './_shared/mailer';
-import { formatDateOnly, VACATION_TYPES } from './_shared/vacations';
+import { formatDateOnly, isTrueFlag, VACATION_TYPES } from './_shared/vacations';
 import { uploadTrainerDocumentToGoogleDrive, uploadUserDocumentToGoogleDrive } from './_shared/googleDrive';
 
 const RECIPIENT = 'people@gepgroup.es';
@@ -412,6 +412,7 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
     where: { user_id: existing.user_id },
     select: { trainer_id: true, contrato_fijo: true, treintaytres: true },
   });
+  const hasNaturalVacationDays = isTrueFlag(trainerSettings?.treintaytres);
   const fixedContractTrainer = trainerSettings?.contrato_fijo ? trainerSettings : null;
 
   if (end < start) {
@@ -421,7 +422,7 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
   const { applicationStart, applicationEnd } = resolveVacationApplicationRange(start, end);
 
   const holidayOverrides =
-    effectiveType === 'V' && trainerSettings?.treintaytres !== true
+    effectiveType === 'V' && !hasNaturalVacationDays
       ? await prisma.user_vacation_days.findMany({
           where: {
             user_id: existing.user_id,
@@ -448,7 +449,7 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
     const isHoliday = holidayDateSet.has(isoDate);
     const shouldApplyAsVacation =
-      effectiveType !== 'V' || trainerSettings?.treintaytres === true || (!isWeekend && !isHoliday);
+      effectiveType !== 'V' || hasNaturalVacationDays || (!isWeekend && !isHoliday);
 
     if (shouldApplyAsVacation) {
       appliedDates.push(isoDate);
