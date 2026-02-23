@@ -147,35 +147,11 @@ function parseJustification(payload: any): { error?: ReturnType<typeof errorResp
   };
 }
 
-function startOfWeekMonday(date: Date): Date {
-  const result = new Date(date);
-  const day = result.getUTCDay();
-  const offset = day === 0 ? -6 : 1 - day;
-  result.setUTCDate(result.getUTCDate() + offset);
-  return result;
-}
-
-function endOfWeekSunday(date: Date): Date {
-  const result = new Date(date);
-  const day = result.getUTCDay();
-  const offset = day === 0 ? 0 : 7 - day;
-  result.setUTCDate(result.getUTCDate() + offset);
-  return result;
-}
-
 function resolveVacationApplicationRange(
   start: Date,
   end: Date,
-  options: { countNaturalVacationDays?: boolean; type: string },
 ): { applicationStart: Date; applicationEnd: Date } {
-  if (options.type !== 'V' || options.countNaturalVacationDays !== true) {
-    return { applicationStart: start, applicationEnd: end };
-  }
-
-  return {
-    applicationStart: startOfWeekMonday(start),
-    applicationEnd: endOfWeekSunday(end),
-  };
+  return { applicationStart: start, applicationEnd: end };
 }
 
 export const handler = createHttpHandler<any>(async (request) => {
@@ -442,10 +418,7 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
     return errorResponse('VALIDATION_ERROR', 'La solicitud tiene un rango de fechas inválido', 400);
   }
 
-  const { applicationStart, applicationEnd } = resolveVacationApplicationRange(start, end, {
-    type: effectiveType,
-    countNaturalVacationDays: trainerSettings?.treintaytres === true,
-  });
+  const { applicationStart, applicationEnd } = resolveVacationApplicationRange(start, end);
 
   const holidayOverrides =
     effectiveType === 'V' && trainerSettings?.treintaytres !== true
