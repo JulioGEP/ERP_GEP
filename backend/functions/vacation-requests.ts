@@ -433,7 +433,12 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
   const effectiveType = existing.tag && VACATION_TYPES.has(existing.tag) ? existing.tag : 'V';
 
   const trainerSettings = await prisma.trainers.findFirst({
-    where: { user_id: existing.user_id },
+    where: {
+      OR: [
+        { user_id: existing.user_id },
+        ...(existing.user?.email ? [{ email: existing.user.email }] : []),
+      ],
+    },
     select: { trainer_id: true, contrato_fijo: true, treintaytres: true },
   });
   const fixedContractTrainer = trainerSettings?.contrato_fijo ? trainerSettings : null;

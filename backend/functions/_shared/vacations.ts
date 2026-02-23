@@ -115,6 +115,11 @@ export async function buildVacationPayload(
   const start = new Date(Date.UTC(year, 0, 1));
   const end = new Date(Date.UTC(year + 1, 0, 1));
 
+  const user = await prisma.users.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  });
+
   const [days, balance, trainer] = await Promise.all([
     prisma.user_vacation_days.findMany({
       where: {
@@ -127,7 +132,12 @@ export async function buildVacationPayload(
       where: { user_id_year: { user_id: userId, year } },
     }),
     prisma.trainers.findFirst({
-      where: { user_id: userId },
+      where: {
+        OR: [
+          { user_id: userId },
+          ...(user?.email ? [{ email: user.email }] : []),
+        ],
+      },
       select: { treintaytres: true },
     }),
   ]);
