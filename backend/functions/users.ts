@@ -21,15 +21,6 @@ const DEFAULT_PASSWORD = '123456';
 const BCRYPT_SALT_ROUNDS = 10;
 const DEFAULT_WEEKLY_HOURS = 40;
 
-function isTrueFlag(value: unknown): boolean {
-  if (value === true) return true;
-  if (typeof value === 'number') return value === 1;
-  if (typeof value !== 'string') return false;
-
-  const normalized = value.trim().toLowerCase();
-  return normalized === 'true' || normalized === '1' || normalized === 't' || normalized === 'yes' || normalized === 'si';
-}
-
 type SerializedPayroll = {
   convenio: string;
   categoria: string;
@@ -107,7 +98,7 @@ function serializeUser(user: any) {
     updatedAt: user.updated_at,
     trainerId: user.trainer?.trainer_id ?? null,
     trainerFixedContract: user.trainer?.contrato_fijo ?? null,
-    trainerThirtyThree: user.trainer?.treintaytres === undefined ? null : isTrueFlag(user.trainer?.treintaytres),
+    trainerThirtyThree: user.trainer?.treintaytres ?? null,
     payroll: serializePayroll(user.payroll),
   };
 }

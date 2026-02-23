@@ -9,7 +9,6 @@ import {
   DEFAULT_PREVIOUS_YEAR_ALLOWANCE,
   formatDateOnly,
   getEffectiveVacationDays,
-  isTrueFlag,
   parseYear,
   resolveVacationAllowance,
 } from './_shared/vacations';
@@ -71,7 +70,7 @@ export const handler = createHttpHandler<any>(async (request) => {
   const trainerMap = new Map<string, boolean>(
     trainers
       .filter((trainer) => typeof trainer.user_id === 'string' && trainer.user_id.length > 0)
-      .map((trainer) => [trainer.user_id as string, isTrueFlag(trainer.treintaytres)]),
+      .map((trainer) => [trainer.user_id as string, trainer.treintaytres === true]),
   );
 
   for (const day of days) {

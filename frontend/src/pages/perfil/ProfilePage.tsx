@@ -79,15 +79,6 @@ function resolveDocumentLink(doc: ProfileDocument): string | null {
   return doc.drive_web_view_link ?? null;
 }
 
-function isTrueFlag(value: unknown): boolean {
-  if (value === true) return true;
-  if (typeof value === 'number') return value === 1;
-  if (typeof value !== 'string') return false;
-
-  const normalized = value.trim().toLowerCase();
-  return normalized === 'true' || normalized === '1' || normalized === 't' || normalized === 'yes' || normalized === 'si';
-}
-
 export default function ProfilePage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -178,7 +169,6 @@ export default function ProfilePage() {
   });
 
   const isFixedTrainer = trainerDetailsQuery.data?.contrato_fijo === true;
-  const usesNaturalVacationDays = isTrueFlag(trainerDetailsQuery.data?.treintaytres);
 
   const requiresExpenseDetails =
     EXPENSE_DOCUMENT_TYPES.has(selectedDocumentType) && (!trainerId || isFixedTrainer === true);
@@ -628,9 +618,6 @@ export default function ProfilePage() {
       }),
     [holidayDays, selectedVacationDates],
   );
-  const effectiveSelectedVacationDates = usesNaturalVacationDays
-    ? selectedVacationDates
-    : workingSelectedVacationDates;
   const previousYearRemaining = Math.max(
     0,
     (vacationData?.previousYearAllowance ?? 0) - (vacationCounts.Y ?? 0),
@@ -997,16 +984,10 @@ export default function ProfilePage() {
               {selectedVacationDates.length ? (
                 <div className="d-flex align-items-center gap-2 flex-wrap">
                   <Badge bg="secondary" className="text-uppercase">
-                    {effectiveSelectedVacationDates.length}{' '}
-                    {effectiveSelectedVacationDates.length === 1
-                      ? usesNaturalVacationDays
-                        ? 'día natural'
-                        : 'día laborable'
-                      : usesNaturalVacationDays
-                        ? 'días naturales'
-                        : 'días laborables'}
+                    {workingSelectedVacationDates.length}{' '}
+                    {workingSelectedVacationDates.length === 1 ? 'día laborable' : 'días laborables'}
                   </Badge>
-                  {!usesNaturalVacationDays && selectedVacationDates.length !== workingSelectedVacationDates.length ? (
+                  {selectedVacationDates.length !== workingSelectedVacationDates.length ? (
                     <Badge bg="light" text="dark" className="text-uppercase">
                       Excluye fines de semana y festivos
                     </Badge>
