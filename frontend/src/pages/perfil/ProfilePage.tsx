@@ -49,24 +49,6 @@ const VACATION_REQUEST_SECTION_TITLE = 'Petición de vacaciones y justificación
 const VACATION_REQUEST_BUTTON_LABEL = 'Enviar Petición';
 const HOLIDAY_TYPES: VacationType[] = ['L', 'N', 'C'];
 
-const expandVacationRangeForSpecialTrainer = (dates: string[]): string[] => {
-  if (!dates.length) return [];
-
-  const uniqueSortedDates = Array.from(new Set(dates)).sort();
-  const startDate = new Date(`${uniqueSortedDates[0]}T00:00:00Z`);
-  const endDate = new Date(`${uniqueSortedDates[uniqueSortedDates.length - 1]}T00:00:00Z`);
-
-  if (startDate.getUTCDay() === 1 && endDate.getUTCDay() === 5) {
-    for (let offset = 1; offset <= 2; offset += 1) {
-      const extraDate = new Date(endDate);
-      extraDate.setUTCDate(extraDate.getUTCDate() + offset);
-      uniqueSortedDates.push(extraDate.toISOString().slice(0, 10));
-    }
-  }
-
-  return Array.from(new Set(uniqueSortedDates)).sort();
-};
-
 async function fileToBase64(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   let binary = '';
@@ -627,17 +609,15 @@ export default function ProfilePage() {
 
     return dates;
   }, [vacationEnd, vacationStart]);
-  const isSpecialVacationRequest = vacationData?.specialVacationTrainer === true && (!vacationTag || vacationTag === 'V');
-  const displayedVacationDates = useMemo(() => {
-    if (isSpecialVacationRequest) {
-      return expandVacationRangeForSpecialTrainer(selectedVacationDates);
-    }
-    return selectedVacationDates.filter((date) => {
-      const day = new Date(`${date}T00:00:00Z`).getUTCDay();
-      const isWeekend = day === 0 || day === 6;
-      return !isWeekend && !holidayDays.has(date);
-    });
-  }, [holidayDays, isSpecialVacationRequest, selectedVacationDates]);
+  const workingSelectedVacationDates = useMemo(
+    () =>
+      selectedVacationDates.filter((date) => {
+        const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+        const isWeekend = day === 0 || day === 6;
+        return !isWeekend && !holidayDays.has(date);
+      }),
+    [holidayDays, selectedVacationDates],
+  );
   const previousYearRemaining = Math.max(
     0,
     (vacationData?.previousYearAllowance ?? 0) - (vacationCounts.Y ?? 0),
@@ -1004,16 +984,10 @@ export default function ProfilePage() {
               {selectedVacationDates.length ? (
                 <div className="d-flex align-items-center gap-2 flex-wrap">
                   <Badge bg="secondary" className="text-uppercase">
-                    {displayedVacationDates.length}{' '}
-                    {isSpecialVacationRequest
-                      ? displayedVacationDates.length === 1
-                        ? 'día natural'
-                        : 'días naturales'
-                      : displayedVacationDates.length === 1
-                        ? 'día laborable'
-                        : 'días laborables'}
+                    {workingSelectedVacationDates.length}{' '}
+                    {workingSelectedVacationDates.length === 1 ? 'día laborable' : 'días laborables'}
                   </Badge>
-                  {!isSpecialVacationRequest && selectedVacationDates.length !== displayedVacationDates.length ? (
+                  {selectedVacationDates.length !== workingSelectedVacationDates.length ? (
                     <Badge bg="light" text="dark" className="text-uppercase">
                       Excluye fines de semana y festivos
                     </Badge>

@@ -1290,24 +1290,6 @@ const DEFAULT_LOCAL_HOLIDAY_ALLOWANCE = 2;
 const DEFAULT_PREVIOUS_YEAR_ALLOWANCE = 0;
 type AllowanceFieldKey = 'allowance' | 'anniversaryAllowance' | 'localHolidayAllowance' | 'previousYearAllowance';
 
-const expandVacationRangeForSpecialTrainer = (dates: string[]): string[] => {
-  if (!dates.length) return [];
-
-  const uniqueSortedDates = Array.from(new Set(dates)).sort();
-  const startDate = new Date(`${uniqueSortedDates[0]}T00:00:00Z`);
-  const endDate = new Date(`${uniqueSortedDates[uniqueSortedDates.length - 1]}T00:00:00Z`);
-
-  if (startDate.getUTCDay() === 1 && endDate.getUTCDay() === 5) {
-    for (let offset = 1; offset <= 2; offset += 1) {
-      const extraDate = new Date(endDate);
-      extraDate.setUTCDate(extraDate.getUTCDate() + offset);
-      uniqueSortedDates.push(extraDate.toISOString().slice(0, 10));
-    }
-  }
-
-  return Array.from(new Set(uniqueSortedDates)).sort();
-};
-
 export function VacationManagerModal({ show, user, year, onHide, onNotify }: VacationManagerModalProps) {
   const queryClient = useQueryClient();
   const [selectionStart, setSelectionStart] = useState<string | null>(null);
@@ -1479,17 +1461,15 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
     return dates;
   }, [selectionEnd, selectionStart]);
 
-  const isSpecialVacationRequest = data?.specialVacationTrainer === true && selectedType === 'V';
-  const datesToSave = useMemo(() => {
-    if (isSpecialVacationRequest) {
-      return expandVacationRangeForSpecialTrainer(selectedDates);
-    }
-    return selectedDates.filter((date) => {
-      const day = new Date(`${date}T00:00:00Z`).getUTCDay();
-      const isWeekend = day === 0 || day === 6;
-      return !isWeekend && !holidayDays.has(date);
-    });
-  }, [holidayDays, isSpecialVacationRequest, selectedDates]);
+  const workingSelectedDates = useMemo(
+    () =>
+      selectedDates.filter((date) => {
+        const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+        const isWeekend = day === 0 || day === 6;
+        return !isWeekend && !holidayDays.has(date);
+      }),
+    [holidayDays, selectedDates],
+  );
 
   const resolveUserDocumentUrl = (document: UserDocument) =>
     document.drive_web_view_link ?? document.drive_web_content_link ?? document.download_url;
@@ -1560,16 +1540,16 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
       return;
     }
 
-    if (!datesToSave.length) {
-      onNotify?.({ variant: 'warning', message: 'No hay días válidos para guardar en el rango seleccionado.' });
+    if (!workingSelectedDates.length) {
+      onNotify?.({ variant: 'warning', message: 'Solo puedes guardar días laborables.' });
       return;
     }
 
-    for (const date of datesToSave) {
+    for (const date of workingSelectedDates) {
       await dayMutation.mutateAsync({ date, type: selectedType });
     }
 
-    if (!isSpecialVacationRequest && datesToSave.length < selectedDates.length) {
+    if (workingSelectedDates.length < selectedDates.length) {
       onNotify?.({
         variant: 'info',
         message: 'Los fines de semana y los festivos se han excluido automáticamente.',
@@ -1788,16 +1768,10 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
               {selectedDates.length ? (
                 <div className="d-flex align-items-center gap-2 flex-wrap">
                   <Badge bg="secondary" className="text-uppercase">
-                    {datesToSave.length}{' '}
-                    {isSpecialVacationRequest
-                      ? datesToSave.length === 1
-                        ? 'día natural'
-                        : 'días naturales'
-                      : datesToSave.length === 1
-                        ? 'día laborable'
-                        : 'días laborables'}
+                    {workingSelectedDates.length}{' '}
+                    {workingSelectedDates.length === 1 ? 'día laborable' : 'días laborables'}
                   </Badge>
-                  {!isSpecialVacationRequest && selectedDates.length !== datesToSave.length ? (
+                  {selectedDates.length !== workingSelectedDates.length ? (
                     <Badge bg="light" text="dark" className="text-uppercase">
                       Excluye fines de semana y festivos
                     </Badge>

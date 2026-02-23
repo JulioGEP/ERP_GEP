@@ -4,7 +4,7 @@ import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
 import { normalizeRoleKey, requireAuth } from './_shared/auth';
 import { sendEmail } from './_shared/mailer';
-import { expandVacationRangeForSpecialTrainer, formatDateOnly, isSpecialVacationTrainer, VACATION_TYPES } from './_shared/vacations';
+import { formatDateOnly, VACATION_TYPES } from './_shared/vacations';
 import { uploadTrainerDocumentToGoogleDrive, uploadUserDocumentToGoogleDrive } from './_shared/googleDrive';
 
 const RECIPIENT = 'people@gepgroup.es';
@@ -400,7 +400,6 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
   const start = new Date(existing.start_date);
   const end = new Date(existing.end_date);
   const effectiveType = existing.tag && VACATION_TYPES.has(existing.tag) ? existing.tag : 'V';
-  const specialVacationTrainer = effectiveType === 'V' ? await isSpecialVacationTrainer(prisma, existing.user_id) : false;
 
   const fixedContractTrainer = await prisma.trainers.findFirst({
     where: { user_id: existing.user_id, contrato_fijo: true },
@@ -414,17 +413,8 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
   const appliedDates: string[] = [];
   const operations = [] as ReturnType<typeof prisma.user_vacation_days.upsert>[];
   const availabilityOperations = [] as ReturnType<typeof prisma.trainer_availability.upsert>[];
-  const datesToApply = specialVacationTrainer
-    ? expandVacationRangeForSpecialTrainer(start, end)
-    : (() => {
-        const dates: Date[] = [];
-        for (let cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
-          dates.push(new Date(cursor));
-        }
-        return dates;
-      })();
-
-  for (const dateOnly of datesToApply) {
+  for (let cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    const dateOnly = new Date(cursor);
     appliedDates.push(formatDateOnly(dateOnly));
     operations.push(
       prisma.user_vacation_days.upsert({

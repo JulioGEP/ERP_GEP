@@ -112,7 +112,6 @@ function buildPayload(values: TrainerFormValues): TrainerPayload {
     carnet_conducir_caducidad: toNullableDate(values.carnet_conducir_caducidad),
     certificado_bombero_caducidad: toNullableDate(values.certificado_bombero_caducidad),
     contrato_fijo: values.contrato_fijo,
-    treintaytres: values.treintaytres,
     nomina: values.contrato_fijo ? toNullableSalary(values.nomina) : null,
     irpf: values.contrato_fijo ? toNullableNumber(values.irpf) : null,
     ss: values.contrato_fijo ? toNullableNumber(values.ss) : null,
