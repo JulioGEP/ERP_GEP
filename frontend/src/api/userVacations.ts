@@ -27,6 +27,7 @@ export type VacationSummaryUser = {
   fullName: string;
   role: string;
   active: boolean;
+  trainerThirtyThree: boolean;
   allowance: number;
   anniversaryAllowance: number;
   localHolidayAllowance: number;
