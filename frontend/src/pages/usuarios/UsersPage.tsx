@@ -1284,6 +1284,31 @@ export type VacationManagerModalProps = {
 
 const HOLIDAY_TYPES: VacationType[] = ['L', 'N', 'C'];
 
+function expandRangeToNaturalWeek(selectedDates: string[]): string[] {
+  if (!selectedDates.length) return selectedDates;
+
+  const sortedDates = [...selectedDates].sort();
+  const start = new Date(`${sortedDates[0]}T00:00:00Z`);
+  const end = new Date(`${sortedDates[sortedDates.length - 1]}T00:00:00Z`);
+
+  const startDay = start.getUTCDay();
+  const daysFromMonday = (startDay + 6) % 7;
+  start.setUTCDate(start.getUTCDate() - daysFromMonday);
+
+  const endDay = end.getUTCDay();
+  const daysUntilSunday = (7 - endDay) % 7;
+  end.setUTCDate(end.getUTCDate() + daysUntilSunday);
+
+  const dates: string[] = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return dates;
+}
+
 const DEFAULT_VACATION_ALLOWANCE = 24;
 const DEFAULT_ANNIVERSARY_ALLOWANCE = 1;
 const DEFAULT_LOCAL_HOLIDAY_ALLOWANCE = 2;
@@ -1471,7 +1496,11 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
       }),
     [holidayDays, selectedDates],
   );
-  const effectiveSelectedDates = useNaturalDays ? selectedDates : workingSelectedDates;
+  const naturalWeekSelectedDates = useMemo(
+    () => (useNaturalDays && selectedType === 'V' ? expandRangeToNaturalWeek(selectedDates) : selectedDates),
+    [selectedDates, selectedType, useNaturalDays],
+  );
+  const effectiveSelectedDates = useNaturalDays ? naturalWeekSelectedDates : workingSelectedDates;
 
   const resolveUserDocumentUrl = (document: UserDocument) =>
     document.drive_web_view_link ?? document.drive_web_content_link ?? document.download_url;
@@ -1787,6 +1816,11 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
                   {!useNaturalDays && selectedDates.length !== workingSelectedDates.length ? (
                     <Badge bg="light" text="dark" className="text-uppercase">
                       Excluye fines de semana y festivos
+                    </Badge>
+                  ) : null}
+                  {useNaturalDays && selectedType === 'V' && naturalWeekSelectedDates.length !== selectedDates.length ? (
+                    <Badge bg="light" text="dark" className="text-uppercase">
+                      Incluye semana completa (lunes a domingo)
                     </Badge>
                   ) : null}
                 </div>

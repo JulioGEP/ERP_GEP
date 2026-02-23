@@ -150,7 +150,22 @@ function parseJustification(payload: any): { error?: ReturnType<typeof errorResp
 function resolveVacationApplicationRange(
   start: Date,
   end: Date,
+  options?: { countNaturalVacationDaysByWeek?: boolean },
 ): { applicationStart: Date; applicationEnd: Date } {
+  if (options?.countNaturalVacationDaysByWeek) {
+    const startOfWeek = new Date(start);
+    const startDay = startOfWeek.getUTCDay();
+    const daysFromMonday = (startDay + 6) % 7;
+    startOfWeek.setUTCDate(startOfWeek.getUTCDate() - daysFromMonday);
+
+    const endOfWeek = new Date(end);
+    const endDay = endOfWeek.getUTCDay();
+    const daysUntilSunday = (7 - endDay) % 7;
+    endOfWeek.setUTCDate(endOfWeek.getUTCDate() + daysUntilSunday);
+
+    return { applicationStart: startOfWeek, applicationEnd: endOfWeek };
+  }
+
   return { applicationStart: start, applicationEnd: end };
 }
 
@@ -418,7 +433,10 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
     return errorResponse('VALIDATION_ERROR', 'La solicitud tiene un rango de fechas inválido', 400);
   }
 
-  const { applicationStart, applicationEnd } = resolveVacationApplicationRange(start, end);
+  const countNaturalVacationDaysByWeek = effectiveType === 'V' && trainerSettings?.treintaytres === true;
+  const { applicationStart, applicationEnd } = resolveVacationApplicationRange(start, end, {
+    countNaturalVacationDaysByWeek,
+  });
 
   const holidayOverrides =
     effectiveType === 'V' && trainerSettings?.treintaytres !== true
