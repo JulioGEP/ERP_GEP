@@ -36,7 +36,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         { role: 'Formador', trainer: { is: { contrato_fijo: true } } },
       ],
     },
-    select: { id: true, first_name: true, last_name: true, role: true, active: true },
+    select: { id: true, first_name: true, last_name: true, email: true, role: true, active: true },
     orderBy: [{ first_name: 'asc' }, { last_name: 'asc' }],
   });
 
@@ -48,6 +48,10 @@ export const handler = createHttpHandler<any>(async (request) => {
   const start = new Date(Date.UTC(year, 0, 1));
   const end = new Date(Date.UTC(year + 1, 0, 1));
 
+  const trainerEmails = users
+    .map((user: (typeof users)[number]) => user.email)
+    .filter((email): email is string => typeof email === 'string' && email.length > 0);
+
   const [days, balances, trainers] = await Promise.all([
     prisma.user_vacation_days.findMany({
       where: { user_id: { in: userIds }, date: { gte: start, lt: end } },
@@ -57,8 +61,13 @@ export const handler = createHttpHandler<any>(async (request) => {
       where: { user_id: { in: userIds }, year },
     }),
     prisma.trainers.findMany({
-      where: { user_id: { in: userIds } },
-      select: { user_id: true, treintaytres: true },
+      where: {
+        OR: [
+          { user_id: { in: userIds } },
+          ...(trainerEmails.length ? [{ email: { in: trainerEmails } }] : []),
+        ],
+      },
+      select: { user_id: true, email: true, treintaytres: true },
     }),
   ]);
 
@@ -73,6 +82,12 @@ export const handler = createHttpHandler<any>(async (request) => {
       .map((trainer) => [trainer.user_id as string, trainer.treintaytres === true]),
   );
 
+  const trainerEmailMap = new Map<string, boolean>(
+    trainers
+      .filter((trainer) => typeof trainer.email === 'string' && trainer.email.length > 0)
+      .map((trainer) => [trainer.email as string, trainer.treintaytres === true]),
+  );
+
   for (const day of days) {
     const bucket = daysByUser.get(day.user_id) ?? [];
     bucket.push(day);
@@ -82,7 +97,7 @@ export const handler = createHttpHandler<any>(async (request) => {
   const todayIso = formatDateOnly(new Date());
   const userSummaries = users.map((user: (typeof users)[number]) => {
     const userDays = daysByUser.get(user.id) ?? [];
-    const hasThirtyThreeDays = trainerMap.get(user.id) === true;
+    const hasThirtyThreeDays = trainerMap.get(user.id) === true || trainerEmailMap.get(user.email ?? '') === true;
     const { effectiveVacationDays, counts } = getEffectiveVacationDays(userDays, {
       countNaturalVacationDays: hasThirtyThreeDays,
     });
