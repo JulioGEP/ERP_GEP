@@ -169,6 +169,7 @@ export default function ProfilePage() {
   });
 
   const isFixedTrainer = trainerDetailsQuery.data?.contrato_fijo === true;
+  const usesNaturalVacationDays = trainerDetailsQuery.data?.treintaytres === true;
 
   const requiresExpenseDetails =
     EXPENSE_DOCUMENT_TYPES.has(selectedDocumentType) && (!trainerId || isFixedTrainer === true);
@@ -618,6 +619,9 @@ export default function ProfilePage() {
       }),
     [holidayDays, selectedVacationDates],
   );
+  const effectiveSelectedVacationDates = usesNaturalVacationDays
+    ? selectedVacationDates
+    : workingSelectedVacationDates;
   const previousYearRemaining = Math.max(
     0,
     (vacationData?.previousYearAllowance ?? 0) - (vacationCounts.Y ?? 0),
@@ -984,10 +988,16 @@ export default function ProfilePage() {
               {selectedVacationDates.length ? (
                 <div className="d-flex align-items-center gap-2 flex-wrap">
                   <Badge bg="secondary" className="text-uppercase">
-                    {workingSelectedVacationDates.length}{' '}
-                    {workingSelectedVacationDates.length === 1 ? 'día laborable' : 'días laborables'}
+                    {effectiveSelectedVacationDates.length}{' '}
+                    {effectiveSelectedVacationDates.length === 1
+                      ? usesNaturalVacationDays
+                        ? 'día natural'
+                        : 'día laborable'
+                      : usesNaturalVacationDays
+                        ? 'días naturales'
+                        : 'días laborables'}
                   </Badge>
-                  {selectedVacationDates.length !== workingSelectedVacationDates.length ? (
+                  {!usesNaturalVacationDays && selectedVacationDates.length !== workingSelectedVacationDates.length ? (
                     <Badge bg="light" text="dark" className="text-uppercase">
                       Excluye fines de semana y festivos
                     </Badge>
