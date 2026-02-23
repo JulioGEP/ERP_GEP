@@ -10,6 +10,7 @@ export type Trainer = {
   especialidad: string | null;
   titulacion: string | null;
   contrato_fijo: boolean;
+  treintaytres: boolean;
   nomina: number | null;
   irpf: number | null;
   ss: number | null;

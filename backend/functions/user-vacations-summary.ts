@@ -8,6 +8,7 @@ import {
   DEFAULT_LOCAL_HOLIDAY_ALLOWANCE,
   DEFAULT_PREVIOUS_YEAR_ALLOWANCE,
   DEFAULT_VACATION_ALLOWANCE,
+  THIRTY_THREE_DAYS_VACATION_ALLOWANCE,
   formatDateOnly,
   getEffectiveVacationDays,
   parseYear,
@@ -48,7 +49,7 @@ export const handler = createHttpHandler<any>(async (request) => {
   const start = new Date(Date.UTC(year, 0, 1));
   const end = new Date(Date.UTC(year + 1, 0, 1));
 
-  const [days, balances] = await Promise.all([
+  const [days, balances, trainers] = await Promise.all([
     prisma.user_vacation_days.findMany({
       where: { user_id: { in: userIds }, date: { gte: start, lt: end } },
       orderBy: { date: 'asc' },
@@ -56,12 +57,22 @@ export const handler = createHttpHandler<any>(async (request) => {
     prisma.user_vacation_balances.findMany({
       where: { user_id: { in: userIds }, year },
     }),
+    prisma.trainers.findMany({
+      where: { user_id: { in: userIds } },
+      select: { user_id: true, treintaytres: true },
+    }),
   ]);
 
   const balanceMap = new Map<string, (typeof balances)[number]>(
     balances.map((balance: (typeof balances)[number]) => [balance.user_id, balance]),
   );
   const daysByUser = new Map<string, typeof days>();
+
+  const trainerMap = new Map<string, boolean>(
+    trainers
+      .filter((trainer) => typeof trainer.user_id === 'string' && trainer.user_id.length > 0)
+      .map((trainer) => [trainer.user_id as string, trainer.treintaytres === true]),
+  );
 
   for (const day of days) {
     const bucket = daysByUser.get(day.user_id) ?? [];
@@ -72,14 +83,19 @@ export const handler = createHttpHandler<any>(async (request) => {
   const todayIso = formatDateOnly(new Date());
   const userSummaries = users.map((user: (typeof users)[number]) => {
     const userDays = daysByUser.get(user.id) ?? [];
-    const { effectiveVacationDays, counts } = getEffectiveVacationDays(userDays);
+    const hasThirtyThreeDays = trainerMap.get(user.id) === true;
+    const { effectiveVacationDays, counts } = getEffectiveVacationDays(userDays, {
+      countNaturalVacationDays: hasThirtyThreeDays,
+    });
     const normalizedDays = userDays.map((day: (typeof userDays)[number]) => ({
       date: formatDateOnly(day.date),
       type: day.type,
     }));
 
     const balance = balanceMap.get(user.id);
-    const allowance = balance?.allowance_days ?? DEFAULT_VACATION_ALLOWANCE;
+    const allowance =
+      balance?.allowance_days ??
+      (hasThirtyThreeDays ? THIRTY_THREE_DAYS_VACATION_ALLOWANCE : DEFAULT_VACATION_ALLOWANCE);
     const anniversaryAllowance = balance?.anniversary_days ?? DEFAULT_ANNIVERSARY_ALLOWANCE;
     const localHolidayAllowance = balance?.local_holiday_days ?? DEFAULT_LOCAL_HOLIDAY_ALLOWANCE;
     const previousYearAllowance = balance?.previous_year_days ?? DEFAULT_PREVIOUS_YEAR_ALLOWANCE;

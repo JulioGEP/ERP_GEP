@@ -6,6 +6,7 @@ export const VACATION_TYPES = new Set(['V', 'L', 'A', 'T', 'M', 'H', 'F', 'R', '
 export type VacationCounts = Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'I' | 'N' | 'C' | 'Y', number>;
 
 export const DEFAULT_VACATION_ALLOWANCE = 24;
+export const THIRTY_THREE_DAYS_VACATION_ALLOWANCE = 33;
 export const DEFAULT_ANNIVERSARY_ALLOWANCE = 1;
 export const DEFAULT_LOCAL_HOLIDAY_ALLOWANCE = 2;
 export const DEFAULT_PREVIOUS_YEAR_ALLOWANCE = 0;
@@ -19,6 +20,7 @@ function isWeekday(date: Date): boolean {
 
 export function getEffectiveVacationDays(
   days: Array<{ date: Date; type: string }>,
+  options?: { countNaturalVacationDays?: boolean },
 ): { effectiveVacationDays: number; counts: VacationCounts } {
   const counts: VacationCounts = { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0, N: 0, C: 0, Y: 0 };
   const holidayDates = new Set<string>();
@@ -29,6 +31,7 @@ export function getEffectiveVacationDays(
     }
   }
 
+  const countNaturalVacationDays = options?.countNaturalVacationDays === true;
   let effectiveVacationDays = 0;
 
   for (const day of days) {
@@ -44,7 +47,7 @@ export function getEffectiveVacationDays(
 
     const dateOnly = formatDateOnly(day.date);
     const isBusinessVacationDay = isWeekday(day.date) && !holidayDates.has(dateOnly);
-    if (isBusinessVacationDay) {
+    if (countNaturalVacationDays || isBusinessVacationDay) {
       counts.V += 1;
       effectiveVacationDays += 1;
     }
@@ -94,7 +97,7 @@ export async function buildVacationPayload(
   const start = new Date(Date.UTC(year, 0, 1));
   const end = new Date(Date.UTC(year + 1, 0, 1));
 
-  const [days, balance] = await Promise.all([
+  const [days, balance, trainer] = await Promise.all([
     prisma.user_vacation_days.findMany({
       where: {
         user_id: userId,
@@ -105,11 +108,23 @@ export async function buildVacationPayload(
     prisma.user_vacation_balances.findUnique({
       where: { user_id_year: { user_id: userId, year } },
     }),
+    prisma.trainers.findFirst({
+      where: { user_id: userId },
+      select: { treintaytres: true },
+    }),
   ]);
 
-  const { effectiveVacationDays, counts } = getEffectiveVacationDays(days);
+  const hasThirtyThreeDays = trainer?.treintaytres === true;
+  const { effectiveVacationDays, counts } = getEffectiveVacationDays(days, {
+    countNaturalVacationDays: hasThirtyThreeDays,
+  });
   const enjoyed = effectiveVacationDays + counts.A + counts.Y;
-  const allowance = typeof balance?.allowance_days === 'number' ? balance.allowance_days : DEFAULT_VACATION_ALLOWANCE;
+  const allowance =
+    typeof balance?.allowance_days === 'number'
+      ? balance.allowance_days
+      : hasThirtyThreeDays
+        ? THIRTY_THREE_DAYS_VACATION_ALLOWANCE
+        : DEFAULT_VACATION_ALLOWANCE;
   const anniversaryAllowance =
     typeof balance?.anniversary_days === 'number' ? balance.anniversary_days : DEFAULT_ANNIVERSARY_ALLOWANCE;
   const localHolidayAllowance =
