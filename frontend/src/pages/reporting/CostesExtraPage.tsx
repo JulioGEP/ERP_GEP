@@ -238,6 +238,9 @@ type TrainerFlag = {
   variant: string;
 };
 
+const TRAINER_FLAG_FILTER_OPTIONS = ['+8', '+12', 'Nocturna'] as const;
+type TrainerFlagFilter = (typeof TRAINER_FLAG_FILTER_OPTIONS)[number];
+
 function hasNightHours(startIso: string | null, endIso: string | null): boolean {
   if (!startIso || !endIso) {
     return false;
@@ -340,6 +343,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
     trainerIdFilter ? [trainerIdFilter] : [],
   );
   const [isTrainerDropdownOpen, setIsTrainerDropdownOpen] = useState(false);
+  const [selectedTrainerFlags, setSelectedTrainerFlags] = useState<TrainerFlagFilter[]>([]);
   const trainerDropdownRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -459,15 +463,23 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
   }, [itemsWithQueryFilters]);
 
   const items = useMemo(() => {
-    if (!selectedTrainerIds.length) {
-      return itemsWithQueryFilters;
+    let filtered = itemsWithQueryFilters;
+    if (selectedTrainerIds.length) {
+      filtered = filtered.filter((item) =>
+        selectedTrainerIds.some(
+          (selectedId) => item.trainerId === selectedId || item.trainerUserId === selectedId,
+        ),
+      );
     }
-    return itemsWithQueryFilters.filter((item) =>
-      selectedTrainerIds.some(
-        (selectedId) => item.trainerId === selectedId || item.trainerUserId === selectedId,
-      ),
+    if (!selectedTrainerFlags.length) {
+      return filtered;
+    }
+
+    const selectedSet = new Set(selectedTrainerFlags);
+    return filtered.filter((item) =>
+      getTrainerFlags(item).some((flag) => selectedSet.has(flag.label as TrainerFlagFilter)),
     );
-  }, [itemsWithQueryFilters, selectedTrainerIds]);
+  }, [itemsWithQueryFilters, selectedTrainerFlags, selectedTrainerIds]);
 
   const trainerFilterLabel = useMemo(() => {
     if (selectedTrainerIds.length) {
@@ -1045,6 +1057,32 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                       )}
                     </div>
                   </Collapse>
+                </div>
+              </Form.Group>
+              <Form.Group controlId="costes-extra-trainer-flags" className="mb-0">
+                <Form.Label>Etiquetas formador</Form.Label>
+                <div className="border rounded p-2" style={{ minWidth: '220px' }}>
+                  {TRAINER_FLAG_FILTER_OPTIONS.map((flag) => {
+                    const isChecked = selectedTrainerFlags.includes(flag);
+                    return (
+                      <Form.Check
+                        key={flag}
+                        id={`costes-extra-trainer-flag-${flag}`}
+                        type="checkbox"
+                        label={flag}
+                        checked={isChecked}
+                        onChange={(event) => {
+                          const { checked } = event.currentTarget;
+                          setSelectedTrainerFlags((prev) => {
+                            if (checked) {
+                              return Array.from(new Set([...prev, flag]));
+                            }
+                            return prev.filter((value) => value !== flag);
+                          });
+                        }}
+                      />
+                    );
+                  })}
                 </div>
               </Form.Group>
               <div className="ms-auto text-end">
