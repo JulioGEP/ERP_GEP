@@ -125,6 +125,8 @@ Comandos más usados desde la raíz:
 - `npm run generate` — Genera cliente Prisma para backend/frontend.
 - `npm run build` — Compila el frontend (invoca `build:frontend`).
 - `npm run typecheck:functions` — Type-check de todas las funciones Netlify.
+- `npm run typecheck:function:daily-availability-slack` — Type-check rápido de la función de disponibilidad diaria en Slack.
+- `npm run typecheck:function:daily-trainers-slack` — Type-check rápido de la función de formadores diarios en Slack.
 - `npm run prisma:format` — Formatea `prisma/schema.prisma` usando el binario local del workspace backend.
 - `npm run prisma:prune` — Elimina binarios Prisma sobrantes en CI/Netlify.
 - `npm run netlify:build` — Pipeline de despliegue (generate + prune + build).

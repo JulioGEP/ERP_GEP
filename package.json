@@ -20,7 +20,9 @@
     "dev": "echo \"Dev local: usa 'npx netlify dev -p 8888' si tienes Netlify CLI disponible\"",
     "prisma:format": "backend/node_modules/.bin/prisma format --schema backend/prisma/schema.prisma",
     "prisma:generate": "npm run -w backend generate",
-    "typecheck:functions": "npm run -w backend typecheck"
+    "typecheck:functions": "npm run -w backend typecheck",
+    "typecheck:function:daily-availability-slack": "npm run -w backend typecheck:function:daily-availability-slack",
+    "typecheck:function:daily-trainers-slack": "npm run -w backend typecheck:function:daily-trainers-slack"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.901.0",
