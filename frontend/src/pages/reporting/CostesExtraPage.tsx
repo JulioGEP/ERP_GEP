@@ -233,6 +233,58 @@ function isUnassignedTrainerName(name: string | null, lastName: string | null): 
   return normalizedParts.join(' ').toLowerCase() === 'sin asignar';
 }
 
+type TrainerFlag = {
+  label: string;
+  variant: string;
+};
+
+function hasNightHours(startIso: string | null, endIso: string | null): boolean {
+  if (!startIso || !endIso) {
+    return false;
+  }
+
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+    return false;
+  }
+
+  const crossesDayBoundary =
+    start.getFullYear() !== end.getFullYear() ||
+    start.getMonth() !== end.getMonth() ||
+    start.getDate() !== end.getDate();
+  if (!crossesDayBoundary) {
+    return false;
+  }
+
+  const nightWindowStart = new Date(start);
+  nightWindowStart.setHours(22, 0, 0, 0);
+  const nightWindowEnd = new Date(start);
+  nightWindowEnd.setDate(nightWindowEnd.getDate() + 1);
+  nightWindowEnd.setHours(6, 0, 0, 0);
+
+  return start < nightWindowEnd && end > nightWindowStart;
+}
+
+function getTrainerFlags(item: TrainerExtraCostRecord): TrainerFlag[] {
+  const flags: TrainerFlag[] = [];
+  const workedHours = item.workedHours;
+
+  if (typeof workedHours === 'number' && Number.isFinite(workedHours)) {
+    if (workedHours > 12) {
+      flags.push({ label: '+12', variant: 'danger' });
+    } else if (workedHours > 8) {
+      flags.push({ label: '+8', variant: 'warning' });
+    }
+  }
+
+  if (hasNightHours(item.scheduledStart, item.scheduledEnd)) {
+    flags.push({ label: 'Nocturna', variant: 'dark' });
+  }
+
+  return flags;
+}
+
 type CostesExtraPageProps = {
   onOpenBudgetSession?: (dealId: string, sessionId: string | null) => void;
 };
@@ -693,6 +745,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
           <tbody>
             {items.map((item) => {
               const trainerDisplayName = buildTrainerDisplayName(item);
+              const trainerFlags = getTrainerFlags(item);
               const baseDraft = drafts[item.key] ?? createDraftFromItem(item);
               const saving =
                 saveMutation.isPending && saveMutation.variables?.key === item.key;
@@ -762,6 +815,15 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                   <td className="align-middle">{trainingDateLabel}</td>
                   <td className="align-middle">
                     <div className="fw-semibold">{trainerDisplayName}</div>
+                    {trainerFlags.length ? (
+                      <div className="d-flex gap-1 flex-wrap mt-1">
+                        {trainerFlags.map((flag) => (
+                          <Badge key={`${item.key}-${flag.label}`} bg={flag.variant}>
+                            {flag.label}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : null}
                   </td>
                   <td className="align-middle">
                     <div className="fw-semibold d-flex align-items-center gap-2 flex-wrap">
