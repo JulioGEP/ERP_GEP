@@ -234,7 +234,7 @@ function isUnassignedTrainerName(name: string | null, lastName: string | null): 
 }
 
 type CostesExtraPageProps = {
-  onOpenBudgetSession?: (dealId: string, sessionId: string | null, variantId?: string | null) => void;
+  onOpenBudgetSession?: (dealId: string, sessionId: string | null) => void;
 };
 
 export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPageProps) {
@@ -770,7 +770,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                           variant="link"
                           size="sm"
                           className="p-0 text-start fw-semibold text-decoration-none"
-                          onClick={() => onOpenBudgetSession?.(dealId, item.sessionId, item.variantId)}
+                          onClick={() => onOpenBudgetSession?.(dealId, item.sessionId)}
                         >
                           {formatAssignmentLabel(item.assignmentType)}: {item.sessionName ?? item.variantName ?? '—'}
                         </Button>
