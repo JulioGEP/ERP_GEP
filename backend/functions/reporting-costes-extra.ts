@@ -100,6 +100,7 @@ type TrainerExtraCostResponseItem = {
   variantId: string | null;
   sessionName: string | null;
   variantName: string | null;
+  dealId: string | null;
   dealTitle: string | null;
   pipelineLabel: string | null;
   productName: string | null;
@@ -552,7 +553,7 @@ function mapResponseItem(params: {
     variantId: assignmentType === 'variant' ? variantInfo?.id ?? record?.variant_id ?? null : null,
     sessionName: sessionInfo?.nombre_cache ?? null,
     variantName: variantInfo?.name ?? null,
-    dealId: sessionInfo?.deal_id ?? variantInfo?.deal_id ?? null,
+    dealId: sessionInfo?.deal_id ?? null,
     dealTitle: sessionInfo?.deals?.title ?? null,
     pipelineLabel: sessionInfo?.deals?.pipeline_label ?? sessionInfo?.deals?.pipeline_id ?? null,
     productName: sessionInfo?.deal_products?.name ?? variantInfo?.products?.name ?? null,
