@@ -280,6 +280,21 @@ function normalizeDealId(value: unknown): string | null {
   return normalizeOptionalString(value);
 }
 
+function normalizeDateKey(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed.length) {
+    return null;
+  }
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed.toISOString().slice(0, 10);
+}
+
 function buildSummaryFromDeal(deal: DealDetail | DealSummary): DealSummary {
   const base = deal as DealSummary;
   const resolvedDealId =
@@ -1319,17 +1334,43 @@ export default function AuthenticatedApp() {
   }, []);
 
   const handleOpenBudgetSessionFromCostesExtra = useCallback(
-    async (rawDealId: string, sessionId: string | null) => {
-      const normalizedDealId = normalizeDealId(rawDealId);
+    async (
+      rawDealId: string,
+      sessionId: string | null,
+      context?: {
+        assignmentType: 'session' | 'variant';
+        variantId: string | null;
+        scheduledStart: string | null;
+      },
+    ) => {
+      let normalizedDealId = normalizeDealId(rawDealId);
+      const normalizedVariantId = normalizeOptionalString(context?.variantId);
+      const targetDateKey = normalizeDateKey(context?.scheduledStart);
+
+      const budgets = [...pendingPlanningBudgets, ...allBudgets];
+
+      if (context?.assignmentType === 'variant' && normalizedVariantId) {
+        const normalizeVariationId = (value: unknown) => normalizeOptionalString(value);
+        const variantMatches = budgets.filter(
+          (item) => normalizeVariationId(item.w_id_variation) === normalizedVariantId,
+        );
+
+        if (variantMatches.length > 0) {
+          const exactDateMatch = targetDateKey
+            ? variantMatches.find((item) => normalizeDateKey(item.a_fecha) === targetDateKey) ?? null
+            : null;
+          const selectedVariantDeal = exactDateMatch ?? variantMatches[0];
+          normalizedDealId = normalizeDealId(selectedVariantDeal.dealId ?? selectedVariantDeal.deal_id);
+        }
+      }
+
       if (!normalizedDealId) {
         return;
       }
 
       const matchDealId = (value: unknown) => normalizeDealId(value) === normalizedDealId;
       let summary =
-        pendingPlanningBudgets.find((item) => matchDealId(item.dealId) || matchDealId(item.deal_id)) ??
-        allBudgets.find((item) => matchDealId(item.dealId) || matchDealId(item.deal_id)) ??
-        null;
+        budgets.find((item) => matchDealId(item.dealId) || matchDealId(item.deal_id)) ?? null;
 
       if (!summary) {
         try {

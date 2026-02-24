@@ -143,7 +143,15 @@ type AppRouterProps = {
   recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps;
   usersPageProps: UsersPageProps;
   trainerCalendarPageProps: TrainerCalendarPageProps;
-  onOpenBudgetSessionFromCostesExtra: (dealId: string, sessionId: string | null) => void;
+  onOpenBudgetSessionFromCostesExtra: (
+    dealId: string,
+    sessionId: string | null,
+    context?: {
+      assignmentType: 'session' | 'variant';
+      variantId: string | null;
+      scheduledStart: string | null;
+    },
+  ) => void;
   defaultRedirectPath: string;
   knownPaths: ReadonlySet<string>;
   activePathStorageKey: string;
