@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Badge, Button, Card, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { isApiError } from '../../api/client';
@@ -48,6 +48,23 @@ function formatDuration(totalMinutes: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function getIsoWeekInfo(date: Date): { week: number; year: number } {
+  const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNumber = (target.getUTCDay() + 6) % 7;
+  target.setUTCDate(target.getUTCDate() - dayNumber + 3);
+  const isoYear = target.getUTCFullYear();
+  const firstThursday = new Date(Date.UTC(isoYear, 0, 4));
+  const week =
+    1 +
+    Math.round(((target.getTime() - firstThursday.getTime()) / 86400000 - 3) / 7);
+  return { week, year: isoYear };
+}
+
+function getIsoWeekKey(date: string): string {
+  const { week, year } = getIsoWeekInfo(new Date(`${date}T00:00:00`));
+  return `${year}-W${String(week).padStart(2, '0')}`;
 }
 
 function toTimeInputValue(value: string | null): string {
@@ -161,6 +178,43 @@ export default function ControlHorarioPage() {
   );
 
   const datesInRange = useMemo(() => buildDateRange(range.startDate, range.endDate), [range]);
+  const weekGroups = useMemo(() => {
+    const groups: Array<{
+      key: string;
+      label: string;
+      dates: string[];
+      totalMinutes: number;
+    }> = [];
+
+    datesInRange.forEach((date) => {
+      const key = getIsoWeekKey(date);
+      const currentWeek = groups.at(-1);
+      if (!currentWeek || currentWeek.key !== key) {
+        const { week, year } = getIsoWeekInfo(new Date(`${date}T00:00:00`));
+        groups.push({
+          key,
+          label: `Semana ${week} (${year})`,
+          dates: [date],
+          totalMinutes: 0,
+        });
+      } else {
+        currentWeek.dates.push(date);
+      }
+    });
+
+    groups.forEach((group) => {
+      group.totalMinutes = group.dates.reduce((acc, date) => {
+        const entriesForDate = entriesByDate.get(date) ?? [];
+        const dateTotal = entriesForDate.reduce((minutes, entry) => {
+          if (!entry.checkIn || !entry.checkOut) return minutes;
+          return minutes + diffMinutes(entry.checkIn, new Date(entry.checkOut));
+        }, 0);
+        return acc + dateTotal;
+      }, 0);
+    });
+
+    return groups;
+  }, [datesInRange, entriesByDate]);
   const yesterday = controlHorarioQuery.data?.meta?.yesterday ?? '';
 
   const handleOpenModal = (date: string, entry?: ControlHorarioEntry) => {
@@ -198,58 +252,72 @@ export default function ControlHorarioPage() {
             </tr>
           </thead>
           <tbody>
-            {datesInRange.map((date) => {
-              const entriesForDate = entriesByDate.get(date) ?? [];
-              const totalMinutes = entriesForDate.reduce((acc, entry) => {
-                if (!entry.checkIn || !entry.checkOut) return acc;
-                return acc + diffMinutes(entry.checkIn, new Date(entry.checkOut));
-              }, 0);
-              const isYesterday = date === yesterday;
-              return (
-                <tr key={date}>
-                  <td>{dateFormatter.format(new Date(`${date}T00:00:00`))}</td>
-                  <td>
-                    {entriesForDate.length ? (
-                      <div className="d-flex flex-column gap-2">
-                        {entriesForDate.map((entry) => {
-                          const hasEnd = Boolean(entry.checkOut);
-                          return (
-                            <div key={entry.id} className="d-flex align-items-center gap-2">
-                              <span>
-                                {entry.checkIn ? timeShortFormatter.format(new Date(entry.checkIn)) : '—'} →{' '}
-                                {entry.checkOut ? timeShortFormatter.format(new Date(entry.checkOut)) : '—'}
-                              </span>
-                              {!hasEnd ? <Badge bg="warning" text="dark">En curso</Badge> : null}
-                              {isYesterday ? (
-                                <Button
-                                  size="sm"
-                                  variant="outline-secondary"
-                                  onClick={() => handleOpenModal(date, entry)}
-                                >
-                                  Editar
-                                </Button>
-                              ) : null}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <span className="text-muted">Sin fichajes</span>
-                    )}
-                  </td>
-                  <td>{totalMinutes ? formatDuration(totalMinutes) : '—'}</td>
-                  <td>
-                    {isYesterday ? (
-                      <Button size="sm" variant="outline-primary" onClick={() => handleOpenModal(date)}>
-                        Añadir fichaje
-                      </Button>
-                    ) : (
-                      <span className="text-muted">Bloqueado</span>
-                    )}
+            {weekGroups.map((week) => (
+              <Fragment key={week.key}>
+                <tr className="table-light">
+                  <td colSpan={4} className="fw-semibold">
+                    {week.label}
                   </td>
                 </tr>
-              );
-            })}
+                {week.dates.map((date) => {
+                  const entriesForDate = entriesByDate.get(date) ?? [];
+                  const totalMinutes = entriesForDate.reduce((acc, entry) => {
+                    if (!entry.checkIn || !entry.checkOut) return acc;
+                    return acc + diffMinutes(entry.checkIn, new Date(entry.checkOut));
+                  }, 0);
+                  const isYesterday = date === yesterday;
+                  return (
+                    <tr key={date}>
+                      <td>{dateFormatter.format(new Date(`${date}T00:00:00`))}</td>
+                      <td>
+                        {entriesForDate.length ? (
+                          <div className="d-flex flex-column gap-2">
+                            {entriesForDate.map((entry) => {
+                              const hasEnd = Boolean(entry.checkOut);
+                              return (
+                                <div key={entry.id} className="d-flex align-items-center gap-2">
+                                  <span>
+                                    {entry.checkIn ? timeShortFormatter.format(new Date(entry.checkIn)) : '—'} →{' '}
+                                    {entry.checkOut ? timeShortFormatter.format(new Date(entry.checkOut)) : '—'}
+                                  </span>
+                                  {!hasEnd ? <Badge bg="warning" text="dark">En curso</Badge> : null}
+                                  {isYesterday ? (
+                                    <Button
+                                      size="sm"
+                                      variant="outline-secondary"
+                                      onClick={() => handleOpenModal(date, entry)}
+                                    >
+                                      Editar
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-muted">Sin fichajes</span>
+                        )}
+                      </td>
+                      <td>{totalMinutes ? formatDuration(totalMinutes) : '—'}</td>
+                      <td>
+                        {isYesterday ? (
+                          <Button size="sm" variant="outline-primary" onClick={() => handleOpenModal(date)}>
+                            Añadir fichaje
+                          </Button>
+                        ) : (
+                          <span className="text-muted">Bloqueado</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr className="table-secondary">
+                  <td colSpan={2} className="fw-semibold">Total semana</td>
+                  <td className="fw-semibold">{week.totalMinutes ? formatDuration(week.totalMinutes) : '—'}</td>
+                  <td />
+                </tr>
+              </Fragment>
+            ))}
           </tbody>
         </Table>
       </div>
