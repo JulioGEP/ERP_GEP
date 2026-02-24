@@ -344,6 +344,9 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
   );
   const [isTrainerDropdownOpen, setIsTrainerDropdownOpen] = useState(false);
   const [selectedTrainerFlags, setSelectedTrainerFlags] = useState<TrainerFlagFilter[]>([]);
+  const [selectedItemKeys, setSelectedItemKeys] = useState<string[]>([]);
+  const [bulkFieldKey, setBulkFieldKey] = useState<TrainerExtraCostFieldKey>('dietas');
+  const [bulkFieldValue, setBulkFieldValue] = useState('');
   const trainerDropdownRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -507,6 +510,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
   useEffect(() => {
     if (!items.length) {
       setDrafts({});
+      setSelectedItemKeys([]);
       return;
     }
     setDrafts((prev) => {
@@ -519,7 +523,51 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
       }
       return next;
     });
+    setSelectedItemKeys((prev) => prev.filter((key) => items.some((item) => item.key === key)));
   }, [items]);
+
+  const selectedItemsCount = selectedItemKeys.length;
+  const allItemsSelected = items.length > 0 && selectedItemsCount === items.length;
+  const isBulkValueValid = parseInputToNumber(bulkFieldValue) !== null;
+
+  const handleToggleAllItems = (checked: boolean) => {
+    setSelectedItemKeys(checked ? items.map((item) => item.key) : []);
+  };
+
+  const handleToggleSingleItem = (itemKey: string, checked: boolean) => {
+    setSelectedItemKeys((prev) => {
+      if (checked) {
+        return Array.from(new Set([...prev, itemKey]));
+      }
+      return prev.filter((key) => key !== itemKey);
+    });
+  };
+
+  const handleApplyBulkValue = () => {
+    const parsedValue = parseInputToNumber(bulkFieldValue);
+    if (parsedValue === null || !selectedItemKeys.length) {
+      return;
+    }
+
+    const targetValue = formatNumberInput(parsedValue);
+    setDrafts((prev) => {
+      const next = { ...prev };
+      for (const item of items) {
+        if (!selectedItemKeys.includes(item.key)) {
+          continue;
+        }
+        const current = next[item.key] ?? createDraftFromItem(item);
+        const nextFields = { ...current.fields, [bulkFieldKey]: targetValue };
+        const { dirty, invalid } = evaluateDraft(item, nextFields);
+        next[item.key] = {
+          fields: nextFields,
+          dirty,
+          invalid,
+        };
+      }
+      return next;
+    });
+  };
 
   const numberFormatter = useMemo(() => new Intl.NumberFormat('es-ES'), []);
   const hoursFormatter = useMemo(
@@ -739,6 +787,14 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
         <Table striped bordered hover>
           <thead>
             <tr>
+              <th style={{ width: '60px' }} className="text-center">
+                <Form.Check
+                  type="checkbox"
+                  checked={allItemsSelected}
+                  onChange={(event) => handleToggleAllItems(event.currentTarget.checked)}
+                  aria-label="Seleccionar todos los registros"
+                />
+              </th>
               <th style={{ minWidth: '120px' }}>Fecha</th>
               <th style={{ minWidth: '220px' }}>Formador</th>
               <th style={{ minWidth: '260px' }}>Sesiones</th>
@@ -824,6 +880,16 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
 
               return (
                 <tr key={item.key}>
+                  <td className="align-middle text-center">
+                    <Form.Check
+                      type="checkbox"
+                      checked={selectedItemKeys.includes(item.key)}
+                      onChange={(event) =>
+                        handleToggleSingleItem(item.key, event.currentTarget.checked)
+                      }
+                      aria-label={`Seleccionar ${trainerDisplayName}`}
+                    />
+                  </td>
                   <td className="align-middle">{trainingDateLabel}</td>
                   <td className="align-middle">
                     <div className="fw-semibold">{trainerDisplayName}</div>
@@ -929,7 +995,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
           </tbody>
           <tfoot>
             <tr className="table-light fw-semibold">
-              <td colSpan={4} className="text-end align-middle">
+              <td colSpan={5} className="text-end align-middle">
                 Totales / medias
               </td>
               <td className="text-end align-middle">{hoursFormatter.format(tableSummary.workedHoursTotal)}</td>
@@ -1085,6 +1151,52 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                   })}
                 </div>
               </Form.Group>
+              <div className="d-flex flex-column gap-2 border rounded p-2" style={{ minWidth: '320px' }}>
+                <Form.Label className="mb-0">Edición masiva</Form.Label>
+                <div className="small text-muted">
+                  {selectedItemsCount
+                    ? `${selectedItemsCount} registro(s) seleccionado(s)`
+                    : 'Selecciona registros desde la tabla'}
+                </div>
+                <div className="d-flex gap-2 align-items-end flex-wrap">
+                  <Form.Group controlId="costes-extra-bulk-field" className="mb-0">
+                    <Form.Label className="small mb-1">Campo</Form.Label>
+                    <Form.Select
+                      size="sm"
+                      value={bulkFieldKey}
+                      onChange={(event) =>
+                        setBulkFieldKey(event.currentTarget.value as TrainerExtraCostFieldKey)
+                      }
+                    >
+                      {COST_FIELD_DEFINITIONS.map((definition) => (
+                        <option key={definition.key} value={definition.key}>
+                          {definition.label}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
+                  <Form.Group controlId="costes-extra-bulk-value" className="mb-0">
+                    <Form.Label className="small mb-1">Valor</Form.Label>
+                    <Form.Control
+                      size="sm"
+                      type="text"
+                      inputMode="decimal"
+                      value={bulkFieldValue}
+                      onChange={(event) => setBulkFieldValue(event.currentTarget.value)}
+                      isInvalid={bulkFieldValue.trim().length > 0 && !isBulkValueValid}
+                      placeholder="Ej. 14"
+                    />
+                  </Form.Group>
+                  <Button
+                    size="sm"
+                    type="button"
+                    onClick={handleApplyBulkValue}
+                    disabled={!selectedItemsCount || !bulkFieldValue.trim().length || !isBulkValueValid}
+                  >
+                    Aplicar a seleccionados
+                  </Button>
+                </div>
+              </div>
               <div className="ms-auto text-end">
                 <span className="text-muted d-block small">Registros mostrados</span>
                 <span className="fw-semibold h5 mb-0">{numberFormatter.format(items.length)}</span>
