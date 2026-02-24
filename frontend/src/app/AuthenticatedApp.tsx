@@ -516,6 +516,26 @@ function resolveVariantUnits(details: CalendarVariantEvent['variant']): VariantI
   return units;
 }
 
+
+function normalizeProductIdentifier(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .toLowerCase();
+  return normalized.length ? normalized : null;
+}
+
+const TWO_DAY_VERTICAL_PRODUCT_KEYS = new Set(['atrabajosverticales', 'trabajosverticales']);
+
+function isTwoDayVerticalProduct(event: CalendarVariantEvent): boolean {
+  const identifiers = [event.product.name, event.product.code, event.product.category]
+    .map((value) => normalizeProductIdentifier(value))
+    .filter((value): value is string => Boolean(value));
+  return identifiers.some((identifier) => TWO_DAY_VERTICAL_PRODUCT_KEYS.has(identifier));
+}
+
 function createActiveVariantFromCalendarEvent(event: CalendarVariantEvent): ActiveVariant {
   const variantDetails = event.variant;
   const trainerRecord = mapCalendarVariantTrainer(variantDetails.trainer);
@@ -593,7 +613,14 @@ function createActiveVariantFromCalendarEvent(event: CalendarVariantEvent): Acti
     hora_fin: event.product.hora_fin ?? null,
   };
 
-  return { product: productInfo, variant: variantInfo };
+  const isDay2Event = typeof event.id === 'string' && event.id.endsWith(':day2');
+
+  return {
+    product: productInfo,
+    variant: variantInfo,
+    calendarDayOffset: isDay2Event ? 1 : 0,
+    isTwoDayVerticalProduct: isTwoDayVerticalProduct(event),
+  };
 }
 
 export default function AuthenticatedApp() {
