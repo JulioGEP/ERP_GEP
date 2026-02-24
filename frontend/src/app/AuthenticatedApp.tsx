@@ -10,6 +10,7 @@ import { BudgetDetailModalMaterial } from '../features/presupuestos/material/Bud
 import { ProductCommentWindow } from '../features/presupuestos/ProductCommentWindow';
 import type { ProductCommentPayload } from '../features/presupuestos/ProductCommentWindow';
 import { VariantModal } from '../features/formacion_abierta/ProductVariantsList';
+import { fetchProductsWithVariants } from '../features/formacion_abierta/api';
 import type { ActiveVariant, ProductInfo, VariantInfo } from '../features/formacion_abierta/types';
 import { ApiError } from '../api/client';
 import { fetchMaterialOrders } from '../features/materials/orders.api';
@@ -1315,7 +1316,36 @@ export default function AuthenticatedApp() {
   }, []);
 
   const handleOpenBudgetSessionFromCostesExtra = useCallback(
-    async (rawDealId: string, sessionId: string | null) => {
+    async (rawDealId: string, sessionId: string | null, variantId?: string | null) => {
+      const normalizedVariantId = sanitizeString(variantId);
+      if (normalizedVariantId) {
+        try {
+          const products = await fetchProductsWithVariants();
+          const product = products.find((candidate) =>
+            candidate.variants.some((candidateVariant) => candidateVariant.id === normalizedVariantId),
+          );
+          const variant = product?.variants.find((candidateVariant) => candidateVariant.id === normalizedVariantId) ?? null;
+
+          if (product && variant) {
+            setActiveCalendarVariant({ product, variant });
+            return;
+          }
+
+          pushToast({
+            variant: 'warning',
+            message: 'No se encontró la variante asociada para este coste extra.',
+          });
+          return;
+        } catch (error) {
+          console.error('[App] No se pudo abrir la variante desde Costes Extra', error);
+          pushToast({
+            variant: 'danger',
+            message: 'No se pudo abrir el detalle de la variante seleccionada.',
+          });
+          return;
+        }
+      }
+
       const normalizedDealId = normalizeDealId(rawDealId);
       if (!normalizedDealId) {
         return;
