@@ -87,6 +87,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/reporting/logs',
   '/reporting/control_horario_fijos',
   '/reporting/control_horario_discontinuos',
+  '/usuarios/sesiones_y_costes_extra',
   '/usuarios/costes_extra',
   '/usuarios/nominas_formadores_externos',
   '/perfil/control_horas',

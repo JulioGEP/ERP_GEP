@@ -155,7 +155,7 @@ export default function HorasFormadoresPage() {
     }
 
     const query = params.toString();
-    navigate(query ? `/usuarios/costes_extra?${query}` : '/usuarios/costes_extra');
+    navigate(query ? `/usuarios/sesiones_y_costes_extra?${query}` : '/usuarios/sesiones_y_costes_extra');
   };
 
   const handleDownload = () => {

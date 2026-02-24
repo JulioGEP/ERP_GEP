@@ -265,7 +265,7 @@ export default function ControlHorasFormadoresPage() {
       params.set('endDate', filters.endDate);
     }
 
-    return `/usuarios/costes_extra?${params.toString()}`;
+    return `/usuarios/sesiones_y_costes_extra?${params.toString()}`;
   };
 
   let content: JSX.Element;

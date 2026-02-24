@@ -876,7 +876,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
     <section className="py-3">
       <Card className="shadow-sm">
         <Card.Header as="h1" className="h4 mb-0">
-          Costes Extra
+          Sesiones y Costes Extras
         </Card.Header>
         <Card.Body>
           <p className="text-muted">

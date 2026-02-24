@@ -672,17 +672,19 @@ export function AppRouter({
         />
 
         <Route
-          path="/usuarios/costes_extra"
+          path="/usuarios/sesiones_y_costes_extra"
           element={
             <GuardedRoute
-              path="/usuarios/costes_extra"
+              path="/usuarios/sesiones_y_costes_extra"
               roles={['Admin']}
               element={<CostesExtraPage onOpenBudgetSession={onOpenBudgetSessionFromCostesExtra} />}
             />
           }
         />
 
-        <Route path="/reporting/costes_extra" element={<Navigate to="/usuarios/costes_extra" replace />} />
+        <Route path="/usuarios/costes_extra" element={<Navigate to="/usuarios/sesiones_y_costes_extra" replace />} />
+
+        <Route path="/reporting/costes_extra" element={<Navigate to="/usuarios/sesiones_y_costes_extra" replace />} />
 
 
         <Route
