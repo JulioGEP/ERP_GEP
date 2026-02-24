@@ -302,41 +302,6 @@ function sanitizeStringArray(values: string[]): string[] {
   return sanitized;
 }
 
-
-function resolveContextualTrainerIds(
-  trainerIds: string[],
-  dayOffset: number | null | undefined,
-  isTwoDayVerticalProduct: boolean,
-): string[] {
-  if (!isTwoDayVerticalProduct || (dayOffset !== 0 && dayOffset !== 1)) {
-    return trainerIds;
-  }
-  const currentTrainerId = trainerIds[dayOffset] ?? null;
-  return currentTrainerId ? [currentTrainerId] : [];
-}
-
-function mergeContextualTrainerIds(
-  baseTrainerIds: string[],
-  selectedTrainerIds: string[],
-  dayOffset: number | null | undefined,
-  isTwoDayVerticalProduct: boolean,
-): string[] {
-  if (!isTwoDayVerticalProduct || (dayOffset !== 0 && dayOffset !== 1)) {
-    return sanitizeStringArray(selectedTrainerIds);
-  }
-
-  const merged = sanitizeStringArray(baseTrainerIds);
-  const selected = sanitizeStringArray(selectedTrainerIds)[0] ?? null;
-
-  if (selected) {
-    merged[dayOffset] = selected;
-  } else if (merged[dayOffset]) {
-    merged.splice(dayOffset, 1);
-  }
-
-  return sanitizeStringArray(merged);
-}
-
 type ProductDefaultsFormValues = {
   stock_status: string;
   stock_quantity: string;
@@ -973,8 +938,6 @@ export function VariantModal({
 }) {
   const variant = active?.variant;
   const product = active?.product;
-  const calendarDayOffset = active?.calendarDayOffset ?? null;
-  const isTwoDayVerticalProductContext = active?.isTwoDayVerticalProduct === true;
   const navigate = useNavigate();
 
   const [formValues, setFormValues] = useState<VariantFormValues>({
@@ -1365,16 +1328,8 @@ export function VariantModal({
     }
 
     const nextValues = variantToFormValues(variant);
-    const contextualValues = {
-      ...nextValues,
-      trainer_ids: resolveContextualTrainerIds(
-        nextValues.trainer_ids,
-        calendarDayOffset,
-        isTwoDayVerticalProductContext,
-      ),
-    };
-    setFormValues(contextualValues);
-    setInitialValues(contextualValues);
+    setFormValues(nextValues);
+    setInitialValues(nextValues);
     setSaveError(null);
     const baseStatusMap = variant.trainer_invite_statuses ?? {};
     const syncedStatusMap = syncTrainerInviteStatusMap(baseStatusMap, nextValues.trainer_ids);
@@ -1386,7 +1341,7 @@ export function VariantModal({
     setSelectedDealId(null);
     setSelectedDealSummary(null);
     setVariantRefreshState({ loading: false, error: null });
-  }, [calendarDayOffset, isTwoDayVerticalProductContext, variant]);
+  }, [variant]);
 
   useEffect(() => {
     setTrainerListOpen(false);
@@ -2339,12 +2294,7 @@ export function VariantModal({
       payload.date = formValues.date || null;
     }
     if (!areStringArraysEqual(formValues.trainer_ids, initialValues.trainer_ids)) {
-      payload.trainer_ids = mergeContextualTrainerIds(
-        variant.trainer_ids,
-        formValues.trainer_ids,
-        calendarDayOffset,
-        isTwoDayVerticalProductContext,
-      );
+      payload.trainer_ids = sanitizeStringArray(formValues.trainer_ids);
     }
     if (formValues.sala_id !== initialValues.sala_id) {
       const trimmed = formValues.sala_id.trim();
@@ -2478,16 +2428,8 @@ export function VariantModal({
       onVariantUpdated(enhancedVariant);
 
       const nextValues = variantToFormValues(enhancedVariant);
-      const contextualValues = {
-        ...nextValues,
-        trainer_ids: resolveContextualTrainerIds(
-          nextValues.trainer_ids,
-          calendarDayOffset,
-          isTwoDayVerticalProductContext,
-        ),
-      };
-      setFormValues(contextualValues);
-      setInitialValues(contextualValues);
+      setFormValues(nextValues);
+      setInitialValues(nextValues);
       setSaveSuccess(closeAfter ? null : 'Variante actualizada correctamente.');
       const updatedStatusMap = syncTrainerInviteStatusMap(
         enhancedVariant.trainer_invite_statuses ?? {},

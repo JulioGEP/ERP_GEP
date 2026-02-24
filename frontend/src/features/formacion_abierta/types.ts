@@ -68,8 +68,6 @@ export type ProductInfo = ProductDefaults & {
 export type ActiveVariant = {
   product: ProductInfo;
   variant: VariantInfo;
-  calendarDayOffset?: number | null;
-  isTwoDayVerticalProduct?: boolean;
 };
 
 export type ProductDefaultsUpdatePayload = {
