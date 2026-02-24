@@ -143,6 +143,7 @@ type AppRouterProps = {
   recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps;
   usersPageProps: UsersPageProps;
   trainerCalendarPageProps: TrainerCalendarPageProps;
+  onOpenBudgetSessionFromCostesExtra: (dealId: string, sessionId: string | null) => void;
   defaultRedirectPath: string;
   knownPaths: ReadonlySet<string>;
   activePathStorageKey: string;
@@ -176,6 +177,7 @@ export function AppRouter({
   recursosFormacionAbiertaPageProps,
   usersPageProps,
   trainerCalendarPageProps,
+  onOpenBudgetSessionFromCostesExtra,
   defaultRedirectPath,
   knownPaths,
   activePathStorageKey,
@@ -671,7 +673,7 @@ export function AppRouter({
             <GuardedRoute
               path="/usuarios/costes_extra"
               roles={['Admin']}
-              element={<CostesExtraPage />}
+              element={<CostesExtraPage onOpenBudgetSession={onOpenBudgetSessionFromCostesExtra} />}
             />
           }
         />

@@ -233,7 +233,11 @@ function isUnassignedTrainerName(name: string | null, lastName: string | null): 
   return normalizedParts.join(' ').toLowerCase() === 'sin asignar';
 }
 
-export default function CostesExtraPage() {
+type CostesExtraPageProps = {
+  onOpenBudgetSession?: (dealId: string, sessionId: string | null) => void;
+};
+
+export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPageProps) {
   const today = useMemo(() => new Date(), []);
   const [searchParams] = useSearchParams();
   const trainerIdFilter = useMemo(() => {
@@ -673,7 +677,7 @@ export default function CostesExtraPage() {
             <tr>
               <th style={{ minWidth: '120px' }}>Fecha</th>
               <th style={{ minWidth: '220px' }}>Formador</th>
-              <th style={{ minWidth: '260px' }}>Asignación</th>
+              <th style={{ minWidth: '260px' }}>Sesiones</th>
               <th style={{ minWidth: '200px' }}>Documentos</th>
               <th style={{ minWidth: '120px' }} className="text-end">
                 Horas
@@ -696,6 +700,8 @@ export default function CostesExtraPage() {
                 ? dateFormatter.format(new Date(item.scheduledStart))
                 : '—';
               const sessionCategory = resolveSessionCategory(item);
+              const dealId = item.dealId?.trim() ?? '';
+              const canOpenBudgetDetail = dealId.length > 0;
 
               const handleFieldChange = (
                 fieldKey: TrainerExtraCostFieldKey,
@@ -759,9 +765,20 @@ export default function CostesExtraPage() {
                   </td>
                   <td className="align-middle">
                     <div className="fw-semibold d-flex align-items-center gap-2 flex-wrap">
-                      <span>
-                        {formatAssignmentLabel(item.assignmentType)}: {item.sessionName ?? item.variantName ?? '—'}
-                      </span>
+                      {canOpenBudgetDetail ? (
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="p-0 text-start fw-semibold text-decoration-none"
+                          onClick={() => onOpenBudgetSession?.(dealId, item.sessionId)}
+                        >
+                          {formatAssignmentLabel(item.assignmentType)}: {item.sessionName ?? item.variantName ?? '—'}
+                        </Button>
+                      ) : (
+                        <span>
+                          {formatAssignmentLabel(item.assignmentType)}: {item.sessionName ?? item.variantName ?? '—'}
+                        </span>
+                      )}
                       {sessionCategory ? (
                         <Badge bg={sessionCategory.variant} className="text-uppercase">
                           {sessionCategory.label}

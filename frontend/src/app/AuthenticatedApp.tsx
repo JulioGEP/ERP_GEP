@@ -1314,6 +1314,40 @@ export default function AuthenticatedApp() {
     setHighlightedCalendarSessionId(sessionId?.trim() ?? null);
   }, []);
 
+  const handleOpenBudgetSessionFromCostesExtra = useCallback(
+    async (rawDealId: string, sessionId: string | null) => {
+      const normalizedDealId = normalizeDealId(rawDealId);
+      if (!normalizedDealId) {
+        return;
+      }
+
+      const matchDealId = (value: unknown) => normalizeDealId(value) === normalizedDealId;
+      let summary =
+        pendingPlanningBudgets.find((item) => matchDealId(item.dealId) || matchDealId(item.deal_id)) ??
+        allBudgets.find((item) => matchDealId(item.dealId) || matchDealId(item.deal_id)) ??
+        null;
+
+      if (!summary) {
+        try {
+          const detail = await fetchDealDetail(normalizedDealId);
+          summary = detail ? buildSummaryFromDeal(detail) : null;
+        } catch (error) {
+          console.error('[App] No se pudo abrir el presupuesto desde Costes Extra', error);
+          pushToast({
+            variant: 'danger',
+            message: 'No se pudo abrir el detalle del presupuesto seleccionado.',
+          });
+          return;
+        }
+      }
+
+      if (summary) {
+        handleSelectBudgetSession(summary, sessionId);
+      }
+    },
+    [allBudgets, fetchDealDetail, handleSelectBudgetSession, pendingPlanningBudgets, pushToast],
+  );
+
   const handleDeleteBudget = useCallback(
     async (budget: DealSummary) => {
       const rawId = budget.dealId ?? budget.deal_id;
@@ -1957,6 +1991,7 @@ export default function AuthenticatedApp() {
             recursosFormacionAbiertaPageProps={recursosFormacionAbiertaPageProps}
             usersPageProps={usersPageProps}
             trainerCalendarPageProps={trainerCalendarPageProps}
+            onOpenBudgetSessionFromCostesExtra={handleOpenBudgetSessionFromCostesExtra}
             defaultRedirectPath={homePath}
             knownPaths={allowedPaths}
             activePathStorageKey={ACTIVE_PATH_STORAGE_KEY}

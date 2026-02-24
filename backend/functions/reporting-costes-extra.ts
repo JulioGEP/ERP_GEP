@@ -552,6 +552,7 @@ function mapResponseItem(params: {
     variantId: assignmentType === 'variant' ? variantInfo?.id ?? record?.variant_id ?? null : null,
     sessionName: sessionInfo?.nombre_cache ?? null,
     variantName: variantInfo?.name ?? null,
+    dealId: sessionInfo?.deal_id ?? variantInfo?.deal_id ?? null,
     dealTitle: sessionInfo?.deals?.title ?? null,
     pipelineLabel: sessionInfo?.deals?.pipeline_label ?? sessionInfo?.deals?.pipeline_id ?? null,
     productName: sessionInfo?.deal_products?.name ?? variantInfo?.products?.name ?? null,
