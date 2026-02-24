@@ -95,11 +95,6 @@ type CostMutationVariables = {
   payload: TrainerExtraCostSavePayload;
 };
 
-type BulkSaveRequest = {
-  key: string;
-  payload: TrainerExtraCostSavePayload;
-};
-
 function formatNumberInput(value: number): string {
   if (typeof value !== 'number' || Number.isNaN(value)) {
     return '0.00';
@@ -162,34 +157,6 @@ function evaluateDraft(
   }
 
   return { dirty, invalid };
-}
-
-function buildSavePayload(
-  item: TrainerExtraCostRecord,
-  fields: Record<TrainerExtraCostFieldKey, string>,
-): TrainerExtraCostSavePayload {
-  const costs: Record<TrainerExtraCostFieldKey, number> = {} as Record<
-    TrainerExtraCostFieldKey,
-    number
-  >;
-
-  for (const definition of COST_FIELD_DEFINITIONS) {
-    const parsed = parseInputToNumber(fields[definition.key]);
-    costs[definition.key] = parsed ?? 0;
-  }
-
-  const payload: TrainerExtraCostSavePayload = {
-    trainerId: item.trainerId,
-    costs,
-  };
-
-  if (item.assignmentType === 'session' && item.sessionId) {
-    payload.sessionId = item.sessionId;
-  } else if (item.assignmentType === 'variant' && item.variantId) {
-    payload.variantId = item.variantId;
-  }
-
-  return payload;
 }
 
 function getSortTimestamp(value: string | null): number {
@@ -380,8 +347,6 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
   const [selectedItemKeys, setSelectedItemKeys] = useState<string[]>([]);
   const [bulkFieldKey, setBulkFieldKey] = useState<TrainerExtraCostFieldKey>('dietas');
   const [bulkFieldValue, setBulkFieldValue] = useState('');
-  const [bulkSavingKeys, setBulkSavingKeys] = useState<string[]>([]);
-  const [bulkSaveError, setBulkSaveError] = useState<string | null>(null);
   const trainerDropdownRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -578,21 +543,17 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
     });
   };
 
-  const handleApplyBulkValue = async () => {
+  const handleApplyBulkValue = () => {
     const parsedValue = parseInputToNumber(bulkFieldValue);
     if (parsedValue === null || !selectedItemKeys.length) {
       return;
     }
 
     const targetValue = formatNumberInput(parsedValue);
-    const selectedKeySet = new Set(selectedItemKeys);
-    const requests: BulkSaveRequest[] = [];
-    let skippedInvalidCount = 0;
-
     setDrafts((prev) => {
       const next = { ...prev };
       for (const item of items) {
-        if (!selectedKeySet.has(item.key)) {
+        if (!selectedItemKeys.includes(item.key)) {
           continue;
         }
         const current = next[item.key] ?? createDraftFromItem(item);
@@ -603,68 +564,9 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
           dirty,
           invalid,
         };
-
-        if (invalid) {
-          skippedInvalidCount += 1;
-          continue;
-        }
-
-        requests.push({
-          key: item.key,
-          payload: buildSavePayload(item, nextFields),
-        });
       }
       return next;
     });
-
-    if (!requests.length) {
-      setBulkSaveError(
-        skippedInvalidCount
-          ? `No se pudieron guardar ${skippedInvalidCount} registro(s) porque tienen valores no válidos.`
-          : null,
-      );
-      return;
-    }
-
-    setBulkSaveError(null);
-    setBulkSavingKeys(requests.map((request) => request.key));
-
-    const results = await Promise.allSettled(
-      requests.map(async (request) => {
-        await saveTrainerExtraCost(request.payload);
-        return request.key;
-      }),
-    );
-
-    const successfulKeys = results
-      .filter((result): result is PromiseFulfilledResult<string> => result.status === 'fulfilled')
-      .map((result) => result.value);
-    const failedCount = results.length - successfulKeys.length;
-
-    if (successfulKeys.length) {
-      const successfulSet = new Set(successfulKeys);
-      setDrafts((prev) => {
-        const next = { ...prev };
-        for (const key of successfulSet) {
-          delete next[key];
-        }
-        return next;
-      });
-      void queryClient.invalidateQueries({ queryKey: ['reporting', 'costes-extra'] });
-    }
-
-    if (failedCount || skippedInvalidCount) {
-      const errorParts: string[] = [];
-      if (failedCount) {
-        errorParts.push(`Falló el guardado automático de ${failedCount} registro(s)`);
-      }
-      if (skippedInvalidCount) {
-        errorParts.push(`${skippedInvalidCount} registro(s) con valores no válidos`);
-      }
-      setBulkSaveError(`${errorParts.join(' y ')}.`);
-    }
-
-    setBulkSavingKeys([]);
   };
 
   const numberFormatter = useMemo(() => new Intl.NumberFormat('es-ES'), []);
@@ -914,8 +816,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
               const trainerFlags = getTrainerFlags(item);
               const baseDraft = drafts[item.key] ?? createDraftFromItem(item);
               const saving =
-                (saveMutation.isPending && saveMutation.variables?.key === item.key) ||
-                bulkSavingKeys.includes(item.key);
+                saveMutation.isPending && saveMutation.variables?.key === item.key;
               const trainingDateLabel = item.scheduledStart
                 ? dateFormatter.format(new Date(item.scheduledStart))
                 : '—';
@@ -954,7 +855,26 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
 
               const handleSave = () => {
                 const currentDraft = drafts[item.key] ?? createDraftFromItem(item);
-                const payload = buildSavePayload(item, currentDraft.fields);
+                const costs: Record<TrainerExtraCostFieldKey, number> = {} as Record<
+                  TrainerExtraCostFieldKey,
+                  number
+                >;
+                for (const definition of COST_FIELD_DEFINITIONS) {
+                  const parsed = parseInputToNumber(currentDraft.fields[definition.key]);
+                  costs[definition.key] = parsed ?? 0;
+                }
+
+                const payload: TrainerExtraCostSavePayload = {
+                  trainerId: item.trainerId,
+                  costs,
+                };
+
+                if (item.assignmentType === 'session' && item.sessionId) {
+                  payload.sessionId = item.sessionId;
+                } else if (item.assignmentType === 'variant' && item.variantId) {
+                  payload.variantId = item.variantId;
+                }
+
                 saveMutation.mutate({ key: item.key, payload });
               };
 
@@ -1296,7 +1216,6 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                 : 'No se pudieron guardar los costes extra.'}
             </Alert>
           ) : null}
-          {bulkSaveError ? <Alert variant="warning">{bulkSaveError}</Alert> : null}
           {renderContent()}
         </Card.Body>
       </Card>
