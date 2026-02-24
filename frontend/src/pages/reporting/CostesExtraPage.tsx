@@ -347,6 +347,8 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
   const [selectedItemKeys, setSelectedItemKeys] = useState<string[]>([]);
   const [bulkFieldKey, setBulkFieldKey] = useState<TrainerExtraCostFieldKey>('dietas');
   const [bulkFieldValue, setBulkFieldValue] = useState('');
+  const [isSavingSelected, setIsSavingSelected] = useState(false);
+  const [bulkSaveErrorMessage, setBulkSaveErrorMessage] = useState<string | null>(null);
   const trainerDropdownRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -567,6 +569,64 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
       }
       return next;
     });
+  };
+
+  const buildSavePayload = (item: TrainerExtraCostRecord, draft: CostDraft): TrainerExtraCostSavePayload => {
+    const costs: Record<TrainerExtraCostFieldKey, number> = {} as Record<
+      TrainerExtraCostFieldKey,
+      number
+    >;
+    for (const definition of COST_FIELD_DEFINITIONS) {
+      const parsed = parseInputToNumber(draft.fields[definition.key]);
+      costs[definition.key] = parsed ?? 0;
+    }
+
+    const payload: TrainerExtraCostSavePayload = {
+      trainerId: item.trainerId,
+      costs,
+    };
+
+    if (item.assignmentType === 'session' && item.sessionId) {
+      payload.sessionId = item.sessionId;
+    } else if (item.assignmentType === 'variant' && item.variantId) {
+      payload.variantId = item.variantId;
+    }
+
+    return payload;
+  };
+
+  const selectedItemsWithValidDraft = useMemo(() => {
+    return items
+      .filter((item) => selectedItemKeys.includes(item.key))
+      .map((item) => {
+        const draft = drafts[item.key] ?? createDraftFromItem(item);
+        return { item, draft };
+      })
+      .filter(({ draft }) => draft.dirty && !draft.invalid);
+  }, [drafts, items, selectedItemKeys]);
+
+  const handleSaveSelectedChanges = async () => {
+    if (!selectedItemsWithValidDraft.length || isSavingSelected) {
+      return;
+    }
+
+    setBulkSaveErrorMessage(null);
+    setIsSavingSelected(true);
+    const results = await Promise.allSettled(
+      selectedItemsWithValidDraft.map(({ item, draft }) =>
+        saveMutation.mutateAsync({ key: item.key, payload: buildSavePayload(item, draft) }),
+      ),
+    );
+
+    const failedCount = results.filter((result) => result.status === 'rejected').length;
+    if (failedCount > 0) {
+      setBulkSaveErrorMessage(
+        failedCount === 1
+          ? 'No se pudo guardar 1 registro seleccionado.'
+          : `No se pudieron guardar ${failedCount} registros seleccionados.`,
+      );
+    }
+    setIsSavingSelected(false);
   };
 
   const numberFormatter = useMemo(() => new Intl.NumberFormat('es-ES'), []);
@@ -855,27 +915,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
 
               const handleSave = () => {
                 const currentDraft = drafts[item.key] ?? createDraftFromItem(item);
-                const costs: Record<TrainerExtraCostFieldKey, number> = {} as Record<
-                  TrainerExtraCostFieldKey,
-                  number
-                >;
-                for (const definition of COST_FIELD_DEFINITIONS) {
-                  const parsed = parseInputToNumber(currentDraft.fields[definition.key]);
-                  costs[definition.key] = parsed ?? 0;
-                }
-
-                const payload: TrainerExtraCostSavePayload = {
-                  trainerId: item.trainerId,
-                  costs,
-                };
-
-                if (item.assignmentType === 'session' && item.sessionId) {
-                  payload.sessionId = item.sessionId;
-                } else if (item.assignmentType === 'variant' && item.variantId) {
-                  payload.variantId = item.variantId;
-                }
-
-                saveMutation.mutate({ key: item.key, payload });
+                saveMutation.mutate({ key: item.key, payload: buildSavePayload(item, currentDraft) });
               };
 
               return (
@@ -984,7 +1024,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                       variant="primary"
                       size="sm"
                       onClick={handleSave}
-                      disabled={!dirty || invalid || saving}
+                      disabled={!dirty || invalid || saving || isSavingSelected}
                     >
                       {saving ? 'Guardando…' : 'Guardar'}
                     </Button>
@@ -1196,6 +1236,17 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                   >
                     Aplicar a seleccionados
                   </Button>
+                  <Button
+                    size="sm"
+                    type="button"
+                    variant="success"
+                    onClick={() => {
+                      void handleSaveSelectedChanges();
+                    }}
+                    disabled={!selectedItemsWithValidDraft.length || isSavingSelected}
+                  >
+                    {isSavingSelected ? 'Guardando…' : 'Guardar cambios'}
+                  </Button>
                 </div>
               </div>
               <div className="ms-auto text-end">
@@ -1209,11 +1260,9 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
               </div>
             </div>
           </Form>
-          {mutationError ? (
+          {mutationError || bulkSaveErrorMessage ? (
             <Alert variant="danger">
-              {isApiError(mutationError)
-                ? mutationError.message
-                : 'No se pudieron guardar los costes extra.'}
+              {bulkSaveErrorMessage ?? (isApiError(mutationError) ? mutationError.message : 'No se pudieron guardar los costes extra.')}
             </Alert>
           ) : null}
           {renderContent()}
