@@ -14,6 +14,7 @@ import {
 import { type UserSummary, updateUser } from '../../api/users';
 import { fetchUserDocuments, type UserDocument } from '../../api/userDocuments';
 import { UserFormModal, buildPayrollPayload, type UserFormValues } from '../usuarios/UsersPage';
+import { exportToExcel } from '../../shared/export/exportToExcel';
 
 type NominasOficinaPageProps = {
   title?: string;
@@ -1052,6 +1053,7 @@ export default function NominasOficinaPage({
   const [selectedEntry, setSelectedEntry] = useState<OfficePayrollRecord | null>(null);
   const [selectedExtrasEntry, setSelectedExtrasEntry] = useState<OfficePayrollRecord | null>(null);
   const [hasInitializedYear, setHasInitializedYear] = useState(false);
+  const [selectedExportPeriod, setSelectedExportPeriod] = useState<string>('');
 
   const payrollQuery = useQuery<OfficePayrollResponse>({
     queryKey: ['reporting', 'nominas-oficina', selectedYear],
@@ -1102,6 +1104,106 @@ export default function NominasOficinaPage({
       .map((year) => Number(year))
       .sort((a, b) => b - a);
   }, [groupedByYear]);
+
+  const exportPeriodOptions = useMemo(() => {
+    const uniquePeriods = new Set<string>();
+    filteredEntries.forEach((entry) => {
+      uniquePeriods.add(`${entry.year}-${String(entry.month).padStart(2, '0')}`);
+    });
+    return Array.from(uniquePeriods).sort((a, b) => b.localeCompare(a));
+  }, [filteredEntries]);
+
+  useEffect(() => {
+    if (!exportPeriodOptions.length) {
+      setSelectedExportPeriod('');
+      return;
+    }
+
+    const now = new Date();
+    const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const fallbackPeriod = exportPeriodOptions[0];
+
+    setSelectedExportPeriod((previous) => {
+      if (previous && exportPeriodOptions.includes(previous)) return previous;
+      if (exportPeriodOptions.includes(currentPeriod)) return currentPeriod;
+      return fallbackPeriod;
+    });
+  }, [exportPeriodOptions]);
+
+  const handleExportMonth = () => {
+    if (!selectedExportPeriod) return;
+    const [periodYear, periodMonth] = selectedExportPeriod.split('-').map(Number);
+    const entriesToExport = filteredEntries
+      .filter((entry) => entry.year === periodYear && entry.month === periodMonth)
+      .sort((a, b) => a.fullName.localeCompare(b.fullName, 'es'));
+
+    const rows = [
+      [
+        'Nombre y Apellidos',
+        'user_payrolls.convenio',
+        'user_payrolls.categoria',
+        'user_payrolls.antiguedad',
+        'user_payrolls.horas_semana',
+        'user_payrolls.base_retencion',
+        'user_payrolls.salario_bruto',
+        'user_payrolls.salario_bruto_total',
+        'user_payrolls.retencion',
+        'user_payrolls.aportacion_ss_irpf',
+        'user_payrolls.salario_limpio',
+        'user_payrolls.contingencias_comunes',
+        'user_payrolls.total_empresa',
+        'user_payrolls.aportacion_ss_irpf_detalle',
+        'user_payrolls.contingencias_comunes_detalle',
+        'user_payrolls.base_retencion_detalle',
+        'trainer_extra_costs.dietas',
+        'trainer_extra_costs.kilometraje',
+        'trainer_extra_costs.pernocta',
+        'trainer_extra_costs.nocturnidad',
+        'trainer_extra_costs.festivo',
+        'trainer_extra_costs.horas_extras',
+        'trainer_extra_costs.gastos_extras',
+      ],
+      ...entriesToExport.map((entry) => [
+        entry.fullName,
+        entry.convenio ?? entry.defaultConvenio,
+        entry.categoria ?? entry.defaultCategoria,
+        entry.antiguedad ?? entry.defaultAntiguedad,
+        entry.horasSemana ?? entry.defaultHorasSemana,
+        entry.baseRetencion ?? entry.defaultBaseRetencion,
+        entry.salarioBruto ?? entry.defaultSalarioBruto,
+        entry.salarioBrutoTotal ?? entry.defaultSalarioBrutoTotal,
+        entry.retencion ?? entry.defaultRetencion,
+        entry.aportacionSsIrpf ?? entry.defaultAportacionSsIrpf,
+        entry.salarioLimpio ?? entry.defaultSalarioLimpio,
+        entry.contingenciasComunes ?? entry.defaultContingenciasComunes,
+        entry.totalEmpresa ?? entry.defaultTotalEmpresa,
+        entry.aportacionSsIrpfDetalle ?? entry.defaultAportacionSsIrpfDetalle,
+        entry.contingenciasComunesDetalle ?? entry.defaultContingenciasComunesDetalle,
+        entry.baseRetencionDetalle ?? entry.defaultBaseRetencionDetalle,
+        entry.dietas,
+        entry.kilometrajes,
+        entry.pernocta,
+        entry.nocturnidad,
+        entry.festivo,
+        entry.horasExtras,
+        entry.otrosGastos,
+      ]),
+    ];
+
+    exportToExcel({
+      rows,
+      fileName: `nominas_${selectedExportPeriod}.xlsx`,
+      sheetName: 'Nóminas',
+      auditEvent: {
+        action: 'usuarios.nominas.export',
+        details: {
+          period: selectedExportPeriod,
+          count: entriesToExport.length,
+          page: title,
+        },
+      },
+    });
+  };
 
   const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
 
@@ -1190,6 +1292,28 @@ export default function NominasOficinaPage({
         comenzó en un mes concreto, solo aparecerá a partir de esa fecha y los cambios guardados no afectarán a los
         meses anteriores.
       </Alert>
+
+      <div className="d-flex justify-content-end align-items-center gap-2 flex-wrap">
+        <Form.Select
+          style={{ maxWidth: '220px' }}
+          value={selectedExportPeriod}
+          onChange={(event) => setSelectedExportPeriod(event.target.value)}
+          disabled={!exportPeriodOptions.length}
+        >
+          {exportPeriodOptions.map((period) => {
+            const [year, monthValue] = period.split('-').map(Number);
+            const monthLabel = MONTH_LABELS[monthValue - 1] ?? monthValue;
+            return (
+              <option key={period} value={period}>
+                {monthLabel} {year}
+              </option>
+            );
+          })}
+        </Form.Select>
+        <Button variant="outline-success" onClick={handleExportMonth} disabled={!selectedExportPeriod}>
+          Descargar Excel
+        </Button>
+      </div>
 
       {payrollQuery.isLoading ? (
         <div className="text-center py-4">
