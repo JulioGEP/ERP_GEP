@@ -1,12 +1,8 @@
-import { join, sqltag, type Sql } from '@prisma/client/runtime/library';
-
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { requireAuth } from './_shared/auth';
 import { getPrisma } from './_shared/prisma';
 import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
-
-const sql = sqltag;
 
 type DecimalLike = { toNumber?: () => number; toString?: () => string };
 
@@ -239,46 +235,6 @@ async function fetchVariantAssignments(
       assignments.set(variantId, new Set());
     }
     assignments.get(variantId)!.add(trainerId);
-  }
-
-  const conditions: Sql[] = [
-    sql`t.contrato_fijo = false`,
-    sql`COALESCE(LOWER(v.status), '') <> ${CANCELLED_VARIANT_STATUS}`,
-  ];
-  if (startDate) {
-    conditions.push(sql`v.date >= ${startDate}`);
-  }
-  if (endDate) {
-    conditions.push(sql`v.date <= ${endDate}`);
-  }
-  const whereClause = conditions.length > 0 ? join(conditions, ' AND ') : sql`TRUE`;
-
-  try {
-    const rawAssignments = await prisma.$queryRaw(
-      sql`
-        SELECT vtl.variant_id::text AS variant_id, vtl.trainer_id::text AS trainer_id
-        FROM variant_trainer_links vtl
-        JOIN variants v ON v.id = vtl.variant_id
-        JOIN trainers t ON t.trainer_id = vtl.trainer_id
-        WHERE ${whereClause}
-      `,
-    );
-    const linkedAssignments = (rawAssignments as Array<{ variant_id: string; trainer_id: string }> | null | undefined) ?? [];
-    for (const row of linkedAssignments) {
-      const variantId = normalizeIdentifier(row.variant_id);
-      const trainerId = normalizeIdentifier(row.trainer_id);
-      if (!variantId || !trainerId) {
-        continue;
-      }
-      if (!assignments.has(variantId)) {
-        assignments.set(variantId, new Set());
-      }
-      assignments.get(variantId)!.add(trainerId);
-    }
-  } catch (error) {
-    if (!(error instanceof Error && /variant_trainer_links/i.test(error.message))) {
-      throw error;
-    }
   }
 
   return assignments;
