@@ -538,7 +538,7 @@ export type TrainerExtraCostFieldKey = (typeof EXTRA_COST_FIELD_KEYS)[number];
 
 export const DEFAULT_TRAINER_EXTRA_COST_VALUES: Partial<Record<TrainerExtraCostFieldKey, number>> =
   {
-    precioCosteFormacion: 15,
+    precioCosteFormacion: 30,
     precioCostePreventivo: 15
   };
 
