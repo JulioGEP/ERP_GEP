@@ -706,20 +706,20 @@ export function AppRouter({
         />
 
         <Route
-          path="/reporting/control_horario_fijos"
+          path="/usuarios/control_horario_fijos"
           element={
             <GuardedRoute
-              path="/reporting/control_horario_fijos"
+              path="/usuarios/control_horario_fijos"
               roles={['Admin']}
               element={<ControlHorarioPage />}
             />
           }
         />
         <Route
-          path="/reporting/control_horario_discontinuos"
+          path="/usuarios/control_horario_discontinuos"
           element={
             <GuardedRoute
-              path="/reporting/control_horario_discontinuos"
+              path="/usuarios/control_horario_discontinuos"
               roles={['Admin']}
               element={<ControlHorasFormadoresPage />}
             />
@@ -728,11 +728,19 @@ export function AppRouter({
 
         <Route
           path="/reporting/control_horario"
-          element={<Navigate to="/reporting/control_horario_fijos" replace />}
+          element={<Navigate to="/usuarios/control_horario_fijos" replace />}
         />
         <Route
           path="/reporting/control_horas_formadores"
-          element={<Navigate to="/reporting/control_horario_discontinuos" replace />}
+          element={<Navigate to="/usuarios/control_horario_discontinuos" replace />}
+        />
+        <Route
+          path="/reporting/control_horario_fijos"
+          element={<Navigate to="/usuarios/control_horario_fijos" replace />}
+        />
+        <Route
+          path="/reporting/control_horario_discontinuos"
+          element={<Navigate to="/usuarios/control_horario_discontinuos" replace />}
         />
 
         <Route path="/perfil" element={<GuardedRoute path="/perfil" element={<ProfilePage />} />} />

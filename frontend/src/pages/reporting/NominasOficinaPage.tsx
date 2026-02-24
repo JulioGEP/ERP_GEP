@@ -1519,7 +1519,7 @@ export default function NominasOficinaPage({
                                               variant="outline-info"
                                               onClick={() => {
                                                 const params = new URLSearchParams({ userId: entry.userId });
-                                                navigate(`/reporting/control_horario_fijos?${params.toString()}`);
+                                                navigate(`/usuarios/control_horario_fijos?${params.toString()}`);
                                               }}
                                             >
                                               Horario
