@@ -491,6 +491,35 @@ function computeVariantWorkedHours(
   return roundToTwoDecimals(diff / (60 * 60 * 1000));
 }
 
+function buildVariantSchedule(
+  variantDate: Date | string | null | undefined,
+  productTimes: { hora_inicio: Date | string | null; hora_fin: Date | string | null },
+): { start: string | null; end: string | null } {
+  if (!variantDate) {
+    return { start: null, end: null };
+  }
+
+  const parsedDate = new Date(variantDate);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return { start: null, end: null };
+  }
+
+  const startTime = extractTimeParts(productTimes.hora_inicio);
+  if (!startTime) {
+    return { start: null, end: null };
+  }
+
+  const start = buildDateTime(parsedDate, startTime, startTime);
+  const endTime = extractTimeParts(productTimes.hora_fin);
+  const rawEnd = endTime ? buildDateTime(parsedDate, endTime, endTime) : null;
+  const end = rawEnd && rawEnd.getTime() > start.getTime() ? rawEnd : null;
+
+  return {
+    start: toIsoString(start),
+    end: toIsoString(end),
+  };
+}
+
 function computeSessionWorkedHours(sessionInfo: SessionInfo | null): number | null {
   if (!sessionInfo?.fecha_inicio_utc || !sessionInfo?.fecha_fin_utc) {
     return null;
@@ -528,6 +557,10 @@ function mapResponseItem(params: {
     expenseDocuments = [],
   } = params;
   const costs = createEmptyCosts();
+  const variantSchedule =
+    assignmentType === 'variant'
+      ? buildVariantSchedule(variantInfo?.date ?? null, variantInfo?.products ?? { hora_inicio: null, hora_fin: null })
+      : { start: null, end: null };
 
   if (record) {
     for (const definition of COST_FIELD_DEFINITIONS) {
@@ -561,11 +594,11 @@ function mapResponseItem(params: {
     scheduledStart:
       assignmentType === 'session'
         ? toIsoString(sessionInfo?.fecha_inicio_utc ?? null)
-        : toIsoString(variantInfo?.date ?? null),
+        : variantSchedule.start,
     scheduledEnd:
       assignmentType === 'session'
         ? toIsoString(sessionInfo?.fecha_fin_utc ?? null)
-        : null,
+        : variantSchedule.end,
     workedHours:
       assignmentType === 'session'
         ? computeSessionWorkedHours(sessionInfo)

@@ -971,6 +971,9 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                         {scheduledEnd ? ` · Fin: ${scheduledEnd}` : ''}
                       </div>
                     ) : null}
+                    {item.assignmentType === 'variant' && item.productName ? (
+                      <div className="small text-muted">Producto: {item.productName}</div>
+                    ) : null}
                   </td>
                   <td className="align-middle">
                     {item.trainerExpenseDocuments.length ? (
