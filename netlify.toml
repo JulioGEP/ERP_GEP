@@ -33,6 +33,10 @@
   function = "daily-availability-slack"
   cron = "0 7 * * *"
 
+[[scheduled]]
+  function = "daily-trainers-slack"
+  cron = "1 7 * * *"
+
 # --------- Redirects ---------
 
 # Health
