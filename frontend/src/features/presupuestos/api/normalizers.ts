@@ -609,6 +609,7 @@ export function normalizeSession(row: any): SessionDTO {
     direccion: toStringValue(row?.direccion) ?? '',
     estado: toSessionEstadoValue(row?.estado),
     drive_url: toStringValue(row?.drive_url ?? row?.driveUrl) ?? null,
+    tiempo_parada: toNumber(row?.tiempo_parada ?? row?.tiempoParada) ?? null,
     trainer_ids: sanitizeStringArray(row?.trainer_ids) ?? [],
     unidad_movil_ids: sanitizeStringArray(row?.unidad_movil_ids) ?? [],
     trainer_invite_status: toSessionTrainerInviteStatus(row?.trainer_invite_status),
