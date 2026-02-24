@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Accordion, Alert, Badge, Button, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import {
+  fetchReportingControlHorario,
   fetchTrainerExtraCosts,
   fetchOfficePayrolls,
   saveOfficePayroll,
@@ -123,6 +124,19 @@ function buildMonthRange(year: number, month: number) {
     startDate: formatDateForInput(start),
     endDate: formatDateForInput(end),
   };
+}
+
+function diffMinutes(start: string, end: string): number {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return 0;
+  return Math.max(0, Math.floor((endDate.getTime() - startDate.getTime()) / 60000));
+}
+
+function formatDuration(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
 const MONTH_LABELS = [
@@ -1105,6 +1119,55 @@ export default function NominasOficinaPage({
       .sort((a, b) => b - a);
   }, [groupedByYear]);
 
+  const controlHoursRange = useMemo(() => {
+    if (!filteredEntries.length) return null;
+
+    let minYear = Number.POSITIVE_INFINITY;
+    let minMonth = Number.POSITIVE_INFINITY;
+    let maxYear = Number.NEGATIVE_INFINITY;
+    let maxMonth = Number.NEGATIVE_INFINITY;
+
+    filteredEntries.forEach((entry) => {
+      if (entry.year < minYear || (entry.year === minYear && entry.month < minMonth)) {
+        minYear = entry.year;
+        minMonth = entry.month;
+      }
+      if (entry.year > maxYear || (entry.year === maxYear && entry.month > maxMonth)) {
+        maxYear = entry.year;
+        maxMonth = entry.month;
+      }
+    });
+
+    return {
+      startDate: buildMonthRange(minYear, minMonth).startDate,
+      endDate: buildMonthRange(maxYear, maxMonth).endDate,
+    };
+  }, [filteredEntries]);
+
+  const controlHoursQuery = useQuery({
+    queryKey: ['reporting-control-horario', 'nominas-oficina', controlHoursRange?.startDate, controlHoursRange?.endDate],
+    queryFn: () =>
+      fetchReportingControlHorario({
+        startDate: controlHoursRange?.startDate,
+        endDate: controlHoursRange?.endDate,
+      }),
+    enabled: Boolean(controlHoursRange),
+  });
+
+  const trackedMinutesByUserMonth = useMemo(() => {
+    const map = new Map<string, number>();
+    (controlHoursQuery.data?.entries ?? []).forEach((entry) => {
+      if (!entry.checkIn || !entry.checkOut) return;
+      const parsedDate = new Date(`${entry.date}T00:00:00`);
+      if (Number.isNaN(parsedDate.getTime())) return;
+      const month = parsedDate.getMonth() + 1;
+      const year = parsedDate.getFullYear();
+      const key = `${entry.userId}-${year}-${month}`;
+      map.set(key, (map.get(key) ?? 0) + diffMinutes(entry.checkIn, entry.checkOut));
+    });
+    return map;
+  }, [controlHoursQuery.data?.entries]);
+
   const exportPeriodOptions = useMemo(() => {
     const uniquePeriods = new Set<string>();
     filteredEntries.forEach((entry) => {
@@ -1374,6 +1437,7 @@ export default function NominasOficinaPage({
                                     <th>Total Extras</th>
                                     <th>Cotización SS</th>
                                     <th>Salario limpio</th>
+                                    <th>Horas mes</th>
                                     <th style={{ width: '140px' }}>Estado</th>
                                     <th style={{ width: '220px' }} className="text-end">
                                       Acciones
@@ -1402,6 +1466,14 @@ export default function NominasOficinaPage({
                                     const totalExtras = resolveDisplayValue(entry.totalExtras);
                                     const aportacion = resolveDisplayValue(entry.aportacionSsIrpf);
                                     const salarioLimpio = resolveDisplayValue(entry.salarioLimpio);
+                                    const trackedMinutes = trackedMinutesByUserMonth.get(
+                                      `${entry.userId}-${entry.year}-${entry.month}`,
+                                    );
+                                    const trackedHoursLabel = controlHoursQuery.isLoading
+                                      ? '…'
+                                      : controlHoursQuery.isError
+                                        ? '—'
+                                        : formatDuration(trackedMinutes ?? 0);
 
                                     return (
                                       <tr key={`${year}-${month}-${entry.userId}`}>
@@ -1431,6 +1503,7 @@ export default function NominasOficinaPage({
                                         <td className={mismatches.salarioLimpio ? 'text-danger fw-semibold' : ''}>
                                           {salarioLimpio}
                                         </td>
+                                        <td>{trackedHoursLabel}</td>
                                         <td>{entry.isSaved ? 'Guardada' : 'Sin guardar'}</td>
                                         <td className="text-end">
                                           <div className="d-inline-flex gap-2">
@@ -1440,6 +1513,16 @@ export default function NominasOficinaPage({
                                               onClick={() => setSelectedEntry(entry)}
                                             >
                                               Nómina
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              variant="outline-info"
+                                              onClick={() => {
+                                                const params = new URLSearchParams({ userId: entry.userId });
+                                                navigate(`/reporting/control_horario_fijos?${params.toString()}`);
+                                              }}
+                                            >
+                                              Control horario
                                             </Button>
                                             <Button
                                               size="sm"
