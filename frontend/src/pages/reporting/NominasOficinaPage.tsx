@@ -256,11 +256,17 @@ function preservePayrollBaseValues(
   updated: OfficePayrollRecord,
 ): OfficePayrollRecord {
   const merged = { ...existing, ...updated };
-  for (const field of PAYROLL_BASE_FIELDS) {
+
+  const preserveField = <K extends keyof OfficePayrollRecord>(field: K): void => {
     if (updated[field] === null || updated[field] === undefined) {
       merged[field] = existing[field];
     }
+  };
+
+  for (const field of PAYROLL_BASE_FIELDS) {
+    preserveField(field);
   }
+
   return merged;
 }
 
