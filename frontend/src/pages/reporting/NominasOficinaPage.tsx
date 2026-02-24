@@ -1522,7 +1522,7 @@ export default function NominasOficinaPage({
                                                 navigate(`/reporting/control_horario_fijos?${params.toString()}`);
                                               }}
                                             >
-                                              Control horario
+                                              Horario
                                             </Button>
                                             <Button
                                               size="sm"
