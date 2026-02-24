@@ -1044,3 +1044,19 @@ export type SlackDailyAvailabilityResponse = {
 export async function sendDailyAvailabilitySlackMessage(): Promise<SlackDailyAvailabilityResponse> {
   return postJson<SlackDailyAvailabilityResponse>('/daily-availability-slack', {});
 }
+
+export type SlackDailyTrainersResponse = {
+  message: string;
+  date: string;
+  channel: string;
+  text: string;
+  sessions: Array<{
+    company: string;
+    sessionName: string;
+    trainers: string[];
+  }>;
+};
+
+export async function sendDailyTrainersSlackMessage(): Promise<SlackDailyTrainersResponse> {
+  return postJson<SlackDailyTrainersResponse>('/daily-trainers-slack', {});
+}
