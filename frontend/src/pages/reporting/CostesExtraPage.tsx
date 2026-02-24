@@ -709,7 +709,8 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                 : '—';
               const sessionCategory = resolveSessionCategory(item);
               const dealId = item.dealId?.trim() ?? '';
-              const canOpenBudgetDetail = dealId.length > 0;
+              const variantId = item.variantId?.trim() ?? '';
+              const canOpenBudgetDetail = dealId.length > 0 || (item.assignmentType === 'variant' && variantId.length > 0);
 
               const handleFieldChange = (
                 fieldKey: TrainerExtraCostFieldKey,
@@ -781,7 +782,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                           onClick={() =>
                             onOpenBudgetSession?.(dealId, item.sessionId, {
                               assignmentType: item.assignmentType,
-                              variantId: item.variantId,
+                              variantId,
                               scheduledStart: item.scheduledStart,
                             })
                           }
