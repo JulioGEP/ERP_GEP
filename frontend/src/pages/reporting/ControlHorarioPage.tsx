@@ -500,7 +500,7 @@ export default function ControlHorarioPage() {
   const handleFixedTrainerClick = (person: ReportingControlHorarioPerson) => {
     const params = new URLSearchParams();
     params.set('trainerId', person.id);
-    navigate(`/usuarios/costes_extra?${params.toString()}`);
+    navigate(`/usuarios/sesiones_y_costes_extra?${params.toString()}`);
   };
 
   let content: JSX.Element;

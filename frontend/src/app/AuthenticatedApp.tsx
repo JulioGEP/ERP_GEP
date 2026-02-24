@@ -225,7 +225,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     children: [
       { key: 'Usuarios/Principal', label: 'Gestión de usuarios', path: '/usuarios' },
       { key: 'Usuarios/Vacaciones', label: 'Vacaciones', path: '/usuarios/vacaciones' },
-      { key: 'Usuarios/CostesExtra', label: 'Costes Extra', path: '/usuarios/costes_extra' },
+      {
+        key: 'Usuarios/CostesExtra',
+        label: 'Sesiones y Costes Extras',
+        path: '/usuarios/sesiones_y_costes_extra',
+      },
       {
         key: 'Usuarios/NominasOficina',
         label: 'Nómina Fijos',

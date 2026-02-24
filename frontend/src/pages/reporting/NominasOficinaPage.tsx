@@ -479,7 +479,7 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
       startDate: monthRange.startDate,
       endDate: monthRange.endDate,
     });
-    navigate(`/usuarios/costes_extra?${params.toString()}`);
+    navigate(`/usuarios/sesiones_y_costes_extra?${params.toString()}`);
   };
 
   return (
@@ -1334,7 +1334,7 @@ export default function NominasOficinaPage({
                                                     startDate: range.startDate,
                                                     endDate: range.endDate,
                                                   });
-                                                  navigate(`/usuarios/costes_extra?${params.toString()}`);
+                                                  navigate(`/usuarios/sesiones_y_costes_extra?${params.toString()}`);
                                                 }}
                                               >
                                                 Sesiones
