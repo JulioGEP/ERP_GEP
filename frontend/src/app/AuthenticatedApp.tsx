@@ -206,6 +206,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         path: '/reporting/webhooks_pipedrive',
       },
       {
+        key: 'Reporting/Slack',
+        label: 'Slack',
+        path: '/reporting/slack',
+      },
+      {
         key: 'Reporting/Logs',
         label: 'Logs',
         path: '/reporting/logs',
