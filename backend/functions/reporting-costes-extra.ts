@@ -26,7 +26,7 @@ type CostFieldDefinition = (typeof COST_FIELD_DEFINITIONS)[number];
 export type CostFieldKey = CostFieldDefinition['key'];
 
 const DEFAULT_COST_VALUES: Partial<Record<CostFieldKey, number>> = {
-  precioCosteFormacion: 15,
+  precioCosteFormacion: 30,
   precioCostePreventivo: 15,
 };
 
