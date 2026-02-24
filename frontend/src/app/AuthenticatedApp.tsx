@@ -134,7 +134,6 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     key: 'Recursos',
     label: 'Recursos',
     children: [
-      { key: 'Recursos/Formadores', label: 'Formadores / Bomberos', path: '/recursos/formadores_bomberos' },
       { key: 'Recursos/Confirmaciones', label: 'Confirmaciones', path: '/recursos/confirmaciones' },
       { key: 'Recursos/Unidades', label: 'Unidades Móviles', path: '/recursos/unidades_moviles' },
       { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
@@ -213,6 +212,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     path: '/usuarios',
     children: [
       { key: 'Usuarios/Principal', label: 'Gestión de usuarios', path: '/usuarios' },
+      { key: 'Usuarios/Formadores', label: 'Formadores / Bomberos', path: '/usuarios/formadores_bomberos' },
       { key: 'Usuarios/Vacaciones', label: 'Vacaciones', path: '/usuarios/vacaciones' },
       {
         key: 'Usuarios/CostesExtra',

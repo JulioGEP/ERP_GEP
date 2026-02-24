@@ -376,6 +376,15 @@ export function AppRouter({
           }
         />
         <Route
+          path="/usuarios/formadores_bomberos"
+          element={
+            <GuardedRoute
+              path="/recursos/formadores_bomberos"
+              element={<FormadoresBomberosPage {...formadoresBomberosPageProps} />}
+            />
+          }
+        />
+        <Route
           path="/recursos/unidades_moviles"
           element={
             <GuardedRoute
