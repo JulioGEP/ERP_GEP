@@ -1028,3 +1028,17 @@ export async function saveOfficePayroll(
   }
   throw new Error('No se pudo guardar la nómina de oficina');
 }
+
+
+export type SlackDailyAvailabilityResponse = {
+  message: string;
+  date: string;
+  nextDate: string;
+  channel: string;
+  text: string;
+  availability: Record<string, { off: string[]; telework: string[] }>;
+};
+
+export async function sendDailyAvailabilitySlackMessage(): Promise<SlackDailyAvailabilityResponse> {
+  return postJson<SlackDailyAvailabilityResponse>('/daily-availability-slack', {});
+}
