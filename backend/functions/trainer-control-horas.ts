@@ -270,6 +270,9 @@ function computeVariantHours(
   return diff / (60 * 60 * 1000);
 }
 
+const CANCELLED_VARIANT_STATUS = 'cancelado';
+const EXCLUDED_SESSION_STATES: Array<'SUSPENDIDA' | 'CANCELADA'> = ['SUSPENDIDA', 'CANCELADA'];
+
 export const handler = createHttpHandler(async (request) => {
   if (request.method !== 'GET') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
@@ -312,6 +315,9 @@ export const handler = createHttpHandler(async (request) => {
     sesiones: {
       fecha_inicio_utc: sessionStartFilter,
       fecha_fin_utc: sessionEndFilter,
+      estado: {
+        notIn: EXCLUDED_SESSION_STATES,
+      },
     },
   };
 
@@ -344,6 +350,9 @@ export const handler = createHttpHandler(async (request) => {
     where: {
       trainer_id: trainer.trainer_id,
       date: variantDateFilter,
+      NOT: {
+        status: { equals: CANCELLED_VARIANT_STATUS, mode: 'insensitive' },
+      },
     },
     select: {
       id: true,
