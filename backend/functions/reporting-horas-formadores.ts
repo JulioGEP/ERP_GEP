@@ -63,6 +63,9 @@ const EXTRA_COST_COLUMNS = [
   'gastos_extras',
 ] as const;
 
+const CANCELLED_VARIANT_STATUS = 'cancelado';
+const EXCLUDED_SESSION_STATES: Array<'SUSPENDIDA' | 'CANCELADA'> = ['SUSPENDIDA', 'CANCELADA'];
+
 function computeSessionHours(start: Date | null, end: Date | null, breakHours = 0): number {
   if (!start || !end) return 0;
   const startTime = start.getTime();
@@ -211,6 +214,9 @@ async function fetchVariantAssignments(
     where: {
       trainer_id: { not: null },
       date: variantDateFilter,
+      NOT: {
+        status: { equals: CANCELLED_VARIANT_STATUS, mode: 'insensitive' },
+      },
       trainers: {
         is: {
           contrato_fijo: false,
@@ -235,7 +241,10 @@ async function fetchVariantAssignments(
     assignments.get(variantId)!.add(trainerId);
   }
 
-  const conditions: Sql[] = [sql`t.contrato_fijo = false`];
+  const conditions: Sql[] = [
+    sql`t.contrato_fijo = false`,
+    sql`COALESCE(LOWER(v.status), '') <> ${CANCELLED_VARIANT_STATUS}`,
+  ];
   if (startDate) {
     conditions.push(sql`v.date >= ${startDate}`);
   }
@@ -389,6 +398,9 @@ export const handler = createHttpHandler(async (request) => {
     sesiones: {
       fecha_inicio_utc: sessionStartFilter,
       fecha_fin_utc: sessionEndFilter,
+      estado: {
+        notIn: EXCLUDED_SESSION_STATES,
+      },
     },
     trainers: {
       is: {

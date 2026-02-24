@@ -30,6 +30,8 @@ const DEFAULT_COST_VALUES: Partial<Record<CostFieldKey, number>> = {
   precioCostePreventivo: 15,
 };
 
+const CANCELLED_VARIANT_STATUS = 'cancelado';
+
 type TrainerSummary = {
   trainer_id: string;
   name: string | null;
@@ -804,6 +806,9 @@ async function fetchVariantAssignments(
   const directVariants = (await prisma.variants.findMany({
     where: {
       trainer_id: { not: null },
+      NOT: {
+        status: { equals: CANCELLED_VARIANT_STATUS, mode: 'insensitive' },
+      },
       ...(startDate || endDate
         ? {
             date: {
@@ -831,7 +836,7 @@ async function fetchVariantAssignments(
     assignments.get(variantId)!.add(trainerId);
   }
 
-  const conditions: Sql[] = [];
+  const conditions: Sql[] = [sql`COALESCE(LOWER(v.status), '') <> ${CANCELLED_VARIANT_STATUS}`];
   if (startDate) {
     conditions.push(sql`v.date >= ${startDate}`);
   }
@@ -892,6 +897,11 @@ export const handler = createHttpHandler(async (request) => {
     const { startDate, endDate } = parsedFilters;
 
     const sessionWhere: Record<string, unknown> = {};
+    const sessionFilter: Record<string, unknown> = {
+      estado: {
+        notIn: ['SUSPENDIDA', 'CANCELADA'],
+      },
+    };
     if (startDate || endDate) {
       const dateFilter: { gte?: Date; lte?: Date } = {};
       if (startDate) {
@@ -900,8 +910,9 @@ export const handler = createHttpHandler(async (request) => {
       if (endDate) {
         dateFilter.lte = endDate;
       }
-      sessionWhere.sesiones = { fecha_inicio_utc: dateFilter };
+      sessionFilter.fecha_inicio_utc = dateFilter;
     }
+    sessionWhere.sesiones = sessionFilter;
 
     const sessionAssignments = (await prisma.sesion_trainers.findMany({
       where: sessionWhere,
