@@ -12,6 +12,8 @@
     "migrate:deploy": "node ../scripts/prisma-migrate-retry.js",
     "prisma:prune": "node ../scripts/prisma-prune-binaries.mjs || true",
     "typecheck": "npm run generate && tsc -p tsconfig.json",
+    "typecheck:function:daily-availability-slack": "tsc --noEmit --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck functions/daily-availability-slack.ts",
+    "typecheck:function:daily-trainers-slack": "tsc --noEmit --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck functions/daily-trainers-slack.ts",
     "postinstall": "prisma generate --schema prisma/schema.prisma"
   },
   "dependencies": {
