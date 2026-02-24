@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Card, Collapse, Form, Modal, Spinner, Table } from 'react-bootstrap';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { isApiError } from '../../api/client';
 import {
   createReportingControlHorarioEntry,
@@ -142,6 +142,8 @@ type ModalState = {
 
 export default function ControlHorarioPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const preselectedUserId = searchParams.get('userId') ?? searchParams.get('trainerId');
   const [filters, setFilters] = useState(getInitialFilters);
   const [modalState, setModalState] = useState<ModalState | null>(null);
   const [checkInTime, setCheckInTime] = useState('');
@@ -152,6 +154,16 @@ export default function ControlHorarioPage() {
   const queryClient = useQueryClient();
 
   const dateRange = useMemo(() => getMonthRange(filters.year, filters.month), [filters.month, filters.year]);
+
+  useEffect(() => {
+    if (!preselectedUserId) return;
+    setFilters((prev) => {
+      if (prev.userIds.includes(preselectedUserId)) {
+        return prev;
+      }
+      return { ...prev, userIds: [preselectedUserId] };
+    });
+  }, [preselectedUserId]);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
