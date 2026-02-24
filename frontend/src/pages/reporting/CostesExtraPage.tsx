@@ -1125,9 +1125,9 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                   </Collapse>
                 </div>
               </Form.Group>
-              <Form.Group controlId="costes-extra-trainer-flags" className="mb-0">
-                <Form.Label>Etiquetas formador</Form.Label>
-                <div className="border rounded p-2" style={{ minWidth: '220px' }}>
+              <Form.Group controlId="costes-extra-trainer-flags" className="mb-0 align-self-start">
+                <Form.Label className="mb-1">Etiquetas formador</Form.Label>
+                <div className="border rounded p-2 d-flex flex-wrap gap-3 align-items-center" style={{ minWidth: '220px' }}>
                   {TRAINER_FLAG_FILTER_OPTIONS.map((flag) => {
                     const isChecked = selectedTrainerFlags.includes(flag);
                     return (
@@ -1136,6 +1136,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                         id={`costes-extra-trainer-flag-${flag}`}
                         type="checkbox"
                         label={flag}
+                        className="mb-0"
                         checked={isChecked}
                         onChange={(event) => {
                           const { checked } = event.currentTarget;
