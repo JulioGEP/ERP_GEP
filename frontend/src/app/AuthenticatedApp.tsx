@@ -186,16 +186,6 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     label: 'Reporting',
     children: [
       {
-        key: 'Reporting/ControlHorasFormadores',
-        label: 'Control horario discontinuos',
-        path: '/reporting/control_horario_discontinuos',
-      },
-      {
-        key: 'Reporting/ControlHorario',
-        label: 'Control horario fijos',
-        path: '/reporting/control_horario_fijos',
-      },
-      {
         key: 'Reporting/Comparativa',
         label: 'Comparativa Formaciones y Servicios',
         path: '/reporting/comparativa',
@@ -243,6 +233,16 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         key: 'Usuarios/NominasFormadoresExternos',
         label: 'Nóminas Formadores Externos',
         path: '/usuarios/nominas_formadores_externos',
+      },
+      {
+        key: 'Usuarios/ControlHorarioDiscontinuos',
+        label: 'Control horario discontinuos',
+        path: '/usuarios/control_horario_discontinuos',
+      },
+      {
+        key: 'Usuarios/ControlHorarioFijos',
+        label: 'Control horario fijos',
+        path: '/usuarios/control_horario_fijos',
       },
     ],
   },
