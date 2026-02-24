@@ -578,7 +578,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
     });
   };
 
-  const handleApplyBulkValue = async () => {
+  const handleApplyBulkValue = () => {
     const parsedValue = parseInputToNumber(bulkFieldValue);
     if (parsedValue === null || !selectedItemKeys.length) {
       return;
@@ -586,8 +586,6 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
 
     const targetValue = formatNumberInput(parsedValue);
     const selectedKeySet = new Set(selectedItemKeys);
-    const requests: BulkSaveRequest[] = [];
-    let skippedInvalidCount = 0;
 
     setDrafts((prev) => {
       const next = { ...prev };
@@ -603,25 +601,45 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
           dirty,
           invalid,
         };
-
-        if (invalid) {
-          skippedInvalidCount += 1;
-          continue;
-        }
-
-        requests.push({
-          key: item.key,
-          payload: buildSavePayload(item, nextFields),
-        });
       }
       return next;
     });
+
+    setBulkSaveError(null);
+  };
+
+  const handleBulkSaveChanges = async () => {
+    if (!selectedItemKeys.length) {
+      return;
+    }
+
+    const selectedKeySet = new Set(selectedItemKeys);
+    const requests: BulkSaveRequest[] = [];
+    let skippedInvalidCount = 0;
+
+    for (const item of items) {
+      if (!selectedKeySet.has(item.key)) {
+        continue;
+      }
+      const draft = drafts[item.key] ?? createDraftFromItem(item);
+      if (!draft.dirty) {
+        continue;
+      }
+      if (draft.invalid) {
+        skippedInvalidCount += 1;
+        continue;
+      }
+      requests.push({
+        key: item.key,
+        payload: buildSavePayload(item, draft.fields),
+      });
+    }
 
     if (!requests.length) {
       setBulkSaveError(
         skippedInvalidCount
           ? `No se pudieron guardar ${skippedInvalidCount} registro(s) porque tienen valores no válidos.`
-          : null,
+          : 'No hay cambios pendientes en los registros seleccionados.',
       );
       return;
     }
@@ -666,6 +684,20 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
 
     setBulkSavingKeys([]);
   };
+
+  const canBulkSaveSelected = useMemo(() => {
+    if (!selectedItemKeys.length) {
+      return false;
+    }
+    const selectedKeySet = new Set(selectedItemKeys);
+    return items.some((item) => {
+      if (!selectedKeySet.has(item.key)) {
+        return false;
+      }
+      const draft = drafts[item.key] ?? createDraftFromItem(item);
+      return draft.dirty && !draft.invalid;
+    });
+  }, [drafts, items, selectedItemKeys]);
 
   const numberFormatter = useMemo(() => new Intl.NumberFormat('es-ES'), []);
   const hoursFormatter = useMemo(
@@ -1275,6 +1307,17 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                     disabled={!selectedItemsCount || !bulkFieldValue.trim().length || !isBulkValueValid}
                   >
                     Aplicar a seleccionados
+                  </Button>
+                  <Button
+                    size="sm"
+                    type="button"
+                    variant="success"
+                    onClick={() => {
+                      void handleBulkSaveChanges();
+                    }}
+                    disabled={!canBulkSaveSelected || bulkSavingKeys.length > 0}
+                  >
+                    Guardar cambios
                   </Button>
                 </div>
               </div>
