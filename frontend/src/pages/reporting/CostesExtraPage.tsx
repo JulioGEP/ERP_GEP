@@ -234,15 +234,7 @@ function isUnassignedTrainerName(name: string | null, lastName: string | null): 
 }
 
 type CostesExtraPageProps = {
-  onOpenBudgetSession?: (
-    dealId: string,
-    sessionId: string | null,
-    context?: {
-      assignmentType: 'session' | 'variant';
-      variantId: string | null;
-      scheduledStart: string | null;
-    },
-  ) => void;
+  onOpenBudgetSession?: (dealId: string, sessionId: string | null) => void;
 };
 
 export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPageProps) {
@@ -709,8 +701,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                 : '—';
               const sessionCategory = resolveSessionCategory(item);
               const dealId = item.dealId?.trim() ?? '';
-              const variantId = item.variantId?.trim() ?? '';
-              const canOpenBudgetDetail = dealId.length > 0 || (item.assignmentType === 'variant' && variantId.length > 0);
+              const canOpenBudgetDetail = dealId.length > 0;
 
               const handleFieldChange = (
                 fieldKey: TrainerExtraCostFieldKey,
@@ -779,13 +770,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                           variant="link"
                           size="sm"
                           className="p-0 text-start fw-semibold text-decoration-none"
-                          onClick={() =>
-                            onOpenBudgetSession?.(dealId, item.sessionId, {
-                              assignmentType: item.assignmentType,
-                              variantId,
-                              scheduledStart: item.scheduledStart,
-                            })
-                          }
+                          onClick={() => onOpenBudgetSession?.(dealId, item.sessionId)}
                         >
                           {formatAssignmentLabel(item.assignmentType)}: {item.sessionName ?? item.variantName ?? '—'}
                         </Button>
