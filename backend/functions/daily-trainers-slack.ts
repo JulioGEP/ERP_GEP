@@ -6,6 +6,7 @@ import { nowInMadridISO } from './_shared/timezone';
 
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
 const SLACK_CHANNEL_ID = 'C063C7QRHK4';
+const NETLIFY_SCHEDULE_HEADER = 'x-netlify-event';
 
 type SessionSummary = {
   company: string;
@@ -49,6 +50,17 @@ function buildSlackMessage(sessions: SessionSummary[]): string {
   );
 
   return ['Hoy tenemos a', ...lines, 'De tu querido Bot', '¡Gracias!'].join('\n');
+}
+
+function isScheduledInvocation(event: Parameters<Handler>[0]): boolean {
+  const scheduleHeader = event.headers?.[NETLIFY_SCHEDULE_HEADER] ?? event.headers?.[NETLIFY_SCHEDULE_HEADER.toUpperCase()];
+  return String(scheduleHeader ?? '').toLowerCase() === 'schedule';
+}
+
+function isMadridSevenAm(isoDateTime: string): boolean {
+  const timePart = isoDateTime.split('T')[1] ?? '';
+  const [hour = '', minute = ''] = timePart.split(':');
+  return hour === '07' && minute === '00';
 }
 
 async function postSlackMessage(token: string, text: string): Promise<void> {
@@ -97,6 +109,14 @@ export const handler: Handler = async (event) => {
   try {
     const prisma = getPrisma();
     const todayIso = nowInMadridISO();
+
+    if (isScheduledInvocation(event) && !isMadridSevenAm(todayIso)) {
+      return successResponse({
+        message: 'Invocación programada fuera del horario de envío. Se omite.',
+        nowMadrid: todayIso,
+      });
+    }
+
     const { day, startUtc, endUtc } = buildMadridDayRange(todayIso);
 
     const sessionRows = await prisma.sesiones.findMany({
@@ -163,4 +183,3 @@ export const handler: Handler = async (event) => {
     return errorResponse('SLACK_POST_FAILED', errorMessage, 500);
   }
 };
-
