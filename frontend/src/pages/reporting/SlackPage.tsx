@@ -51,7 +51,7 @@ export default function SlackPage() {
                   Enviando...
                 </>
               ) : (
-                'Enviar Slack'
+                'Mensaje Vacaciones'
               )}
             </Button>
 
