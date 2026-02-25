@@ -204,6 +204,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         label: 'Logs',
         path: '/reporting/logs',
       },
+      {
+        key: 'Reporting/ReporteNominas',
+        label: 'Reporte Nóminas',
+        path: '/reporting/reporte_nominas',
+      },
     ],
   },
   {

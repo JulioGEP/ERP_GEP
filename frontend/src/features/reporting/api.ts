@@ -1031,6 +1031,82 @@ export async function saveOfficePayroll(
   throw new Error('No se pudo guardar la nómina de oficina');
 }
 
+export type PayrollReportMetricKey =
+  | 'salarioBruto'
+  | 'salarioBrutoTotal'
+  | 'salarioLimpio'
+  | 'contingenciasComunes'
+  | 'aportacionSsIrpf'
+  | 'totalEmpresa'
+  | 'dietas'
+  | 'kilometraje'
+  | 'pernocta'
+  | 'nocturnidad'
+  | 'festivo'
+  | 'horasExtras'
+  | 'gastosExtras';
+
+export type PayrollReportTotals = {
+  metrics: Record<PayrollReportMetricKey, number>;
+  totalCost: number;
+};
+
+export type PayrollReportComparisonMetric = {
+  current: number;
+  previous: number;
+  absoluteDifference: number;
+  percentageDifference: number | null;
+};
+
+export type PayrollReportResponse = {
+  period: {
+    year: number;
+    month: number;
+    quarter: number;
+    period: string;
+  };
+  totals: {
+    fixedTrainers: PayrollReportTotals;
+    fixedStaff: PayrollReportTotals;
+    discontinuousTrainers: PayrollReportTotals;
+    overall: PayrollReportTotals;
+  };
+  quarterTotals: {
+    fixedTrainers: PayrollReportTotals;
+    fixedStaff: PayrollReportTotals;
+    discontinuousTrainers: PayrollReportTotals;
+    overall: PayrollReportTotals;
+  };
+  comparisons: {
+    monthVsPreviousMonth: {
+      metrics: Record<PayrollReportMetricKey, PayrollReportComparisonMetric>;
+      totalCost: PayrollReportComparisonMetric;
+    };
+    monthVsSameMonthLastYear: {
+      metrics: Record<PayrollReportMetricKey, PayrollReportComparisonMetric>;
+      totalCost: PayrollReportComparisonMetric;
+    };
+    quarterVsPreviousQuarter: {
+      metrics: Record<PayrollReportMetricKey, PayrollReportComparisonMetric>;
+      totalCost: PayrollReportComparisonMetric;
+    };
+    quarterVsSameQuarterLastYear: {
+      metrics: Record<PayrollReportMetricKey, PayrollReportComparisonMetric>;
+      totalCost: PayrollReportComparisonMetric;
+    };
+  };
+};
+
+export async function fetchReporteNominas(period: string): Promise<PayrollReportResponse> {
+  const params = new URLSearchParams();
+  if (period.trim().length) {
+    params.set('period', period.trim());
+  }
+  const query = params.toString();
+  const url = query.length ? `/reporting-reporte-nominas?${query}` : '/reporting-reporte-nominas';
+  return getJson<PayrollReportResponse>(url);
+}
+
 
 export type SlackDailyAvailabilityResponse = {
   message: string;
