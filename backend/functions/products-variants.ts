@@ -27,12 +27,14 @@ const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750
 const VARIANT_TRAINER_TABLE = 'variant_trainer_links';
 const VARIANT_UNIT_TABLE = 'variant_unit_links';
 const VARIANT_TRAINER_INVITES_TABLE = 'variant_trainer_invites';
+const VARIANT_DAY_TRAINER_TABLE = 'variant_day_trainer_links';
 
 type TrainerInviteStatus = 'PENDING' | 'CONFIRMED' | 'DECLINED';
 type TrainerInviteSummaryStatus = TrainerInviteStatus | 'NOT_SENT';
 
 let variantTrainerLinksSupported: boolean | null = null;
 let variantUnitLinksSupported: boolean | null = null;
+let variantDayTrainerLinksSupported: boolean | null = null;
 
 function isMissingRelationError(error: unknown, relation: string): boolean {
   if (error instanceof PrismaClientKnownRequestError) {
@@ -136,6 +138,39 @@ async function ensureVariantUnitLinksTable(prisma: PrismaClientOrTx): Promise<bo
   }
 
   return variantUnitLinksSupported === true;
+}
+
+async function ensureVariantDayTrainerLinksTable(prisma: PrismaClientOrTx): Promise<boolean> {
+  if (variantDayTrainerLinksSupported === false) return false;
+  if (variantDayTrainerLinksSupported === true) return true;
+
+  try {
+    await prisma.$executeRawUnsafe(
+      `CREATE TABLE IF NOT EXISTS ${VARIANT_DAY_TRAINER_TABLE} (
+        variant_id UUID NOT NULL,
+        day_offset INTEGER NOT NULL,
+        trainer_id TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (variant_id, day_offset, trainer_id),
+        CONSTRAINT ${VARIANT_DAY_TRAINER_TABLE}_variant_fk FOREIGN KEY (variant_id) REFERENCES variants(id) ON DELETE CASCADE,
+        CONSTRAINT ${VARIANT_DAY_TRAINER_TABLE}_trainer_fk FOREIGN KEY (trainer_id) REFERENCES trainers(trainer_id) ON DELETE CASCADE
+      );`,
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS idx_${VARIANT_DAY_TRAINER_TABLE}_variant_day ON ${VARIANT_DAY_TRAINER_TABLE}(variant_id, day_offset);`,
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS idx_${VARIANT_DAY_TRAINER_TABLE}_trainer ON ${VARIANT_DAY_TRAINER_TABLE}(trainer_id);`,
+    );
+    variantDayTrainerLinksSupported = true;
+  } catch (error) {
+    variantDayTrainerLinksSupported = false;
+    console.warn('[products-variants] variant day trainer links unsupported', { error });
+  }
+
+  return variantDayTrainerLinksSupported === true;
 }
 
 type VariantTrainerLink = {
@@ -337,6 +372,75 @@ async function syncVariantUnitAssignments(
     if (isMissingRelationError(error, VARIANT_UNIT_TABLE)) {
       variantUnitLinksSupported = false;
       console.warn('[products-variants] variant unit links sync disabled (missing relation)', { error });
+      return;
+    }
+    throw error;
+  }
+}
+
+async function fetchVariantDayTrainerAssignments(
+  prisma: PrismaClientOrTx,
+  variantId: string,
+  dayOffset: number,
+): Promise<string[]> {
+  if (!(await ensureVariantDayTrainerLinksTable(prisma))) return [];
+
+  try {
+    const rows = (await prisma.$queryRawUnsafe(
+      `SELECT trainer_id
+       FROM ${VARIANT_DAY_TRAINER_TABLE}
+       WHERE variant_id = $1::uuid
+         AND day_offset = $2
+       ORDER BY position ASC`,
+      variantId,
+      dayOffset,
+    )) as Array<{ trainer_id: string }>;
+    return rows.map((row) => row.trainer_id).filter((value): value is string => Boolean(toTrimmed(value)));
+  } catch (error) {
+    if (isMissingRelationError(error, VARIANT_DAY_TRAINER_TABLE)) {
+      variantDayTrainerLinksSupported = false;
+      console.warn('[products-variants] variant day trainer links query disabled (missing relation)', { error });
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function syncVariantDayTrainerAssignments(
+  prisma: PrismaClientOrTx,
+  variantId: string,
+  dayOffset: number,
+  trainerIds: string[],
+): Promise<void> {
+  if (!(await ensureVariantDayTrainerLinksTable(prisma))) return;
+
+  try {
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM ${VARIANT_DAY_TRAINER_TABLE}
+       WHERE variant_id = $1::uuid
+         AND day_offset = $2`,
+      variantId,
+      dayOffset,
+    );
+
+    if (!trainerIds.length) return;
+
+    for (let index = 0; index < trainerIds.length; index += 1) {
+      const trainerId = trainerIds[index];
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO ${VARIANT_DAY_TRAINER_TABLE}
+          (variant_id, day_offset, trainer_id, position, created_at, updated_at)
+         VALUES ($1::uuid, $2, $3, $4, NOW(), NOW())`,
+        variantId,
+        dayOffset,
+        trainerId,
+        index + 1,
+      );
+    }
+  } catch (error) {
+    if (isMissingRelationError(error, VARIANT_DAY_TRAINER_TABLE)) {
+      variantDayTrainerLinksSupported = false;
+      console.warn('[products-variants] variant day trainer links sync disabled (missing relation)', { error });
       return;
     }
     throw error;
@@ -769,6 +873,37 @@ function parseVariantIdFromPath(path: string): string | null {
   const value = String(path || '');
   const match = value.match(/\/(?:\.netlify\/functions\/)?products-variants\/([^/?#]+)/i);
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+const VARIANT_VIRTUAL_ID_REGEX = /^(?<base>[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})(?::day(?<day>\d+))?$/i;
+
+type ParsedVariantTarget = {
+  rawId: string;
+  baseVariantId: string;
+  dayOffset: number;
+  isVirtualDay: boolean;
+};
+
+function parseVariantTarget(rawVariantId: string): ParsedVariantTarget | null {
+  const normalized = toTrimmed(rawVariantId);
+  if (!normalized) return null;
+  const match = normalized.match(VARIANT_VIRTUAL_ID_REGEX);
+  if (!match?.groups?.base) return null;
+  const baseVariantId = match.groups.base.toLowerCase();
+  const parsedDay = match.groups.day ? Number.parseInt(match.groups.day, 10) : 0;
+  const dayOffset = Number.isFinite(parsedDay) && parsedDay > 0 ? parsedDay : 0;
+  return {
+    rawId: normalized,
+    baseVariantId,
+    dayOffset,
+    isVirtualDay: dayOffset > 0,
+  };
+}
+
+function addDaysToDate(date: Date, days: number): Date {
+  const next = new Date(date.getTime());
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
 }
 
 type FetchResponse = Awaited<ReturnType<typeof fetch>>;
@@ -1658,8 +1793,12 @@ export const handler = createHttpHandler<any>(async (request) => {
   const prisma = getPrisma();
 
   if (method === 'PATCH') {
-    const variantId = parseVariantIdFromPath(request.path || '');
-    if (!variantId) return errorResponse('VALIDATION_ERROR', 'ID de variante requerido', 400);
+    const rawVariantId = parseVariantIdFromPath(request.path || '');
+    if (!rawVariantId) return errorResponse('VALIDATION_ERROR', 'ID de variante requerido', 400);
+
+    const variantTarget = parseVariantTarget(rawVariantId);
+    if (!variantTarget) return errorResponse('VALIDATION_ERROR', 'ID de variante inválido', 400);
+    const variantId = variantTarget.baseVariantId;
     if (!request.rawBody) return errorResponse('VALIDATION_ERROR', 'Cuerpo de la petición requerido', 400);
 
     const payload = request.body && typeof request.body === 'object' ? (request.body as any) : {};
@@ -1764,13 +1903,18 @@ export const handler = createHttpHandler<any>(async (request) => {
       unidadIdsUpdate = parsed;
     }
 
+    if (variantTarget.isVirtualDay && trainerIdsUpdate === undefined && Object.prototype.hasOwnProperty.call(updates, 'trainer_id')) {
+      trainerIdsUpdate = updates.trainer_id ? [updates.trainer_id] : [];
+      delete updates.trainer_id;
+    }
+
     const hasResourceArrayUpdates = trainerIdsUpdate !== undefined || unidadIdsUpdate !== undefined;
 
     if (!Object.keys(updates).length && !hasResourceArrayUpdates)
       return errorResponse('VALIDATION_ERROR', 'No se proporcionaron cambios', 400);
 
     const existing = await prisma.variants.findUnique({
-      where: { id: variantId },
+      where: { id: variantTarget.baseVariantId },
       select: {
         id: true,
         id_woo: true,
@@ -1791,26 +1935,31 @@ export const handler = createHttpHandler<any>(async (request) => {
     });
     if (!existing) return errorResponse('NOT_FOUND', 'Variante no encontrada', 404);
 
-    const [existingTrainerAssignments, existingUnitAssignments] = await Promise.all([
-      fetchVariantTrainerAssignments(prisma, [variantId]),
-      fetchVariantUnitAssignments(prisma, [variantId]),
+    const [existingTrainerAssignments, existingUnitAssignments, existingDayTrainerAssignments] = await Promise.all([
+      fetchVariantTrainerAssignments(prisma, [variantTarget.baseVariantId]),
+      fetchVariantUnitAssignments(prisma, [variantTarget.baseVariantId]),
+      variantTarget.isVirtualDay
+        ? fetchVariantDayTrainerAssignments(prisma, variantTarget.baseVariantId, variantTarget.dayOffset)
+        : Promise.resolve<string[]>([]),
     ]);
 
     const normalizedExistingTrainerIds = Array.from(
       new Set(
-        (existingTrainerAssignments.get(variantId)?.map((item) => item.trainer_id) ?? [])
+        (variantTarget.isVirtualDay
+          ? existingDayTrainerAssignments
+          : existingTrainerAssignments.get(variantTarget.baseVariantId)?.map((item) => item.trainer_id) ?? [])
           .map((value) => toTrimmed(value))
           .filter((value): value is string => Boolean(value)),
       ),
     );
-    const trimmedExistingTrainerId = toTrimmed(existing.trainer_id);
+    const trimmedExistingTrainerId = variantTarget.isVirtualDay ? null : toTrimmed(existing.trainer_id);
     if (trimmedExistingTrainerId && !normalizedExistingTrainerIds.includes(trimmedExistingTrainerId)) {
       normalizedExistingTrainerIds.unshift(trimmedExistingTrainerId);
     }
 
     const normalizedExistingUnitIds = Array.from(
       new Set(
-        (existingUnitAssignments.get(variantId)?.map((item) => item.unidad_id) ?? [])
+        (existingUnitAssignments.get(variantTarget.baseVariantId)?.map((item) => item.unidad_id) ?? [])
           .map((value) => toTrimmed(value))
           .filter((value): value is string => Boolean(value)),
       ),
@@ -1837,7 +1986,9 @@ export const handler = createHttpHandler<any>(async (request) => {
           ? updates.unidad_movil_id ?? null
           : trimmedExistingUnidadId ?? null;
     const nextSede      = Object.prototype.hasOwnProperty.call(updates, 'sede') ? updates.sede ?? null : existing.sede ?? null;
-    const nextDate      = Object.prototype.hasOwnProperty.call(updates, 'date') ? updates.date ?? null : existing.date ?? null;
+    const baseDate = Object.prototype.hasOwnProperty.call(updates, 'date') ? updates.date ?? null : existing.date ?? null;
+    const nextDate =
+      variantTarget.isVirtualDay && baseDate ? addDaysToDate(new Date(baseDate), variantTarget.dayOffset) : baseDate;
 
     if (nextSede && nextSalaId && nextSede.trim().toLowerCase() === 'sabadell') {
       const room = await prisma.salas.findUnique({ where: { sala_id: nextSalaId }, select: { sala_id: true, sede: true } });
@@ -1859,7 +2010,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     });
     if (availabilityError) return availabilityError;
 
-    if (trainerIdsUpdate !== undefined) updates.trainer_id = nextTrainerId;
+    if (trainerIdsUpdate !== undefined && !variantTarget.isVirtualDay) updates.trainer_id = nextTrainerId;
     if (unidadIdsUpdate !== undefined) updates.unidad_movil_id = nextUnidadId;
 
     const wooUpdates: VariantWooUpdateInput = {};
@@ -1893,27 +2044,31 @@ export const handler = createHttpHandler<any>(async (request) => {
     if ('unidad_movil_id' in updates) data.unidad_movil_id = updates.unidad_movil_id ?? null;
 
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      await tx.variants.update({ where: { id: variantId }, data });
+      await tx.variants.update({ where: { id: variantTarget.baseVariantId }, data });
       if (trainerIdsUpdate !== undefined) {
-        await syncVariantTrainerAssignments(tx, variantId, nextTrainerIds);
-        if (nextTrainerIds.length) {
-          await tx.variant_trainer_invites.deleteMany({
-            where: {
-              variant_id: variantId,
-              trainer_id: { notIn: nextTrainerIds },
-            },
-          });
+        if (variantTarget.isVirtualDay) {
+          await syncVariantDayTrainerAssignments(tx, variantTarget.baseVariantId, variantTarget.dayOffset, nextTrainerIds);
         } else {
-          await tx.variant_trainer_invites.deleteMany({ where: { variant_id: variantId } });
+          await syncVariantTrainerAssignments(tx, variantTarget.baseVariantId, nextTrainerIds);
+          if (nextTrainerIds.length) {
+            await tx.variant_trainer_invites.deleteMany({
+              where: {
+                variant_id: variantTarget.baseVariantId,
+                trainer_id: { notIn: nextTrainerIds },
+              },
+            });
+          } else {
+            await tx.variant_trainer_invites.deleteMany({ where: { variant_id: variantTarget.baseVariantId } });
+          }
         }
       }
       if (unidadIdsUpdate !== undefined) {
-        await syncVariantUnitAssignments(tx, variantId, nextUnidadIds);
+        await syncVariantUnitAssignments(tx, variantTarget.baseVariantId, nextUnidadIds);
       }
     });
 
     const refreshed = await prisma.variants.findUnique({
-      where: { id: variantId },
+      where: { id: variantTarget.baseVariantId },
       select: {
         id: true,
         id_woo: true,
@@ -1938,25 +2093,73 @@ export const handler = createHttpHandler<any>(async (request) => {
       },
     });
 
-    const [refreshedTrainerAssignments, refreshedUnitAssignments] = await Promise.all([
-      fetchVariantTrainerAssignments(prisma, [variantId]),
-      fetchVariantUnitAssignments(prisma, [variantId]),
+    const [refreshedTrainerAssignments, refreshedUnitAssignments, refreshedDayTrainerAssignments] = await Promise.all([
+      fetchVariantTrainerAssignments(prisma, [variantTarget.baseVariantId]),
+      fetchVariantUnitAssignments(prisma, [variantTarget.baseVariantId]),
+      variantTarget.isVirtualDay
+        ? fetchVariantDayTrainerAssignments(prisma, variantTarget.baseVariantId, variantTarget.dayOffset)
+        : Promise.resolve<string[]>([]),
     ]);
 
     const enrichedRefreshed =
       refreshed &&
       ({
         ...(refreshed as any),
-        trainer_links: refreshedTrainerAssignments.get(variantId) ?? [],
-        unidad_links: refreshedUnitAssignments.get(variantId) ?? [],
+        trainer_links: refreshedTrainerAssignments.get(variantTarget.baseVariantId) ?? [],
+        unidad_links: refreshedUnitAssignments.get(variantTarget.baseVariantId) ?? [],
       } as VariantRecord);
 
-    return successResponse({ ok: true, variant: enrichedRefreshed ? normalizeVariant(enrichedRefreshed) : null });
+    const normalizedRefreshed = enrichedRefreshed ? normalizeVariant(enrichedRefreshed) : null;
+
+    if (normalizedRefreshed && variantTarget.isVirtualDay) {
+      const overrideTrainerIds = Array.from(
+        new Set(
+          refreshedDayTrainerAssignments
+            .map((value) => toTrimmed(value))
+            .filter((value): value is string => Boolean(value)),
+        ),
+      );
+      const trainerLookup = new Map(
+        normalizedRefreshed.trainers.map((trainer) => [trainer.trainer_id, trainer] as const),
+      );
+      const overrideTrainers = overrideTrainerIds.map((trainerId) => {
+        const existingTrainer = trainerLookup.get(trainerId);
+        return (
+          existingTrainer ?? {
+            trainer_id: trainerId,
+            name: null,
+            apellido: null,
+            dni: null,
+          }
+        );
+      });
+
+      return successResponse({
+        ok: true,
+        variant: {
+          ...normalizedRefreshed,
+          id: variantTarget.rawId,
+          trainer_id: overrideTrainerIds[0] ?? null,
+          trainer_ids: overrideTrainerIds,
+          trainer: overrideTrainers[0] ?? null,
+          trainers: overrideTrainers,
+          trainer_invites: [],
+          trainer_invite_status: 'NOT_SENT',
+          trainer_invite_statuses: {},
+        },
+      });
+    }
+
+    return successResponse({ ok: true, variant: normalizedRefreshed });
   }
 
   if (method === 'DELETE') {
-    const variantId = parseVariantIdFromPath(request.path || '');
-    if (!variantId) return errorResponse('VALIDATION_ERROR', 'ID de variante requerido', 400);
+    const rawVariantId = parseVariantIdFromPath(request.path || '');
+    if (!rawVariantId) return errorResponse('VALIDATION_ERROR', 'ID de variante requerido', 400);
+
+    const variantTarget = parseVariantTarget(rawVariantId);
+    if (!variantTarget) return errorResponse('VALIDATION_ERROR', 'ID de variante inválido', 400);
+    const variantId = variantTarget.baseVariantId;
 
     const variant = await prisma.variants.findUnique({
       where: { id: variantId },
