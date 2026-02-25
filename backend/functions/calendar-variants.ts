@@ -694,7 +694,6 @@ export const handler = async (event: any) => {
 
           eventVariant = {
             ...normalizedVariant,
-            id,
             trainer_id: overrideTrainerIds[0] ?? null,
             trainer: overrideTrainers[0] ?? null,
             trainers: overrideTrainers,
