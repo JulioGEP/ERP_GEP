@@ -1,4 +1,5 @@
 // backend/functions/calendar-variants.ts
+import { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { ensureMadridTimezone, toMadridISOString } from './_shared/timezone';
 import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
@@ -138,50 +139,6 @@ function isMissingRelationError(error: unknown, relation: string): boolean {
   return pattern.test(message);
 }
 
-
-const VARIANT_DAY_TRAINER_TABLE = 'variant_day_trainer_links';
-
-type VariantDayTrainerAssignment = {
-  variant_id: string;
-  day_offset: number;
-  trainer_id: string;
-};
-
-async function fetchVariantDayTrainerAssignments(
-  prisma: ReturnType<typeof getPrisma>,
-  variantIds: string[],
-): Promise<Map<string, string[]>> {
-  const map = new Map<string, string[]>();
-  if (!variantIds.length) return map;
-
-  try {
-    const rows = (await prisma.$queryRawUnsafe(
-      `SELECT variant_id::text AS variant_id, day_offset, trainer_id
-       FROM ${VARIANT_DAY_TRAINER_TABLE}
-       WHERE variant_id = ANY($1::uuid[])
-       ORDER BY variant_id ASC, day_offset ASC, position ASC`,
-      variantIds,
-    )) as VariantDayTrainerAssignment[];
-
-    rows.forEach((row) => {
-      const key = `${row.variant_id}:${row.day_offset}`;
-      const list = map.get(key) ?? [];
-      const trainerId = toTrimmed(row.trainer_id);
-      if (trainerId) {
-        list.push(trainerId);
-        map.set(key, list);
-      }
-    });
-  } catch (error) {
-    if (isMissingRelationError(error, VARIANT_DAY_TRAINER_TABLE)) {
-      return new Map();
-    }
-    throw error;
-  }
-
-  return map;
-}
-
 function buildDateTime(date: Date, time: TimeParts | null, fallback: TimeParts): Date {
   const parts = time ?? fallback;
   const year = date.getUTCFullYear();
@@ -238,7 +195,6 @@ function normalizeVariantRecord(
     sede: record.sede ?? null,
     date: toMadridISOString(record.date),
     trainer_id: record.trainer_id ?? null,
-    trainer_ids: trainerRecord?.trainer_id ? [trainerRecord.trainer_id] : [],
     trainer: trainerRecord
       ? {
           trainer_id: trainerRecord.trainer_id ?? null,
@@ -246,16 +202,6 @@ function normalizeVariantRecord(
           apellido: trainerRecord.apellido ?? null,
         }
       : null,
-    trainers:
-      trainerRecord && trainerRecord.trainer_id
-        ? [
-            {
-              trainer_id: trainerRecord.trainer_id,
-              name: trainerRecord.name ?? null,
-              apellido: trainerRecord.apellido ?? null,
-            },
-          ]
-        : [],
     sala_id: record.sala_id ?? null,
     sala: salaRecord
       ? {
@@ -500,6 +446,38 @@ export const handler = async (event: any) => {
     }
 
     const prisma = getPrisma();
+    let legacyVariantIds: string[] = [];
+    if (trainerId) {
+      try {
+        const rows = (await prisma.$queryRaw<{ variant_id: string }[]>`
+          SELECT variant_id::text AS variant_id
+          FROM variant_trainer_links
+          WHERE trainer_id = ${trainerId}
+        `) as Array<{ variant_id: string }>;
+
+        legacyVariantIds = rows
+          .map((row) => row.variant_id)
+          .filter((value): value is string => Boolean(value));
+      } catch (error) {
+        if (!isMissingRelationError(error, 'variant_trainer_links')) {
+          throw error;
+        }
+      }
+    }
+
+    const trainerFilters: Prisma.variantsWhereInput[] = [];
+    if (trainerId) {
+      trainerFilters.push({ trainer_id: trainerId });
+      trainerFilters.push({
+        trainer_invites: {
+          some: { trainer_id: trainerId, status: { in: ['PENDING', 'CONFIRMED'] } },
+        },
+      });
+      if (legacyVariantIds.length) {
+        trainerFilters.push({ id: { in: legacyVariantIds } });
+      }
+    }
+
     const buildQuery = (includeResources: boolean) =>
       prisma.variants.findMany({
         where: {
@@ -508,6 +486,7 @@ export const handler = async (event: any) => {
             gte: range.start,
             lte: range.end,
           },
+          ...(trainerFilters.length ? { OR: trainerFilters } : {}),
         },
         orderBy: [{ date: 'asc' }, { name: 'asc' }],
         select: (includeResources ? variantSelectionWithResources : variantSelectionBase) as any,
@@ -533,30 +512,6 @@ export const handler = async (event: any) => {
     }
 
     const events: CalendarVariantEvent[] = [];
-    const variantRecords = Array.isArray(variants) ? (variants as any[]) : [];
-    const variantIds = variantRecords
-      .map((variant) => toTrimmed((variant as any)?.id))
-      .filter((id): id is string => Boolean(id));
-    const dayTrainerOverrides = await fetchVariantDayTrainerAssignments(prisma, variantIds);
-
-    const overrideTrainerIds = Array.from(
-      new Set(
-        Array.from(dayTrainerOverrides.values())
-          .flat()
-          .map((value) => toTrimmed(value))
-          .filter((value): value is string => Boolean(value)),
-      ),
-    );
-
-    const trainerCatalog = overrideTrainerIds.length
-      ? await prisma.trainers.findMany({
-          where: { trainer_id: { in: overrideTrainerIds } },
-          select: { trainer_id: true, name: true, apellido: true },
-        })
-      : [];
-    const trainerCatalogById = new Map(
-      trainerCatalog.map((trainer) => [trainer.trainer_id, trainer] as const),
-    );
 
     // Claves únicas de variación (Woo)
     const variantWooIds = Array.isArray(variants)
@@ -639,7 +594,7 @@ export const handler = async (event: any) => {
       });
     }
 
-    variantRecords.forEach((variant) => {
+    (Array.isArray(variants) ? variants : []).forEach((variant) => {
       const record = variant as any;
       const productRecord = (record as any)?.product ?? (record as any)?.products ?? null;
       if (!productRecord) {
@@ -671,60 +626,18 @@ export const handler = async (event: any) => {
 
       const normalizedVariant = normalizeVariantRecord(record, studentsTotal);
 
-      const pushEvent = (id: string, start: Date, end: Date, dayOffset: number) => {
-        let eventVariant = normalizedVariant;
-
-        if (dayOffset > 0) {
-          const overrideKey = `${record.id}:${dayOffset}`;
-          const overrideTrainerIds = Array.from(
-            new Set(
-              (dayTrainerOverrides.get(overrideKey) ?? [])
-                .map((value) => toTrimmed(value))
-                .filter((value): value is string => Boolean(value)),
-            ),
-          );
-          const overrideTrainers = overrideTrainerIds.map((trainerId) => {
-            const trainer = trainerCatalogById.get(trainerId);
-            return {
-              trainer_id: trainerId,
-              name: trainer?.name ?? null,
-              apellido: trainer?.apellido ?? null,
-            };
-          });
-
-          eventVariant = {
-            ...normalizedVariant,
-            trainer_id: overrideTrainerIds[0] ?? null,
-            trainer: overrideTrainers[0] ?? null,
-            trainers: overrideTrainers,
-          };
-        }
-
-        if (trainerId) {
-          const eventTrainerIds = new Set<string>();
-          const singleTrainerId = toTrimmed(eventVariant.trainer_id);
-          if (singleTrainerId) eventTrainerIds.add(singleTrainerId);
-          const trainerList = Array.isArray((eventVariant as any).trainers) ? (eventVariant as any).trainers : [];
-          trainerList.forEach((record: any) => {
-            const recordId = toTrimmed(record?.trainer_id);
-            if (recordId) eventTrainerIds.add(recordId);
-          });
-          if (!eventTrainerIds.has(trainerId)) {
-            return;
-          }
-        }
-
+      const pushEvent = (id: string, start: Date, end: Date) => {
         events.push({
           id,
           start: start.toISOString(),
           end: end.toISOString(),
           product,
-          variant: eventVariant,
+          variant: normalizedVariant,
           deals: variantDeals,
         });
       };
 
-      pushEvent(record.id, times.start, times.end, 0);
+      pushEvent(record.id, times.start, times.end);
 
       // duplicado para verticales 2 días
       if (variantDate && isTwoDayVerticalProduct(product)) {
@@ -732,7 +645,7 @@ export const handler = async (event: any) => {
         nextDayDate.setUTCDate(nextDayDate.getUTCDate() + 1);
         const nextTimes = computeEventTimes(nextDayDate, product);
         if (nextTimes) {
-          pushEvent(`${record.id}:day2`, nextTimes.start, nextTimes.end, 1);
+          pushEvent(`${record.id}:day2`, nextTimes.start, nextTimes.end);
         }
       }
     });
