@@ -7,6 +7,7 @@ import { nowInMadridISO } from './_shared/timezone';
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
 const SLACK_CHANNEL_ID = 'C063C7QRHK4';
 const TELEWORK_TYPE = 'T';
+const NETLIFY_SCHEDULE_HEADER = 'x-netlify-event';
 
 type DailyGroup = {
   off: string[];
@@ -33,6 +34,17 @@ function toTitleCase(text: string): string {
 
 function formatNames(names: string[]): string {
   return names.length ? names.join(' / ') : 'Nadie';
+}
+
+function isScheduledInvocation(event: Parameters<Handler>[0]): boolean {
+  const scheduleHeader = event.headers?.[NETLIFY_SCHEDULE_HEADER] ?? event.headers?.[NETLIFY_SCHEDULE_HEADER.toUpperCase()];
+  return String(scheduleHeader ?? '').toLowerCase() === 'schedule';
+}
+
+function isMadridSevenAm(isoDateTime: string): boolean {
+  const timePart = isoDateTime.split('T')[1] ?? '';
+  const [hour = '', minute = ''] = timePart.split(':');
+  return hour === '07' && minute === '00';
 }
 
 function normalizePersonName(entry: { first_name: string; last_name: string; name: string | null }): string {
@@ -97,7 +109,15 @@ export const handler: Handler = async (event) => {
 
   try {
     const prisma = getPrisma();
-    const today = nowInMadridISO().slice(0, 10);
+    const nowMadrid = nowInMadridISO();
+    if (isScheduledInvocation(event) && !isMadridSevenAm(nowMadrid)) {
+      return successResponse({
+        message: 'Invocación programada fuera del horario de envío. Se omite.',
+        nowMadrid,
+      });
+    }
+
+    const today = nowMadrid.slice(0, 10);
     const tomorrow = addDaysToDateOnly(today, 1);
     const targetDates = [today, tomorrow];
 

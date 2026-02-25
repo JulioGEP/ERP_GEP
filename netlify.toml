@@ -31,11 +31,11 @@
 
 [[scheduled]]
   function = "daily-availability-slack"
-  cron = "0 7 * * *"
+  cron = "0 * * * *"
 
 [[scheduled]]
   function = "daily-trainers-slack"
-  cron = "1 7 * * *"
+  cron = "0 * * * *"
 
 # --------- Redirects ---------
 
