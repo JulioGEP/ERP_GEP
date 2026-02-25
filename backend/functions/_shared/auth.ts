@@ -222,6 +222,10 @@ export function getPermissionsForUser(user: UserRecord): readonly string[] {
     permissions.add('/recursos/formaciones');
   }
 
+  if (normalizedEmail === 'manuela@gepgroup.es') {
+    permissions.add('/usuarios/formadores_bomberos');
+  }
+
   return Array.from(permissions);
 }
 
