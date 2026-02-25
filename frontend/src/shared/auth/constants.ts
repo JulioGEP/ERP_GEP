@@ -87,6 +87,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/informes/recurso_preventivo_ebro',
   '/reporting/slack',
   '/reporting/logs',
+  '/reporting/reporte_nominas',
   '/usuarios/control_horario_fijos',
   '/usuarios/control_horario_discontinuos',
   '/reporting/control_horario_fijos',
