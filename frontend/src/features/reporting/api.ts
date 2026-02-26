@@ -1038,6 +1038,8 @@ export type PayrollReportMetricKey =
   | 'contingenciasComunes'
   | 'aportacionSsIrpf'
   | 'totalEmpresa'
+  | 'costeServicioFormacion'
+  | 'costeServicioPreventivo'
   | 'dietas'
   | 'kilometraje'
   | 'pernocta'
