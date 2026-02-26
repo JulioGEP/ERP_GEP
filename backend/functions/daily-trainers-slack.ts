@@ -57,10 +57,11 @@ function isScheduledInvocation(event: Parameters<Handler>[0]): boolean {
   return String(scheduleHeader ?? '').toLowerCase() === 'schedule';
 }
 
-function isMadridSevenAm(isoDateTime: string): boolean {
+function isWithinMadridSendWindow(isoDateTime: string, startMinute: number, endMinute: number): boolean {
   const timePart = isoDateTime.split('T')[1] ?? '';
   const [hour = '', minute = ''] = timePart.split(':');
-  return hour === '07' && minute === '00';
+  const minuteNumber = Number.parseInt(minute, 10);
+  return hour === '07' && Number.isInteger(minuteNumber) && minuteNumber >= startMinute && minuteNumber <= endMinute;
 }
 
 async function postSlackMessage(token: string, text: string): Promise<void> {
@@ -110,7 +111,7 @@ export const handler: Handler = async (event) => {
     const prisma = getPrisma();
     const todayIso = nowInMadridISO();
 
-    if (isScheduledInvocation(event) && !isMadridSevenAm(todayIso)) {
+    if (isScheduledInvocation(event) && !isWithinMadridSendWindow(todayIso, 5, 14)) {
       return successResponse({
         message: 'Invocación programada fuera del horario de envío. Se omite.',
         nowMadrid: todayIso,

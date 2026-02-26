@@ -41,10 +41,11 @@ function isScheduledInvocation(event: Parameters<Handler>[0]): boolean {
   return String(scheduleHeader ?? '').toLowerCase() === 'schedule';
 }
 
-function isMadridSevenAm(isoDateTime: string): boolean {
+function isWithinMadridSendWindow(isoDateTime: string, startMinute: number, endMinute: number): boolean {
   const timePart = isoDateTime.split('T')[1] ?? '';
   const [hour = '', minute = ''] = timePart.split(':');
-  return hour === '07' && minute === '00';
+  const minuteNumber = Number.parseInt(minute, 10);
+  return hour === '07' && Number.isInteger(minuteNumber) && minuteNumber >= startMinute && minuteNumber <= endMinute;
 }
 
 function normalizePersonName(entry: { first_name: string; last_name: string; name: string | null }): string {
@@ -110,7 +111,7 @@ export const handler: Handler = async (event) => {
   try {
     const prisma = getPrisma();
     const nowMadrid = nowInMadridISO();
-    if (isScheduledInvocation(event) && !isMadridSevenAm(nowMadrid)) {
+    if (isScheduledInvocation(event) && !isWithinMadridSendWindow(nowMadrid, 0, 4)) {
       return successResponse({
         message: 'Invocación programada fuera del horario de envío. Se omite.',
         nowMadrid,
