@@ -16,6 +16,8 @@ type MetricKey =
   | 'contingenciasComunes'
   | 'aportacionSsIrpf'
   | 'totalEmpresa'
+  | 'costeServicioFormacion'
+  | 'costeServicioPreventivo'
   | 'dietas'
   | 'kilometraje'
   | 'pernocta'
@@ -52,6 +54,8 @@ const METRIC_KEYS: MetricKey[] = [
   'contingenciasComunes',
   'aportacionSsIrpf',
   'totalEmpresa',
+  'costeServicioFormacion',
+  'costeServicioPreventivo',
   'dietas',
   'kilometraje',
   'pernocta',
@@ -88,6 +92,8 @@ function emptyMetrics(): MetricTotals {
     contingenciasComunes: 0,
     aportacionSsIrpf: 0,
     totalEmpresa: 0,
+    costeServicioFormacion: 0,
+    costeServicioPreventivo: 0,
     dietas: 0,
     kilometraje: 0,
     pernocta: 0,
@@ -105,6 +111,8 @@ function emptyCategoryTotals(): CategoryTotals {
 function computeTotalCost(metrics: MetricTotals): number {
   return roundToTwo(
     metrics.totalEmpresa
+      + metrics.costeServicioFormacion
+      + metrics.costeServicioPreventivo
       + metrics.dietas
       + metrics.kilometraje
       + metrics.pernocta
@@ -113,6 +121,86 @@ function computeTotalCost(metrics: MetricTotals): number {
       + metrics.horasExtras
       + metrics.gastosExtras,
   );
+}
+
+function computeSessionHours(start: Date | null, end: Date | null, breakHours = 0): number {
+  if (!start || !end) return 0;
+  const diff = end.getTime() - start.getTime();
+  if (!Number.isFinite(diff) || diff <= 0) return 0;
+  const totalHours = diff / (60 * 60 * 1000);
+  const normalizedBreak = Number.isFinite(breakHours) ? Math.max(0, breakHours) : 0;
+  return Math.max(0, totalHours - normalizedBreak);
+}
+
+function extractTimeParts(value: Date | string | null | undefined): { hour: number; minute: number } | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return {
+    hour: date.getUTCHours(),
+    minute: date.getUTCMinutes(),
+  };
+}
+
+function computeVariantHours(
+  variantDate: Date | string | null | undefined,
+  productTimes: { hora_inicio: Date | string | null; hora_fin: Date | string | null },
+): number {
+  if (!variantDate) return 0;
+  const parsedDate = variantDate instanceof Date ? variantDate : new Date(variantDate);
+  if (Number.isNaN(parsedDate.getTime())) return 0;
+
+  const startTime = extractTimeParts(productTimes.hora_inicio) ?? { hour: 9, minute: 0 };
+  const endTime = extractTimeParts(productTimes.hora_fin) ?? { hour: 11, minute: 0 };
+
+  const start = new Date(Date.UTC(
+    parsedDate.getUTCFullYear(),
+    parsedDate.getUTCMonth(),
+    parsedDate.getUTCDate(),
+    startTime.hour,
+    startTime.minute,
+  ));
+
+  let end = new Date(Date.UTC(
+    parsedDate.getUTCFullYear(),
+    parsedDate.getUTCMonth(),
+    parsedDate.getUTCDate(),
+    endTime.hour,
+    endTime.minute,
+  ));
+
+  if (end.getTime() <= start.getTime()) {
+    end = new Date(start.getTime() + 60 * 60 * 1000);
+  }
+
+  const diff = end.getTime() - start.getTime();
+  if (!Number.isFinite(diff) || diff <= 0) return 0;
+  return diff / (60 * 60 * 1000);
+}
+
+function isPreventiveService(tipo: string | null | undefined): boolean {
+  if (!tipo) return false;
+  return tipo.toLowerCase().includes('preventivo');
+}
+
+function applyTrainerServiceCostMetrics(target: MetricTotals, extraCost: trainer_extra_costs & {
+  sesion?: { fecha_inicio_utc: Date | null; fecha_fin_utc: Date | null; tiempo_parada: DecimalLike | null; deals: { tipo_servicio: string | null } | null } | null;
+  variant?: { date: Date | null; products: { hora_inicio: Date | null; hora_fin: Date | null } | null } | null;
+}): void {
+  const breakHours = decimalToNumber(extraCost.sesion?.tiempo_parada);
+  const sessionHours = computeSessionHours(extraCost.sesion?.fecha_inicio_utc ?? null, extraCost.sesion?.fecha_fin_utc ?? null, breakHours);
+  const variantHours = computeVariantHours(extraCost.variant?.date ?? null, extraCost.variant?.products ?? { hora_inicio: null, hora_fin: null });
+  const workedHours = sessionHours + variantHours;
+
+  const serviceType = isPreventiveService(extraCost.sesion?.deals?.tipo_servicio)
+    ? 'preventivo'
+    : 'formacion';
+
+  if (serviceType === 'preventivo') {
+    target.costeServicioPreventivo += workedHours * decimalToNumber(extraCost.precio_coste_preventivo);
+  } else {
+    target.costeServicioFormacion += workedHours * decimalToNumber(extraCost.precio_coste_formacion);
+  }
 }
 
 function applyOfficePayrollMetrics(target: MetricTotals, payroll: office_payrolls): void {
@@ -263,6 +351,29 @@ export const handler = createHttpHandler(async (request) => {
               contrato_fijo: true,
             },
           },
+          sesion: {
+            select: {
+              fecha_inicio_utc: true,
+              fecha_fin_utc: true,
+              tiempo_parada: true,
+              deals: {
+                select: {
+                  tipo_servicio: true,
+                },
+              },
+            },
+          },
+          variant: {
+            select: {
+              date: true,
+              products: {
+                select: {
+                  hora_inicio: true,
+                  hora_fin: true,
+                },
+              },
+            },
+          },
         },
       }),
     ]);
@@ -283,6 +394,7 @@ export const handler = createHttpHandler(async (request) => {
     trainerExtraCosts.forEach((cost) => {
       const isFixedTrainer = Boolean(cost.trainer?.contrato_fijo);
       if (!isFixedTrainer) {
+        applyTrainerServiceCostMetrics(discontinuousTrainers.metrics, cost);
         applyTrainerExtraCostMetrics(discontinuousTrainers.metrics, cost);
       }
     });
