@@ -65,6 +65,9 @@ const METRIC_KEYS: MetricKey[] = [
   'gastosExtras',
 ];
 
+const TRAINING_SERVICE_RATE_PER_HOUR = 30;
+const PREVENTIVE_SERVICE_RATE_PER_HOUR = 15;
+
 function decimalToNumber(value: DecimalLike | number | string | null | undefined): number {
   if (value === null || value === undefined) return 0;
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
@@ -183,23 +186,62 @@ function isPreventiveService(tipo: string | null | undefined): boolean {
   return tipo.toLowerCase().includes('preventivo');
 }
 
+function normalizePipelineLabel(value: string | null | undefined): string {
+  if (!value) return '';
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim();
+}
+
+function isPreventivePipeline(pipeline: string | null | undefined): boolean {
+  const normalized = normalizePipelineLabel(pipeline);
+  return normalized === 'preventivos' || normalized === 'gep services' || normalized === 'pci';
+}
+
 function applyTrainerServiceCostMetrics(target: MetricTotals, extraCost: trainer_extra_costs & {
-  sesion?: { fecha_inicio_utc: Date | null; fecha_fin_utc: Date | null; tiempo_parada: DecimalLike | null; deals: { tipo_servicio: string | null } | null } | null;
-  variant?: { date: Date | null; products: { hora_inicio: Date | null; hora_fin: Date | null } | null } | null;
+  sesion?: {
+    fecha_inicio_utc: Date | null;
+    fecha_fin_utc: Date | null;
+    tiempo_parada: DecimalLike | null;
+    deals: { tipo_servicio: string | null; pipeline_id: string | null; pipeline_label: string | null } | null;
+  } | null;
+  variant?: {
+    date: Date | null;
+    products: {
+      hora_inicio: Date | null;
+      hora_fin: Date | null;
+      deal_products: Array<{
+        deals: { pipeline_id: string | null; pipeline_label: string | null; tipo_servicio: string | null } | null;
+      }>;
+    } | null;
+  } | null;
 }): void {
   const breakHours = decimalToNumber(extraCost.sesion?.tiempo_parada);
   const sessionHours = computeSessionHours(extraCost.sesion?.fecha_inicio_utc ?? null, extraCost.sesion?.fecha_fin_utc ?? null, breakHours);
   const variantHours = computeVariantHours(extraCost.variant?.date ?? null, extraCost.variant?.products ?? { hora_inicio: null, hora_fin: null });
   const workedHours = sessionHours + variantHours;
 
-  const serviceType = isPreventiveService(extraCost.sesion?.deals?.tipo_servicio)
+  const pipelineSource =
+    extraCost.sesion?.deals?.pipeline_id
+    ?? extraCost.sesion?.deals?.pipeline_label
+    ?? extraCost.variant?.products?.deal_products[0]?.deals?.pipeline_id
+    ?? extraCost.variant?.products?.deal_products[0]?.deals?.pipeline_label
+    ?? null;
+
+  const variantDeal = extraCost.variant?.products?.deal_products[0]?.deals ?? null;
+
+  const serviceType = (isPreventivePipeline(pipelineSource)
+    || isPreventiveService(extraCost.sesion?.deals?.tipo_servicio)
+    || isPreventiveService(variantDeal?.tipo_servicio))
     ? 'preventivo'
     : 'formacion';
 
   if (serviceType === 'preventivo') {
-    target.costeServicioPreventivo += workedHours * decimalToNumber(extraCost.precio_coste_preventivo);
+    target.costeServicioPreventivo += workedHours * PREVENTIVE_SERVICE_RATE_PER_HOUR;
   } else {
-    target.costeServicioFormacion += workedHours * decimalToNumber(extraCost.precio_coste_formacion);
+    target.costeServicioFormacion += workedHours * TRAINING_SERVICE_RATE_PER_HOUR;
   }
 }
 
@@ -359,6 +401,8 @@ export const handler = createHttpHandler(async (request) => {
               deals: {
                 select: {
                   tipo_servicio: true,
+                  pipeline_id: true,
+                  pipeline_label: true,
                 },
               },
             },
@@ -370,6 +414,18 @@ export const handler = createHttpHandler(async (request) => {
                 select: {
                   hora_inicio: true,
                   hora_fin: true,
+                  deal_products: {
+                    take: 1,
+                    select: {
+                      deals: {
+                        select: {
+                          tipo_servicio: true,
+                          pipeline_id: true,
+                          pipeline_label: true,
+                        },
+                      },
+                    },
+                  },
                 },
               },
             },
