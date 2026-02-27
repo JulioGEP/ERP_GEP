@@ -39,7 +39,7 @@
 
 [[scheduled]]
   function = "control-horario-open-shift-reminder"
-  cron = "*/15 * * * *"
+  cron = "15 8,12 * * *"
 
 # --------- Redirects ---------
 

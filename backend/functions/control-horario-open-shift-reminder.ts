@@ -6,8 +6,10 @@ import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/respon
 import { nowInMadridISO } from './_shared/timezone';
 
 const NETLIFY_SCHEDULE_HEADER = 'x-netlify-event';
-const HOURS_8_MS = 8 * 60 * 60 * 1000;
-const HOURS_12_MS = 12 * 60 * 60 * 1000;
+const REMINDER_START_HOUR = 8;
+const REMINDER_START_MINUTE = 15;
+const REMINDER_END_HOUR = 12;
+const REMINDER_END_MINUTE = 15;
 
 function isScheduledInvocation(event: Parameters<Handler>[0]): boolean {
   const scheduleHeader = event.headers?.[NETLIFY_SCHEDULE_HEADER] ?? event.headers?.[NETLIFY_SCHEDULE_HEADER.toUpperCase()];
@@ -20,39 +22,50 @@ function resolveUserName(user: { first_name: string; last_name: string; email: s
   return user.email;
 }
 
-async function sendOpenShiftReminderEmail(params: {
-  userEmail: string;
-  userName: string;
-  thresholdHours: 8 | 12;
-  workedHours: number;
-}): Promise<void> {
-  const workedHoursRounded = params.workedHours.toFixed(2);
-  const subject = `Aviso control horario: llevas más de ${params.thresholdHours}:00h sin fichar cierre`;
+function getMadridTimeParts(nowMadridIso: string): { hour: number; minute: number } {
+  const timePart = nowMadridIso.slice(11, 16);
+  const [hourRaw, minuteRaw] = timePart.split(':');
+  return {
+    hour: Number.parseInt(hourRaw ?? '0', 10),
+    minute: Number.parseInt(minuteRaw ?? '0', 10),
+  };
+}
+
+async function sendClockInReminderEmail(params: { userEmail: string; userName: string }): Promise<void> {
+  const subject = 'Recordatorio control horario: ficha tu entrada';
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111;">
       <p>Hola ${params.userName},</p>
-      <p>
-        Hemos detectado que hoy llevas <strong>${workedHoursRounded} horas</strong> trabajadas en el control horario
-        y todavía no has registrado el cierre de la jornada.
-      </p>
-      <p>Por favor, revisa tu fichaje y marca la salida cuando corresponda.</p>
+      <p>Son más de las 08:15 y no hemos detectado tu fichaje de entrada de hoy.</p>
+      <p>Por favor, registra tu entrada en el control horario.</p>
       <p style="margin-top: 16px;">Gracias.</p>
     </div>
   `.trim();
-  const text = [
-    `Hola ${params.userName},`,
-    ``,
-    `Hemos detectado que hoy llevas ${workedHoursRounded} horas trabajadas en el control horario y todavía no has registrado el cierre de la jornada.`,
-    `Por favor, revisa tu fichaje y marca la salida cuando corresponda.`,
-    ``,
-    `Gracias.`,
-  ].join('\n');
 
   await sendEmail({
     to: params.userEmail,
     subject,
     html,
-    text,
+    text: `Hola ${params.userName},\n\nSon más de las 08:15 y no hemos detectado tu fichaje de entrada de hoy.\nPor favor, registra tu entrada en el control horario.\n\nGracias.`,
+  });
+}
+
+async function sendClockOutReminderEmail(params: { userEmail: string; userName: string }): Promise<void> {
+  const subject = 'Recordatorio control horario: ficha tu salida';
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111;">
+      <p>Hola ${params.userName},</p>
+      <p>Son las 12:15 o más tarde y tienes la jornada abierta sin fichar la salida.</p>
+      <p>Por favor, revisa tu fichaje y marca la salida cuando corresponda.</p>
+      <p style="margin-top: 16px;">Gracias.</p>
+    </div>
+  `.trim();
+
+  await sendEmail({
+    to: params.userEmail,
+    subject,
+    html,
+    text: `Hola ${params.userName},\n\nSon las 12:15 o más tarde y tienes la jornada abierta sin fichar la salida.\nPor favor, revisa tu fichaje y marca la salida cuando corresponda.\n\nGracias.`,
   });
 }
 
@@ -70,20 +83,30 @@ export const handler: Handler = async (event) => {
   }
 
   const now = new Date();
-  const madridDate = nowInMadridISO().slice(0, 10);
+  const nowMadridIso = nowInMadridISO();
+  const madridDate = nowMadridIso.slice(0, 10);
+  const madridTime = getMadridTimeParts(nowMadridIso);
+
+  const shouldSendClockInReminder =
+    madridTime.hour > REMINDER_START_HOUR ||
+    (madridTime.hour === REMINDER_START_HOUR && madridTime.minute >= REMINDER_START_MINUTE);
+  const shouldSendClockOutReminder =
+    madridTime.hour > REMINDER_END_HOUR ||
+    (madridTime.hour === REMINDER_END_HOUR && madridTime.minute >= REMINDER_END_MINUTE);
 
   try {
     const prisma = getPrisma();
 
-    const openEntries = await prisma.user_time_logs.findMany({
-      where: {
-        log_date: new Date(`${madridDate}T00:00:00Z`),
-        check_in_utc: {
-          not: null,
-        },
-        check_out_utc: null,
-        user: {
+    let clockInRemindersSent = 0;
+    let clockOutRemindersSent = 0;
+
+    if (shouldSendClockInReminder) {
+      const usersWithoutClockIn = await prisma.users.findMany({
+        where: {
           active: true,
+          email: {
+            contains: '@',
+          },
           OR: [
             {
               role: {
@@ -101,76 +124,94 @@ export const handler: Handler = async (event) => {
               },
             },
           ],
-        },
-      },
-      include: {
-        user: {
-          select: {
-            email: true,
-            first_name: true,
-            last_name: true,
+          time_logs: {
+            none: {
+              log_date: new Date(`${madridDate}T00:00:00Z`),
+              check_in_utc: {
+                not: null,
+              },
+            },
           },
         },
-      },
-      orderBy: {
-        check_in_utc: 'asc',
-      },
-    });
+        select: {
+          email: true,
+          first_name: true,
+          last_name: true,
+        },
+      });
 
-    let reminders8hSent = 0;
-    let reminders12hSent = 0;
+      for (const user of usersWithoutClockIn) {
+        await sendClockInReminderEmail({
+          userEmail: user.email,
+          userName: resolveUserName(user),
+        });
+        clockInRemindersSent += 1;
+      }
+    }
 
-    for (const entry of openEntries) {
-      if (!entry.check_in_utc) continue;
+    if (shouldSendClockOutReminder) {
+      const openEntries = await prisma.user_time_logs.findMany({
+        where: {
+          log_date: new Date(`${madridDate}T00:00:00Z`),
+          check_in_utc: {
+            not: null,
+          },
+          check_out_utc: null,
+          reminder_12h_sent_at: null,
+          user: {
+            active: true,
+            OR: [
+              {
+                role: {
+                  notIn: ['formador', 'Formador'],
+                },
+              },
+              {
+                role: {
+                  in: ['formador', 'Formador'],
+                },
+                trainer: {
+                  is: {
+                    contrato_fijo: true,
+                  },
+                },
+              },
+            ],
+          },
+        },
+        include: {
+          user: {
+            select: {
+              email: true,
+              first_name: true,
+              last_name: true,
+            },
+          },
+        },
+      });
 
-      const elapsedMs = now.getTime() - entry.check_in_utc.getTime();
-      const workedHours = elapsedMs / (60 * 60 * 1000);
-      const userName = resolveUserName(entry.user);
-
-      if (elapsedMs >= HOURS_12_MS && !entry.reminder_12h_sent_at) {
-        await sendOpenShiftReminderEmail({
+      for (const entry of openEntries) {
+        await sendClockOutReminderEmail({
           userEmail: entry.user.email,
-          userName,
-          thresholdHours: 12,
-          workedHours,
+          userName: resolveUserName(entry.user),
         });
 
         await prisma.user_time_logs.update({
           where: { id: entry.id },
           data: {
             reminder_12h_sent_at: now,
-            reminder_8h_sent_at: entry.reminder_8h_sent_at ?? now,
           },
         });
 
-        reminders12hSent += 1;
-        continue;
-      }
-
-      if (elapsedMs >= HOURS_8_MS && !entry.reminder_8h_sent_at) {
-        await sendOpenShiftReminderEmail({
-          userEmail: entry.user.email,
-          userName,
-          thresholdHours: 8,
-          workedHours,
-        });
-
-        await prisma.user_time_logs.update({
-          where: { id: entry.id },
-          data: {
-            reminder_8h_sent_at: now,
-          },
-        });
-
-        reminders8hSent += 1;
+        clockOutRemindersSent += 1;
       }
     }
 
     return successResponse({
       date: madridDate,
-      scannedOpenEntries: openEntries.length,
-      reminders8hSent,
-      reminders12hSent,
+      madridTime,
+      clockInRemindersSent,
+      clockOutRemindersSent,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error inesperado enviando recordatorios de control horario.';
