@@ -45,7 +45,7 @@ type TrainerHoursAccumulator = {
 };
 
 const DEFAULT_SERVICE_COSTS = {
-  formacion: 30,
+  formacion: 15,
   preventivo: 15,
 } as const;
 
@@ -108,9 +108,14 @@ function decimalToNumber(value: DecimalLike | number | string | null | undefined
 }
 
 function resolveServiceRate(
-  _record: TrainerExtraCostRow | null,
+  record: TrainerExtraCostRow | null,
   type: 'formacion' | 'preventivo',
 ): number {
+  const field = type === 'preventivo' ? 'precio_coste_preventivo' : 'precio_coste_formacion';
+  const value = record ? decimalToNumber(record[field]) : 0;
+  if (value > 0) {
+    return value;
+  }
   return DEFAULT_SERVICE_COSTS[type];
 }
 

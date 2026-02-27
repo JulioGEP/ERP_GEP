@@ -28,11 +28,6 @@ type MetricKey =
 
 type MetricTotals = Record<MetricKey, number>;
 
-const TRAINER_SERVICE_COST_PER_HOUR = {
-  formacion: 30,
-  preventivo: 15,
-} as const;
-
 type CategoryTotals = {
   metrics: MetricTotals;
   totalCost: number;
@@ -202,9 +197,9 @@ function applyTrainerServiceCostMetrics(target: MetricTotals, extraCost: trainer
     : 'formacion';
 
   if (serviceType === 'preventivo') {
-    target.costeServicioPreventivo += workedHours * TRAINER_SERVICE_COST_PER_HOUR.preventivo;
+    target.costeServicioPreventivo += workedHours * decimalToNumber(extraCost.precio_coste_preventivo);
   } else {
-    target.costeServicioFormacion += workedHours * TRAINER_SERVICE_COST_PER_HOUR.formacion;
+    target.costeServicioFormacion += workedHours * decimalToNumber(extraCost.precio_coste_formacion);
   }
 }
 
