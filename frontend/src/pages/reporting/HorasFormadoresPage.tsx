@@ -100,16 +100,28 @@ export default function HorasFormadoresPage() {
       (acc, item) => {
         acc.totalSessions += item.sessionCount;
         acc.totalHours += item.totalHours;
+        acc.totalPreventiveHours += item.preventiveHours;
+        acc.totalTrainingHours += item.trainingHours;
         acc.totalServiceCost += item.serviceCost;
+        acc.totalPreventiveServiceCost += item.preventiveServiceCost;
+        acc.totalTrainingServiceCost += item.trainingServiceCost;
         acc.totalExtraCost += item.extraCost;
+        acc.totalPreventiveExtraCost += item.preventiveExtraCost;
+        acc.totalTrainingExtraCost += item.trainingExtraCost;
         acc.totalPayrollCost += item.payrollCost;
         return acc;
       },
       {
         totalSessions: 0,
         totalHours: 0,
+        totalPreventiveHours: 0,
+        totalTrainingHours: 0,
         totalServiceCost: 0,
+        totalPreventiveServiceCost: 0,
+        totalTrainingServiceCost: 0,
         totalExtraCost: 0,
+        totalPreventiveExtraCost: 0,
+        totalTrainingExtraCost: 0,
         totalPayrollCost: 0,
       },
     );
@@ -119,10 +131,20 @@ export default function HorasFormadoresPage() {
   const summaryTrainers = hasLoadedData ? integerFormatter.format(items.length) : '—';
   const summarySessions = hasLoadedData ? integerFormatter.format(summary.totalSessions) : '—';
   const summaryHours = hasLoadedData ? hoursFormatter.format(summary.totalHours) : '—';
-  const summaryServiceCost = hasLoadedData
-    ? currencyFormatter.format(summary.totalServiceCost)
+  const summaryPreventiveHours = hasLoadedData ? hoursFormatter.format(summary.totalPreventiveHours) : '—';
+  const summaryTrainingHours = hasLoadedData ? hoursFormatter.format(summary.totalTrainingHours) : '—';
+  const summaryPreventiveServiceCost = hasLoadedData
+    ? currencyFormatter.format(summary.totalPreventiveServiceCost)
     : '—';
-  const summaryExtraCost = hasLoadedData ? currencyFormatter.format(summary.totalExtraCost) : '—';
+  const summaryTrainingServiceCost = hasLoadedData
+    ? currencyFormatter.format(summary.totalTrainingServiceCost)
+    : '—';
+  const summaryPreventiveExtraCost = hasLoadedData
+    ? currencyFormatter.format(summary.totalPreventiveExtraCost)
+    : '—';
+  const summaryTrainingExtraCost = hasLoadedData
+    ? currencyFormatter.format(summary.totalTrainingExtraCost)
+    : '—';
   const summaryPayrollCost = hasLoadedData
     ? currencyFormatter.format(summary.totalPayrollCost)
     : '—';
@@ -369,12 +391,28 @@ export default function HorasFormadoresPage() {
               <span className="fw-semibold h5 mb-0">{summaryHours}</span>
             </div>
             <div>
-              <span className="text-muted d-block small">Coste servicio</span>
-              <span className="fw-semibold h5 mb-0">{summaryServiceCost}</span>
+              <span className="text-muted d-block small">Total horas preventivos</span>
+              <span className="fw-semibold h5 mb-0">{summaryPreventiveHours}</span>
             </div>
             <div>
-              <span className="text-muted d-block small">Coste extra</span>
-              <span className="fw-semibold h5 mb-0">{summaryExtraCost}</span>
+              <span className="text-muted d-block small">Total horas formación</span>
+              <span className="fw-semibold h5 mb-0">{summaryTrainingHours}</span>
+            </div>
+            <div>
+              <span className="text-muted d-block small">Coste preventivo</span>
+              <span className="fw-semibold h5 mb-0">{summaryPreventiveServiceCost}</span>
+            </div>
+            <div>
+              <span className="text-muted d-block small">Coste formación</span>
+              <span className="fw-semibold h5 mb-0">{summaryTrainingServiceCost}</span>
+            </div>
+            <div>
+              <span className="text-muted d-block small">Coste extra preventivo</span>
+              <span className="fw-semibold h5 mb-0">{summaryPreventiveExtraCost}</span>
+            </div>
+            <div>
+              <span className="text-muted d-block small">Coste extra formación</span>
+              <span className="fw-semibold h5 mb-0">{summaryTrainingExtraCost}</span>
             </div>
             <div>
               <span className="text-muted d-block small">Nómina</span>

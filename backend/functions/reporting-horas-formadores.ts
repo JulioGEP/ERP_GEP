@@ -40,8 +40,14 @@ type TrainerHoursAccumulator = {
   lastName: string | null;
   sessionCount: number;
   totalHours: number;
+  preventiveHours: number;
+  trainingHours: number;
   serviceCost: number;
+  preventiveServiceCost: number;
+  trainingServiceCost: number;
   extraCost: number;
+  preventiveExtraCost: number;
+  trainingExtraCost: number;
 };
 
 const DEFAULT_SERVICE_COSTS = {
@@ -499,6 +505,15 @@ export const handler = createHttpHandler(async (request) => {
     if (existing) {
       existing.sessionCount += 1;
       existing.totalHours += hours;
+      if (sessionType === 'preventivo') {
+        existing.preventiveHours += hours;
+        existing.preventiveServiceCost += serviceCost;
+        existing.preventiveExtraCost += extraCost;
+      } else {
+        existing.trainingHours += hours;
+        existing.trainingServiceCost += serviceCost;
+        existing.trainingExtraCost += extraCost;
+      }
       existing.serviceCost += serviceCost;
       existing.extraCost += extraCost;
       if (existing.name === null && trainerName) {
@@ -516,8 +531,14 @@ export const handler = createHttpHandler(async (request) => {
       lastName: trainerLastName,
       sessionCount: 1,
       totalHours: hours,
+      preventiveHours: sessionType === 'preventivo' ? hours : 0,
+      trainingHours: sessionType === 'formacion' ? hours : 0,
       serviceCost,
+      preventiveServiceCost: sessionType === 'preventivo' ? serviceCost : 0,
+      trainingServiceCost: sessionType === 'formacion' ? serviceCost : 0,
       extraCost,
+      preventiveExtraCost: sessionType === 'preventivo' ? extraCost : 0,
+      trainingExtraCost: sessionType === 'formacion' ? extraCost : 0,
     });
   }
 
@@ -559,8 +580,11 @@ export const handler = createHttpHandler(async (request) => {
       if (existing) {
         existing.sessionCount += 1;
         existing.totalHours += hours;
+        existing.trainingHours += hours;
         existing.serviceCost += serviceCost;
+        existing.trainingServiceCost += serviceCost;
         existing.extraCost += extraCost;
+        existing.trainingExtraCost += extraCost;
         if (existing.name === null && trainerName) {
           existing.name = trainerName;
         }
@@ -576,8 +600,14 @@ export const handler = createHttpHandler(async (request) => {
         lastName: trainerLastName,
         sessionCount: 1,
         totalHours: hours,
+        preventiveHours: 0,
+        trainingHours: hours,
         serviceCost,
+        preventiveServiceCost: 0,
+        trainingServiceCost: serviceCost,
         extraCost,
+        preventiveExtraCost: 0,
+        trainingExtraCost: extraCost,
       });
     }
   }
@@ -587,8 +617,14 @@ export const handler = createHttpHandler(async (request) => {
   const items = accumulatedItems
     .map((item) => {
       const totalHours = roundToTwoDecimals(item.totalHours);
+      const preventiveHours = roundToTwoDecimals(item.preventiveHours);
+      const trainingHours = roundToTwoDecimals(item.trainingHours);
       const serviceCost = roundToTwoDecimals(item.serviceCost);
+      const preventiveServiceCost = roundToTwoDecimals(item.preventiveServiceCost);
+      const trainingServiceCost = roundToTwoDecimals(item.trainingServiceCost);
       const extraCost = roundToTwoDecimals(item.extraCost);
+      const preventiveExtraCost = roundToTwoDecimals(item.preventiveExtraCost);
+      const trainingExtraCost = roundToTwoDecimals(item.trainingExtraCost);
       const payrollCost = roundToTwoDecimals(item.serviceCost + item.extraCost);
       return {
         trainerId: item.trainerId,
@@ -596,8 +632,14 @@ export const handler = createHttpHandler(async (request) => {
         lastName: item.lastName,
         sessionCount: item.sessionCount,
         totalHours,
+        preventiveHours,
+        trainingHours,
         serviceCost,
+        preventiveServiceCost,
+        trainingServiceCost,
         extraCost,
+        preventiveExtraCost,
+        trainingExtraCost,
         payrollCost,
       };
     })
@@ -613,11 +655,29 @@ export const handler = createHttpHandler(async (request) => {
 
   const totalSessions = accumulatedItems.reduce((acc, item) => acc + item.sessionCount, 0);
   const totalHours = roundToTwoDecimals(accumulatedItems.reduce((acc, item) => acc + item.totalHours, 0));
+  const totalPreventiveHours = roundToTwoDecimals(
+    accumulatedItems.reduce((acc, item) => acc + item.preventiveHours, 0),
+  );
+  const totalTrainingHours = roundToTwoDecimals(
+    accumulatedItems.reduce((acc, item) => acc + item.trainingHours, 0),
+  );
   const totalServiceCost = roundToTwoDecimals(
     accumulatedItems.reduce((acc, item) => acc + item.serviceCost, 0),
   );
+  const totalPreventiveServiceCost = roundToTwoDecimals(
+    accumulatedItems.reduce((acc, item) => acc + item.preventiveServiceCost, 0),
+  );
+  const totalTrainingServiceCost = roundToTwoDecimals(
+    accumulatedItems.reduce((acc, item) => acc + item.trainingServiceCost, 0),
+  );
   const totalExtraCost = roundToTwoDecimals(
     accumulatedItems.reduce((acc, item) => acc + item.extraCost, 0),
+  );
+  const totalPreventiveExtraCost = roundToTwoDecimals(
+    accumulatedItems.reduce((acc, item) => acc + item.preventiveExtraCost, 0),
+  );
+  const totalTrainingExtraCost = roundToTwoDecimals(
+    accumulatedItems.reduce((acc, item) => acc + item.trainingExtraCost, 0),
   );
   const totalPayrollCost = roundToTwoDecimals(
     accumulatedItems.reduce((acc, item) => acc + item.serviceCost + item.extraCost, 0),
@@ -628,8 +688,14 @@ export const handler = createHttpHandler(async (request) => {
     summary: {
       totalSessions,
       totalHours,
+      totalPreventiveHours,
+      totalTrainingHours,
       totalServiceCost,
+      totalPreventiveServiceCost,
+      totalTrainingServiceCost,
       totalExtraCost,
+      totalPreventiveExtraCost,
+      totalTrainingExtraCost,
       totalPayrollCost,
     },
   });
