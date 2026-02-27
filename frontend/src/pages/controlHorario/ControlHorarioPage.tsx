@@ -1,13 +1,11 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Badge, Button, Card, Form, Modal, Spinner, Table } from 'react-bootstrap';
+import { Alert, Badge, Button, Card, Spinner, Table } from 'react-bootstrap';
 import { isApiError } from '../../api/client';
 import {
   clockInControlHorario,
   clockOutControlHorario,
-  createControlHorarioEntry,
   fetchControlHorario,
-  updateControlHorarioEntry,
   type ControlHorarioEntry,
 } from '../../features/controlHorario/api';
 
@@ -67,23 +65,9 @@ function getIsoWeekKey(date: string): string {
   return `${year}-W${String(week).padStart(2, '0')}`;
 }
 
-function toTimeInputValue(value: string | null): string {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
-}
-
 export default function ControlHorarioPage() {
   const [now, setNow] = useState(() => new Date());
   const [range] = useState(getCurrentMonthRange);
-  const [showModal, setShowModal] = useState(false);
-  const [modalDate, setModalDate] = useState<string | null>(null);
-  const [modalEntry, setModalEntry] = useState<ControlHorarioEntry | null>(null);
-  const [checkInTime, setCheckInTime] = useState('');
-  const [checkOutTime, setCheckOutTime] = useState('');
 
   const queryClient = useQueryClient();
 
@@ -106,34 +90,6 @@ export default function ControlHorarioPage() {
   const clockOutMutation = useMutation({
     mutationFn: clockOutControlHorario,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['control-horario'] }),
-  });
-
-  const entryMutation = useMutation({
-    mutationFn: async () => {
-      if (!modalDate) {
-        throw new Error('No hay fecha seleccionada.');
-      }
-      if (modalEntry?.id) {
-        return updateControlHorarioEntry({
-          id: modalEntry.id,
-          checkInTime,
-          checkOutTime: checkOutTime || null,
-        });
-      }
-      return createControlHorarioEntry({
-        date: modalDate,
-        checkInTime,
-        checkOutTime: checkOutTime || null,
-      });
-    },
-    onSuccess: () => {
-      setShowModal(false);
-      setModalEntry(null);
-      setModalDate(null);
-      setCheckInTime('');
-      setCheckOutTime('');
-      queryClient.invalidateQueries({ queryKey: ['control-horario'] });
-    },
   });
 
   const entries = controlHorarioQuery.data?.entries ?? [];
@@ -215,18 +171,6 @@ export default function ControlHorarioPage() {
 
     return groups;
   }, [datesInRange, entriesByDate]);
-  const yesterday = controlHorarioQuery.data?.meta?.yesterday ?? '';
-
-  const handleOpenModal = (date: string, entry?: ControlHorarioEntry) => {
-    setModalDate(date);
-    setModalEntry(entry ?? null);
-    setCheckInTime(toTimeInputValue(entry?.checkIn ?? null));
-    setCheckOutTime(toTimeInputValue(entry?.checkOut ?? null));
-    setShowModal(true);
-  };
-
-  const isSavingEntry = entryMutation.isPending;
-
   let content: JSX.Element;
 
   if (controlHorarioQuery.isLoading) {
@@ -265,7 +209,6 @@ export default function ControlHorarioPage() {
                     if (!entry.checkIn || !entry.checkOut) return acc;
                     return acc + diffMinutes(entry.checkIn, new Date(entry.checkOut));
                   }, 0);
-                  const isYesterday = date === yesterday;
                   return (
                     <tr key={date}>
                       <td>{dateFormatter.format(new Date(`${date}T00:00:00`))}</td>
@@ -281,15 +224,6 @@ export default function ControlHorarioPage() {
                                     {entry.checkOut ? timeShortFormatter.format(new Date(entry.checkOut)) : '—'}
                                   </span>
                                   {!hasEnd ? <Badge bg="warning" text="dark">En curso</Badge> : null}
-                                  {isYesterday ? (
-                                    <Button
-                                      size="sm"
-                                      variant="outline-secondary"
-                                      onClick={() => handleOpenModal(date, entry)}
-                                    >
-                                      Editar
-                                    </Button>
-                                  ) : null}
                                 </div>
                               );
                             })}
@@ -300,13 +234,7 @@ export default function ControlHorarioPage() {
                       </td>
                       <td>{totalMinutes ? formatDuration(totalMinutes) : '—'}</td>
                       <td>
-                        {isYesterday ? (
-                          <Button size="sm" variant="outline-primary" onClick={() => handleOpenModal(date)}>
-                            Añadir fichaje
-                          </Button>
-                        ) : (
-                          <span className="text-muted">Bloqueado</span>
-                        )}
+                        <span className="text-muted">Bloqueado</span>
                       </td>
                     </tr>
                   );
@@ -359,51 +287,6 @@ export default function ControlHorarioPage() {
           {content}
         </Card.Body>
       </Card>
-
-      <Modal show={showModal} onHide={() => setShowModal(false)} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>{modalEntry ? 'Editar fichaje' : 'Añadir fichaje'}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <Form className="d-grid gap-3">
-            <Form.Group>
-              <Form.Label>Fecha</Form.Label>
-              <Form.Control value={modalDate ?? ''} disabled />
-            </Form.Group>
-            <Form.Group>
-              <Form.Label>Hora de entrada</Form.Label>
-              <Form.Control
-                type="time"
-                value={checkInTime}
-                onChange={(event) => setCheckInTime(event.currentTarget.value)}
-              />
-            </Form.Group>
-            <Form.Group>
-              <Form.Label>Hora de salida</Form.Label>
-              <Form.Control
-                type="time"
-                value={checkOutTime}
-                onChange={(event) => setCheckOutTime(event.currentTarget.value)}
-              />
-            </Form.Group>
-          </Form>
-          {entryMutation.isError ? (
-            <Alert variant="danger" className="mt-3 mb-0">
-              {isApiError(entryMutation.error)
-                ? entryMutation.error.message
-                : 'No se pudo guardar el fichaje.'}
-            </Alert>
-          ) : null}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowModal(false)} disabled={isSavingEntry}>
-            Cancelar
-          </Button>
-          <Button variant="primary" onClick={() => entryMutation.mutate()} disabled={isSavingEntry || !checkInTime}>
-            {isSavingEntry ? 'Guardando…' : 'Guardar'}
-          </Button>
-        </Modal.Footer>
-      </Modal>
     </section>
   );
 }
