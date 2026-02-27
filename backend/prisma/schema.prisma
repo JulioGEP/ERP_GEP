@@ -63,6 +63,8 @@ model user_time_logs {
   log_date      DateTime  @db.Date
   check_in_utc  DateTime? @db.Timestamptz(6)
   check_out_utc DateTime? @db.Timestamptz(6)
+  reminder_8h_sent_at  DateTime? @db.Timestamptz(6)
+  reminder_12h_sent_at DateTime? @db.Timestamptz(6)
   created_at    DateTime  @default(now()) @db.Timestamptz(6)
   updated_at    DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
 
