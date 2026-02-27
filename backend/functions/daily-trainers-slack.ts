@@ -7,6 +7,9 @@ import { nowInMadridISO } from './_shared/timezone';
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
 const SLACK_CHANNEL_ID = 'C063C7QRHK4';
 const NETLIFY_SCHEDULE_HEADER = 'x-netlify-event';
+const MADRID_SEND_HOUR = '07';
+const MADRID_SEND_START_MINUTE = 5;
+const MADRID_SEND_END_MINUTE = 25;
 
 type SessionSummary = {
   company: string;
@@ -61,7 +64,12 @@ function isWithinMadridSendWindow(isoDateTime: string, startMinute: number, endM
   const timePart = isoDateTime.split('T')[1] ?? '';
   const [hour = '', minute = ''] = timePart.split(':');
   const minuteNumber = Number.parseInt(minute, 10);
-  return hour === '07' && Number.isInteger(minuteNumber) && minuteNumber >= startMinute && minuteNumber <= endMinute;
+  return (
+    hour === MADRID_SEND_HOUR &&
+    Number.isInteger(minuteNumber) &&
+    minuteNumber >= startMinute &&
+    minuteNumber <= endMinute
+  );
 }
 
 async function postSlackMessage(token: string, text: string): Promise<void> {
@@ -111,7 +119,7 @@ export const handler: Handler = async (event) => {
     const prisma = getPrisma();
     const todayIso = nowInMadridISO();
 
-    if (isScheduledInvocation(event) && !isWithinMadridSendWindow(todayIso, 5, 14)) {
+    if (isScheduledInvocation(event) && !isWithinMadridSendWindow(todayIso, MADRID_SEND_START_MINUTE, MADRID_SEND_END_MINUTE)) {
       return successResponse({
         message: 'Invocación programada fuera del horario de envío. Se omite.',
         nowMadrid: todayIso,
