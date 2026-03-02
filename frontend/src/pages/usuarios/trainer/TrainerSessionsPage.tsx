@@ -3310,12 +3310,7 @@ export default function TrainerSessionsPage() {
     return dateEntries.find((entry) => entry.date === selectedDate) ?? null;
   }, [dateEntries, selectedDate]);
 
-  const companyAndServiceSessions = useMemo(() => {
-    if (!selectedEntry) return [];
-    return selectedEntry.sessions.filter(
-      (session) => session.isCompanyTraining || session.isGepServices,
-    );
-  }, [selectedEntry]);
+  const sessions = useMemo(() => selectedEntry?.sessions ?? [], [selectedEntry]);
 
   const variants = selectedEntry?.variants ?? [];
   const variantCount = variants.length;
@@ -3450,17 +3445,17 @@ export default function TrainerSessionsPage() {
         </Card>
       ) : null}
 
-      {selectedEntry && !companyAndServiceSessions.length && !variants.length ? (
+      {selectedEntry && !sessions.length && !variants.length ? (
         <Card className="shadow-sm border-0">
           <Card.Body>
             <p className="text-muted mb-0">
-              En esta fecha no tienes sesiones de formación empresa ni servicios asignados.
+              En esta fecha no tienes sesiones ni variantes asignadas.
             </p>
           </Card.Body>
         </Card>
       ) : null}
 
-      {companyAndServiceSessions.map((session) => (
+      {sessions.map((session) => (
         <SessionDetailCard
           key={session.sessionId}
           session={session}
