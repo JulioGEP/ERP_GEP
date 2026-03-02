@@ -72,7 +72,7 @@ const PIPELINE_LABELS_COMPANY = [
   'formación empresas',
 ];
 
-const PIPELINE_LABELS_GEP = ['gep services'];
+const PIPELINE_LABELS_GEP = ['gep services', 'preventivos', 'pci'];
 
 function normalizePipeline(value: unknown): string | null {
   if (typeof value !== 'string') return null;
