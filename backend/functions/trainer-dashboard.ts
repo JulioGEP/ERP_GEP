@@ -3,7 +3,7 @@ import { createHttpHandler } from './_shared/http';
 import { requireAuth } from './_shared/auth';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, successResponse } from './_shared/response';
-import { nowInMadridISO } from './_shared/timezone';
+import { nowInMadridISO, toMadridISOString } from './_shared/timezone';
 
 type TrainerDashboardMetrics = {
   totalAssigned: number;
@@ -16,6 +16,7 @@ type TrainerDashboardMetrics = {
 type TrainerDashboardSession = {
   sessionId: string;
   budgetNumber: string | null;
+  date: string | null;
   sessionTitle: string | null;
   productName: string | null;
   address: string | null;
@@ -33,6 +34,7 @@ type TrainerDashboardVariant = {
 
 type SessionRecord = {
   id: string;
+  fecha_inicio_utc: Date | null;
   nombre_cache: string | null;
   direccion: string | null;
   deals: { deal_id: string | null; pipeline_id: string | null } | null;
@@ -119,6 +121,12 @@ function normalizeTrainerInviteStatus(value: unknown): 'PENDING' | 'CONFIRMED' |
   return null;
 }
 
+function madridDateKey(value: Date | string | null | undefined): string | null {
+  const iso = toMadridISOString(value);
+  if (!iso) return null;
+  return iso.slice(0, 10);
+}
+
 export const handler = createHttpHandler(async (request) => {
   if (request.method !== 'GET') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
@@ -158,6 +166,7 @@ export const handler = createHttpHandler(async (request) => {
   }
 
   const trainerId = toMaybeString(trainer.trainer_id) ?? trainer.trainer_id;
+  const todayMadridKey = madridDateKey(nowInMadridISO());
 
   const pipelineFilter = {
     OR: [...PIPELINE_LABELS_COMPANY, ...PIPELINE_LABELS_GEP].map((label) => ({
@@ -172,6 +181,7 @@ export const handler = createHttpHandler(async (request) => {
     },
     select: {
       id: true,
+      fecha_inicio_utc: true,
       nombre_cache: true,
       direccion: true,
       deals: { select: { deal_id: true, pipeline_id: true } },
@@ -204,7 +214,12 @@ export const handler = createHttpHandler(async (request) => {
     0,
   );
 
-  const acceptedSessions = sessions.filter((session) => sessionInviteStatuses.get(session.id) === 'CONFIRMED');
+  const acceptedSessions = sessions.filter((session) => {
+    if (sessionInviteStatuses.get(session.id) !== 'CONFIRMED') return false;
+    const sessionDateKey = madridDateKey(session.fecha_inicio_utc);
+    if (!todayMadridKey || !sessionDateKey) return false;
+    return sessionDateKey >= todayMadridKey;
+  });
 
   const variantPrimaryRecords = (await prisma.variants.findMany({
     where: { trainer_id: trainer.trainer_id },
@@ -339,11 +354,17 @@ export const handler = createHttpHandler(async (request) => {
         };
       }
 
+      const variantDate = record.date ? record.date.toISOString() : null;
+      const variantDateKey = madridDateKey(variantDate);
+      if (!todayMadridKey || !variantDateKey || variantDateKey < todayMadridKey) {
+        continue;
+      }
+
       variantDetails.push({
         variantId: record.id,
         productName: record.products?.name ?? null,
         site: record.sede ?? null,
-        date: record.date ? record.date.toISOString() : null,
+        date: variantDate,
         mobileUnit,
         studentCount,
       });
@@ -361,6 +382,7 @@ export const handler = createHttpHandler(async (request) => {
     return {
       sessionId: session.id,
       budgetNumber: session.deals?.deal_id ?? null,
+      date: session.fecha_inicio_utc ? session.fecha_inicio_utc.toISOString() : null,
       sessionTitle: session.nombre_cache ?? null,
       productName: session.deal_products?.name ?? null,
       address: session.direccion ?? null,

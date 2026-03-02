@@ -12,6 +12,7 @@ export type TrainerDashboardMetrics = {
 export type TrainerDashboardSession = {
   sessionId: string;
   budgetNumber: string | null;
+  date: string | null;
   sessionTitle: string | null;
   productName: string | null;
   address: string | null;
@@ -67,6 +68,7 @@ function sanitizeSession(value: unknown): TrainerDashboardSession | null {
   return {
     sessionId,
     budgetNumber: sanitizeString(raw.budgetNumber),
+    date: sanitizeDate(raw.date),
     sessionTitle: sanitizeString(raw.sessionTitle),
     productName: sanitizeString(raw.productName),
     address: sanitizeString(raw.address),
