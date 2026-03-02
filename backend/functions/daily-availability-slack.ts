@@ -8,9 +8,6 @@ const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
 const SLACK_CHANNEL_ID = 'C063C7QRHK4';
 const TELEWORK_TYPE = 'T';
 const NETLIFY_SCHEDULE_HEADER = 'x-netlify-event';
-const MADRID_SEND_HOUR = '07';
-const MADRID_SEND_START_MINUTE = 0;
-const MADRID_SEND_END_MINUTE = 20;
 
 type DailyGroup = {
   off: string[];
@@ -48,12 +45,7 @@ function isWithinMadridSendWindow(isoDateTime: string, startMinute: number, endM
   const timePart = isoDateTime.split('T')[1] ?? '';
   const [hour = '', minute = ''] = timePart.split(':');
   const minuteNumber = Number.parseInt(minute, 10);
-  return (
-    hour === MADRID_SEND_HOUR &&
-    Number.isInteger(minuteNumber) &&
-    minuteNumber >= startMinute &&
-    minuteNumber <= endMinute
-  );
+  return hour === '07' && Number.isInteger(minuteNumber) && minuteNumber >= startMinute && minuteNumber <= endMinute;
 }
 
 function normalizePersonName(entry: { first_name: string; last_name: string; name: string | null }): string {
@@ -119,7 +111,7 @@ export const handler: Handler = async (event) => {
   try {
     const prisma = getPrisma();
     const nowMadrid = nowInMadridISO();
-    if (isScheduledInvocation(event) && !isWithinMadridSendWindow(nowMadrid, MADRID_SEND_START_MINUTE, MADRID_SEND_END_MINUTE)) {
+    if (isScheduledInvocation(event) && !isWithinMadridSendWindow(nowMadrid, 0, 4)) {
       return successResponse({
         message: 'Invocación programada fuera del horario de envío. Se omite.',
         nowMadrid,
