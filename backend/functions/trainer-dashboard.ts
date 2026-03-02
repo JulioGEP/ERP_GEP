@@ -33,7 +33,6 @@ type TrainerDashboardVariant = {
 
 type SessionRecord = {
   id: string;
-  fecha_inicio_utc: Date | null;
   nombre_cache: string | null;
   direccion: string | null;
   deals: { deal_id: string | null; pipeline_id: string | null } | null;
@@ -120,16 +119,6 @@ function normalizeTrainerInviteStatus(value: unknown): 'PENDING' | 'CONFIRMED' |
   return null;
 }
 
-function getMadridTodayStart(): Date {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-}
-
-function isOnOrAfterMadridToday(value: Date | null | undefined, todayStart: Date): boolean {
-  if (!value) return false;
-  return value.getTime() >= todayStart.getTime();
-}
-
 export const handler = createHttpHandler(async (request) => {
   if (request.method !== 'GET') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
@@ -183,7 +172,6 @@ export const handler = createHttpHandler(async (request) => {
     },
     select: {
       id: true,
-      fecha_inicio_utc: true,
       nombre_cache: true,
       direccion: true,
       deals: { select: { deal_id: true, pipeline_id: true } },
@@ -216,13 +204,7 @@ export const handler = createHttpHandler(async (request) => {
     0,
   );
 
-  const todayStart = getMadridTodayStart();
-
-  const acceptedSessions = sessions.filter(
-    (session) =>
-      sessionInviteStatuses.get(session.id) === 'CONFIRMED' &&
-      isOnOrAfterMadridToday(session.fecha_inicio_utc, todayStart),
-  );
+  const acceptedSessions = sessions.filter((session) => sessionInviteStatuses.get(session.id) === 'CONFIRMED');
 
   const variantPrimaryRecords = (await prisma.variants.findMany({
     where: { trainer_id: trainer.trainer_id },
@@ -335,10 +317,6 @@ export const handler = createHttpHandler(async (request) => {
     }
 
     for (const record of variantRecords) {
-      if (!isOnOrAfterMadridToday(record.date, todayStart)) {
-        continue;
-      }
-
       const variantWooId = toMaybeString(record.id_woo);
       const studentCount = variantWooId ? studentsCountByVariant.get(variantWooId) ?? 0 : 0;
 
