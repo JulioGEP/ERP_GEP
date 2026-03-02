@@ -111,7 +111,7 @@ export const handler: Handler = async (event) => {
     const prisma = getPrisma();
     const todayIso = nowInMadridISO();
 
-    if (isScheduledInvocation(event) && !isWithinMadridSendWindow(todayIso, 5, 14)) {
+    if (isScheduledInvocation(event) && !isWithinMadridSendWindow(todayIso, 0, 4)) {
       return successResponse({
         message: 'Invocación programada fuera del horario de envío. Se omite.',
         nowMadrid: todayIso,
