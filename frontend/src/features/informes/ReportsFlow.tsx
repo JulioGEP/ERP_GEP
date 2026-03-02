@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Form from './components/Form';
 import Preview from './components/Preview';
 import './main.css';
@@ -32,6 +33,22 @@ const TITLES: Record<ReportType, string> = {
   preventivo: 'Informe de Preventivos',
   'preventivo-ebro': 'Informe Recurso Preventivo EBRO',
 };
+
+const TRAINER_REPORT_BASE_PATH = '/usuarios/trainer/informes';
+
+const REPORT_ROUTE_SEGMENT: Record<ReportType, string> = {
+  formacion: 'formacion',
+  preventivo: 'preventivo',
+  simulacro: 'simulacro',
+  'preventivo-ebro': 'recurso_preventivo_ebro',
+};
+
+const REPORT_TYPE_OPTIONS: Array<{ value: ReportType; label: string }> = [
+  { value: 'formacion', label: 'Formación' },
+  { value: 'preventivo', label: 'Preventivo' },
+  { value: 'simulacro', label: 'Simulacro' },
+  { value: 'preventivo-ebro', label: 'Recurso Preventivo EBRO' },
+];
 
 const createEmptyDraft = (type: ReportType): ReportDraft => ({
   type,
@@ -101,10 +118,20 @@ const resolveInitialDraft = (
 };
 
 export function ReportsFlow({ type, title, initialDraft }: ReportsFlowProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [stage, setStage] = useState<Stage>('form');
+
+  const locationPrefill = useMemo(() => {
+    const state = location.state as { reportPrefill?: Partial<ReportDraft> | null } | null;
+    return state?.reportPrefill ?? null;
+  }, [location.state]);
+
+  const effectiveInitialDraft = initialDraft ?? locationPrefill;
+
   const resolvedInitialDraft = useMemo(
-    () => resolveInitialDraft(type, initialDraft),
-    [type, initialDraft],
+    () => resolveInitialDraft(type, effectiveInitialDraft),
+    [effectiveInitialDraft, type],
   );
   const [draft, setDraft] = useState<ReportDraft>(() => resolvedInitialDraft);
 
@@ -114,6 +141,8 @@ export function ReportsFlow({ type, title, initialDraft }: ReportsFlowProps) {
   }, [type, resolvedInitialDraft]);
 
   const resolvedTitle = useMemo(() => title || TITLES[type], [title, type]);
+
+  const trainerReportPrefill = effectiveInitialDraft ?? null;
 
   const handleNext = (nextDraft: ReportDraft) => {
     setDraft(nextDraft);
@@ -137,11 +166,25 @@ export function ReportsFlow({ type, title, initialDraft }: ReportsFlowProps) {
     );
   }
 
-  // arriba, junto a los otros handlers
   const handleChooseAnother = () => {
     setDraft(createEmptyDraft(type));
     setStage('form');
   };
+
+  const isTrainerReportsFlow = location.pathname.startsWith(TRAINER_REPORT_BASE_PATH);
+
+  const chooseAnotherOptions = useMemo(() => {
+    if (!isTrainerReportsFlow) return [];
+    return REPORT_TYPE_OPTIONS.filter((option) => option.value !== type).map((option) => ({
+      ...option,
+      onClick: () => {
+        const nextPath = `${TRAINER_REPORT_BASE_PATH}/${REPORT_ROUTE_SEGMENT[option.value]}`;
+        navigate(nextPath, {
+          state: trainerReportPrefill ? { reportPrefill: trainerReportPrefill } : undefined,
+        });
+      },
+    }));
+  }, [isTrainerReportsFlow, navigate, trainerReportPrefill, type]);
 
   return (
     <Form
@@ -150,6 +193,7 @@ export function ReportsFlow({ type, title, initialDraft }: ReportsFlowProps) {
       type={type}
       onNext={handleNext}
       onChooseAnother={handleChooseAnother}
+      chooseAnotherOptions={chooseAnotherOptions as any}
     />
   );
 }

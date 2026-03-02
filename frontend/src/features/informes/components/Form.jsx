@@ -120,7 +120,14 @@ const sanitizeSessionOption = (session) => {
   return { id, number, nombre, direccion, fecha, label }
 }
 
-export default function Form({ initial, onNext, title = 'Informe de Formación', onChooseAnother, type = 'formacion' }) {
+export default function Form({
+  initial,
+  onNext,
+  title = 'Informe de Formación',
+  onChooseAnother,
+  chooseAnotherOptions = [],
+  type = 'formacion',
+}) {
   const formRef = useRef(null)
 
   const isSimulacro = type === 'simulacro'
@@ -128,6 +135,50 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
   const isPreventivoEbro = type === 'preventivo-ebro'
   const isFormacion = type === 'formacion'
   const canChooseAnother = typeof onChooseAnother === 'function'
+  const hasChooseAnotherOptions = Array.isArray(chooseAnotherOptions) && chooseAnotherOptions.length > 0
+  const [isChooseAnotherMenuOpen, setIsChooseAnotherMenuOpen] = useState(false)
+
+  const renderChooseAnotherControl = (className = '') => {
+    if (!canChooseAnother) {
+      return null
+    }
+
+    if (!hasChooseAnotherOptions) {
+      return (
+        <button type="button" className={`btn btn-secondary ${className}`.trim()} onClick={onChooseAnother}>
+          Elegir otro informe
+        </button>
+      )
+    }
+
+    return (
+      <div className={`dropdown ${className}`.trim()}>
+        <button
+          type="button"
+          className="btn btn-secondary dropdown-toggle"
+          onClick={() => setIsChooseAnotherMenuOpen((open) => !open)}
+        >
+          Elegir otro informe
+        </button>
+        <ul className={`dropdown-menu${isChooseAnotherMenuOpen ? ' show' : ''}`}>
+          {chooseAnotherOptions.map((option) => (
+            <li key={option.value}>
+              <button
+                type="button"
+                className="dropdown-item"
+                onClick={() => {
+                  setIsChooseAnotherMenuOpen(false)
+                  option.onClick()
+                }}
+              >
+                {option.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
   const direccionSedeLabel = isPreventivo
     ? 'Dirección del Preventivo'
     : isSimulacro
@@ -1037,15 +1088,7 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
     <form ref={formRef} className="d-grid gap-3" onSubmit={onSubmit}>
       <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2">
         <h1 className="h5 mb-0">{title}</h1>
-        {canChooseAnother && (
-          <button
-            type="button"
-            className="btn btn-secondary mt-2 mt-md-0"
-            onClick={onChooseAnother}
-          >
-            Elegir otro informe
-          </button>
-        )}
+        {canChooseAnother && renderChooseAnotherControl('mt-2 mt-md-0')}
       </div>
 
       {/* ===== Cliente + Formador en 2 columnas ===== */}
@@ -1352,7 +1395,7 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
 
       <div className="d-flex justify-content-between">
         {canChooseAnother ? (
-          <button type="button" className="btn btn-secondary" onClick={onChooseAnother}>Elegir otro informe</button>
+          renderChooseAnotherControl()
         ) : <span />}
         <button type="submit" className="btn btn-primary">Siguiente</button>
       </div>
