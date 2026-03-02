@@ -125,13 +125,12 @@ function renderBooleanField(field: { value: boolean | null; label: string | null
   return '—';
 }
 
-function isSessionConfirmed(session: TrainerSessionDetail): boolean {
-  const status = session.trainerInviteStatus;
-  return status === 'CONFIRMED';
-}
-
 function isSessionPending(session: TrainerSessionDetail): boolean {
   return session.trainerInviteStatus === 'PENDING';
+}
+
+function isSessionVisibleForTrainer(session: TrainerSessionDetail): boolean {
+  return session.trainerInviteStatus !== 'DECLINED';
 }
 
 function formatTrainerName(trainer: TrainerSessionTrainer): string {
@@ -3246,11 +3245,11 @@ export default function TrainerSessionsPage() {
     if (!allDateEntries.length) return [] as TrainerSessionsDateEntry[];
     return allDateEntries
       .map((entry) => {
-        const confirmedSessions = entry.sessions.filter(isSessionConfirmed);
-        if (confirmedSessions.length === entry.sessions.length) {
+        const visibleSessions = entry.sessions.filter(isSessionVisibleForTrainer);
+        if (visibleSessions.length === entry.sessions.length) {
           return entry;
         }
-        return { ...entry, sessions: confirmedSessions } satisfies TrainerSessionsDateEntry;
+        return { ...entry, sessions: visibleSessions } satisfies TrainerSessionsDateEntry;
       })
       .filter((entry) => entry.sessions.length || entry.variants.length);
   }, [allDateEntries]);
