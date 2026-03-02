@@ -35,7 +35,7 @@
 
 [[scheduled]]
   function = "daily-trainers-slack"
-  cron = "5 * * * *"
+  cron = "0 * * * *"
 
 [[scheduled]]
   function = "control-horario-email-alerts"
