@@ -37,6 +37,10 @@
   function = "daily-trainers-slack"
   cron = "5 * * * *"
 
+[[scheduled]]
+  function = "control-horario-email-alerts"
+  cron = "*/5 * * * *"
+
 # --------- Redirects ---------
 
 # Health
