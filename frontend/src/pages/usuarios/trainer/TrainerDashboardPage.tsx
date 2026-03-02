@@ -185,7 +185,8 @@ export default function TrainerDashboardPage() {
                   <Table hover responsive className="mb-0">
                     <thead className="text-uppercase small text-muted">
                       <tr>
-                        <th className="fw-semibold">Nº Presupuesto</th>
+                        <th className="fw-semibold">Presu</th>
+                        <th className="fw-semibold">Fecha</th>
                         <th className="fw-semibold">Título de la sesión</th>
                         <th className="fw-semibold">Formación</th>
                         <th className="fw-semibold">Dirección</th>
@@ -208,6 +209,7 @@ export default function TrainerDashboardPage() {
                           }}
                         >
                           <td className="align-middle text-nowrap">{session.budgetNumber ?? <span className="text-muted">—</span>}</td>
+                          <td className="align-middle text-nowrap">{formatVariantDate(session.date) ?? <span className="text-muted">—</span>}</td>
                           <td className="align-middle">{session.sessionTitle ?? <span className="text-muted">—</span>}</td>
                           <td className="align-middle">{session.productName ?? <span className="text-muted">—</span>}</td>
                           <td className="align-middle">{session.address ?? <span className="text-muted">—</span>}</td>
