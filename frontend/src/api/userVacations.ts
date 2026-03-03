@@ -1,7 +1,21 @@
 // frontend/src/api/userVacations.ts
 import { delJson, getJson, patchJson, postJson } from './client';
 
-export type VacationType = 'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'I' | 'N' | 'C' | 'Y';
+export type VacationType =
+  | 'V'
+  | 'L'
+  | 'A'
+  | 'T'
+  | 'M'
+  | 'H'
+  | 'F'
+  | 'R'
+  | 'P'
+  | 'J'
+  | 'I'
+  | 'N'
+  | 'C'
+  | 'Y';
 
 export type UserVacationDay = {
   date: string; // ISO YYYY-MM-DD

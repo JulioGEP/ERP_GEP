@@ -585,7 +585,7 @@ export default function ProfilePage() {
 
   const vacationData = vacationsQuery.data;
   const vacationCounts: Record<VacationType, number> =
-    vacationData?.counts ?? { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0, N: 0, C: 0, Y: 0 };
+    vacationData?.counts ?? { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, J: 0, I: 0, N: 0, C: 0, Y: 0 };
   const holidayDays = useMemo(() => {
     return new Set(
       (vacationData?.days ?? [])
