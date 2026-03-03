@@ -1,6 +1,6 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Badge, Button, Card, Spinner, Table } from 'react-bootstrap';
+import { Accordion, Alert, Badge, Button, Card, Spinner, Table } from 'react-bootstrap';
 import { isApiError } from '../../api/client';
 import {
   clockInControlHorario,
@@ -16,24 +16,12 @@ function formatDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function getCurrentMonthRange(): { startDate: string; endDate: string } {
+function getHistoricRange(): { startDate: string; endDate: string } {
   const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
   return {
-    startDate: formatDateKey(start),
+    startDate: '2000-01-01',
     endDate: formatDateKey(now),
   };
-}
-
-function buildDateRange(start: string, end: string): string[] {
-  const dates: string[] = [];
-  const current = new Date(`${start}T00:00:00`);
-  const endDate = new Date(`${end}T00:00:00`);
-  while (current <= endDate) {
-    dates.push(formatDateKey(current));
-    current.setDate(current.getDate() + 1);
-  }
-  return dates;
 }
 
 function diffMinutes(start: string, end: Date): number {
@@ -48,26 +36,9 @@ function formatDuration(totalMinutes: number): string {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
-function getIsoWeekInfo(date: Date): { week: number; year: number } {
-  const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNumber = (target.getUTCDay() + 6) % 7;
-  target.setUTCDate(target.getUTCDate() - dayNumber + 3);
-  const isoYear = target.getUTCFullYear();
-  const firstThursday = new Date(Date.UTC(isoYear, 0, 4));
-  const week =
-    1 +
-    Math.round(((target.getTime() - firstThursday.getTime()) / 86400000 - 3) / 7);
-  return { week, year: isoYear };
-}
-
-function getIsoWeekKey(date: string): string {
-  const { week, year } = getIsoWeekInfo(new Date(`${date}T00:00:00`));
-  return `${year}-W${String(week).padStart(2, '0')}`;
-}
-
 export default function ControlHorarioPage() {
   const [now, setNow] = useState(() => new Date());
-  const [range] = useState(getCurrentMonthRange);
+  const [range] = useState(getHistoricRange);
 
   const queryClient = useQueryClient();
 
@@ -133,33 +104,46 @@ export default function ControlHorarioPage() {
     [],
   );
 
-  const datesInRange = useMemo(() => buildDateRange(range.startDate, range.endDate), [range]);
-  const weekGroups = useMemo(() => {
-    const groups: Array<{
-      key: string;
-      label: string;
-      dates: string[];
-      totalMinutes: number;
-    }> = [];
+  const monthFormatter = useMemo(() => new Intl.DateTimeFormat('es-ES', { month: 'long' }), []);
+  const historicGroups = useMemo(() => {
+    const monthMap = new Map<
+      string,
+      {
+        monthKey: string;
+        monthLabel: string;
+        year: number;
+        month: number;
+        dates: string[];
+        totalMinutes: number;
+      }
+    >();
 
-    datesInRange.forEach((date) => {
-      const key = getIsoWeekKey(date);
-      const currentWeek = groups.at(-1);
-      if (!currentWeek || currentWeek.key !== key) {
-        const { week, year } = getIsoWeekInfo(new Date(`${date}T00:00:00`));
-        groups.push({
-          key,
-          label: `Semana ${week} (${year})`,
+    const dates = Array.from(entriesByDate.keys()).sort((a, b) => b.localeCompare(a));
+    dates.forEach((date) => {
+      const [yearRaw, monthRaw] = date.split('-');
+      const year = Number.parseInt(yearRaw, 10);
+      const month = Number.parseInt(monthRaw, 10);
+      const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+      const monthDate = new Date(Date.UTC(year, month - 1, 1));
+
+      const existing = monthMap.get(monthKey);
+      if (existing) {
+        existing.dates.push(date);
+      } else {
+        monthMap.set(monthKey, {
+          monthKey,
+          monthLabel: monthFormatter.format(monthDate),
+          year,
+          month,
           dates: [date],
           totalMinutes: 0,
         });
-      } else {
-        currentWeek.dates.push(date);
       }
     });
 
-    groups.forEach((group) => {
-      group.totalMinutes = group.dates.reduce((acc, date) => {
+    const months = Array.from(monthMap.values()).sort((a, b) => b.monthKey.localeCompare(a.monthKey));
+    months.forEach((monthGroup) => {
+      monthGroup.totalMinutes = monthGroup.dates.reduce((acc, date) => {
         const entriesForDate = entriesByDate.get(date) ?? [];
         const dateTotal = entriesForDate.reduce((minutes, entry) => {
           if (!entry.checkIn || !entry.checkOut) return minutes;
@@ -169,8 +153,39 @@ export default function ControlHorarioPage() {
       }, 0);
     });
 
-    return groups;
-  }, [datesInRange, entriesByDate]);
+    const yearMap = new Map<
+      number,
+      {
+        year: number;
+        months: typeof months;
+        totalMinutes: number;
+      }
+    >();
+
+    months.forEach((monthGroup) => {
+      const existing = yearMap.get(monthGroup.year);
+      if (existing) {
+        existing.months.push(monthGroup);
+        existing.totalMinutes += monthGroup.totalMinutes;
+      } else {
+        yearMap.set(monthGroup.year, {
+          year: monthGroup.year,
+          months: [monthGroup],
+          totalMinutes: monthGroup.totalMinutes,
+        });
+      }
+    });
+
+    return Array.from(yearMap.values()).sort((a, b) => b.year - a.year);
+  }, [entriesByDate, monthFormatter]);
+
+  const currentYear = now.getFullYear();
+  const currentMonthKey = `${currentYear}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const defaultYearKey = historicGroups.find((group) => group.year === currentYear)
+    ? String(currentYear)
+    : historicGroups[0]
+      ? String(historicGroups[0].year)
+      : undefined;
   let content: JSX.Element;
 
   if (controlHorarioQuery.isLoading) {
@@ -185,69 +200,95 @@ export default function ControlHorarioPage() {
     content = <Alert variant="danger">{message}</Alert>;
   } else {
     content = (
-      <div className="table-responsive">
-        <Table striped bordered hover className="align-middle">
-          <thead>
-            <tr>
-              <th style={{ width: '18%' }}>Fecha</th>
-              <th>Fichajes</th>
-              <th style={{ width: '14%' }}>Total</th>
-              <th style={{ width: '14%' }}>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {weekGroups.map((week) => (
-              <Fragment key={week.key}>
-                <tr className="table-light">
-                  <td colSpan={4} className="fw-semibold">
-                    {week.label}
-                  </td>
-                </tr>
-                {week.dates.map((date) => {
-                  const entriesForDate = entriesByDate.get(date) ?? [];
-                  const totalMinutes = entriesForDate.reduce((acc, entry) => {
-                    if (!entry.checkIn || !entry.checkOut) return acc;
-                    return acc + diffMinutes(entry.checkIn, new Date(entry.checkOut));
-                  }, 0);
-                  return (
-                    <tr key={date}>
-                      <td>{dateFormatter.format(new Date(`${date}T00:00:00`))}</td>
-                      <td>
-                        {entriesForDate.length ? (
-                          <div className="d-flex flex-column gap-2">
-                            {entriesForDate.map((entry) => {
-                              const hasEnd = Boolean(entry.checkOut);
-                              return (
-                                <div key={entry.id} className="d-flex align-items-center gap-2">
-                                  <span>
-                                    {entry.checkIn ? timeShortFormatter.format(new Date(entry.checkIn)) : '—'} →{' '}
-                                    {entry.checkOut ? timeShortFormatter.format(new Date(entry.checkOut)) : '—'}
-                                  </span>
-                                  {!hasEnd ? <Badge bg="warning" text="dark">En curso</Badge> : null}
-                                </div>
-                              );
-                            })}
+      <div className="d-grid gap-3">
+        {historicGroups.length ? (
+          <Accordion defaultActiveKey={defaultYearKey}>
+            {historicGroups.map((yearGroup) => (
+              <Accordion.Item eventKey={String(yearGroup.year)} key={yearGroup.year}>
+                <Accordion.Header>
+                  {yearGroup.year} · Total {formatDuration(yearGroup.totalMinutes)}
+                </Accordion.Header>
+                <Accordion.Body className="px-0 pb-0">
+                  <Accordion defaultActiveKey={currentMonthKey} alwaysOpen>
+                    {yearGroup.months.map((monthGroup) => (
+                      <Accordion.Item key={monthGroup.monthKey} eventKey={monthGroup.monthKey}>
+                        <Accordion.Header>
+                          {monthGroup.monthLabel.charAt(0).toUpperCase() + monthGroup.monthLabel.slice(1)} · Total{' '}
+                          {formatDuration(monthGroup.totalMinutes)}
+                        </Accordion.Header>
+                        <Accordion.Body>
+                          <div className="table-responsive">
+                            <Table striped bordered hover className="align-middle mb-0">
+                              <thead>
+                                <tr>
+                                  <th style={{ width: '18%' }}>Fecha</th>
+                                  <th>Fichajes</th>
+                                  <th style={{ width: '14%' }}>Total</th>
+                                  <th style={{ width: '14%' }}>Acciones</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {monthGroup.dates.map((date) => {
+                                  const entriesForDate = entriesByDate.get(date) ?? [];
+                                  const totalMinutes = entriesForDate.reduce((acc, entry) => {
+                                    if (!entry.checkIn || !entry.checkOut) return acc;
+                                    return acc + diffMinutes(entry.checkIn, new Date(entry.checkOut));
+                                  }, 0);
+                                  return (
+                                    <tr key={date}>
+                                      <td>{dateFormatter.format(new Date(`${date}T00:00:00`))}</td>
+                                      <td>
+                                        {entriesForDate.length ? (
+                                          <div className="d-flex flex-column gap-2">
+                                            {entriesForDate.map((entry) => {
+                                              const hasEnd = Boolean(entry.checkOut);
+                                              return (
+                                                <div key={entry.id} className="d-flex align-items-center gap-2">
+                                                  <span>
+                                                    {entry.checkIn
+                                                      ? timeShortFormatter.format(new Date(entry.checkIn))
+                                                      : '—'}{' '}
+                                                    →{' '}
+                                                    {entry.checkOut
+                                                      ? timeShortFormatter.format(new Date(entry.checkOut))
+                                                      : '—'}
+                                                  </span>
+                                                  {!hasEnd ? (
+                                                    <Badge bg="warning" text="dark">
+                                                      En curso
+                                                    </Badge>
+                                                  ) : null}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        ) : (
+                                          <span className="text-muted">Sin fichajes</span>
+                                        )}
+                                      </td>
+                                      <td>{totalMinutes ? formatDuration(totalMinutes) : '—'}</td>
+                                      <td>
+                                        <span className="text-muted">Bloqueado</span>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </Table>
                           </div>
-                        ) : (
-                          <span className="text-muted">Sin fichajes</span>
-                        )}
-                      </td>
-                      <td>{totalMinutes ? formatDuration(totalMinutes) : '—'}</td>
-                      <td>
-                        <span className="text-muted">Bloqueado</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-                <tr className="table-secondary">
-                  <td colSpan={2} className="fw-semibold">Total semana</td>
-                  <td className="fw-semibold">{week.totalMinutes ? formatDuration(week.totalMinutes) : '—'}</td>
-                  <td />
-                </tr>
-              </Fragment>
+                        </Accordion.Body>
+                      </Accordion.Item>
+                    ))}
+                  </Accordion>
+                </Accordion.Body>
+              </Accordion.Item>
             ))}
-          </tbody>
-        </Table>
+          </Accordion>
+        ) : (
+          <Alert variant="info" className="mb-0">
+            Todavía no hay fichajes en tu histórico.
+          </Alert>
+        )}
       </div>
     );
   }
