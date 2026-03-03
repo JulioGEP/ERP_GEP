@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Accordion, Alert, Badge, Button, Card, Spinner, Table } from 'react-bootstrap';
 import { isApiError } from '../../api/client';
@@ -34,6 +34,23 @@ function formatDuration(totalMinutes: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function getIsoWeekInfo(date: Date): { week: number; year: number } {
+  const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNr = (target.getUTCDay() + 6) % 7;
+  target.setUTCDate(target.getUTCDate() - dayNr + 3);
+  const isoYear = target.getUTCFullYear();
+  const firstThursday = new Date(Date.UTC(isoYear, 0, 4));
+  const week =
+    1 +
+    Math.round(((target.getTime() - firstThursday.getTime()) / 86400000 - 3) / 7);
+  return { week, year: isoYear };
+}
+
+function getIsoWeekKey(date: Date): string {
+  const { week, year } = getIsoWeekInfo(date);
+  return `${year}-W${String(week).padStart(2, '0')}`;
 }
 
 export default function ControlHorarioPage() {
@@ -228,51 +245,105 @@ export default function ControlHorarioPage() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {monthGroup.dates.map((date) => {
-                                  const entriesForDate = entriesByDate.get(date) ?? [];
-                                  const totalMinutes = entriesForDate.reduce((acc, entry) => {
-                                    if (!entry.checkIn || !entry.checkOut) return acc;
-                                    return acc + diffMinutes(entry.checkIn, new Date(entry.checkOut));
-                                  }, 0);
-                                  return (
-                                    <tr key={date}>
-                                      <td>{dateFormatter.format(new Date(`${date}T00:00:00`))}</td>
-                                      <td>
-                                        {entriesForDate.length ? (
-                                          <div className="d-flex flex-column gap-2">
-                                            {entriesForDate.map((entry) => {
-                                              const hasEnd = Boolean(entry.checkOut);
-                                              return (
-                                                <div key={entry.id} className="d-flex align-items-center gap-2">
-                                                  <span>
-                                                    {entry.checkIn
-                                                      ? timeShortFormatter.format(new Date(entry.checkIn))
-                                                      : '—'}{' '}
-                                                    →{' '}
-                                                    {entry.checkOut
-                                                      ? timeShortFormatter.format(new Date(entry.checkOut))
-                                                      : '—'}
-                                                  </span>
-                                                  {!hasEnd ? (
-                                                    <Badge bg="warning" text="dark">
-                                                      En curso
-                                                    </Badge>
-                                                  ) : null}
+                                {(() => {
+                                  const weekGroups = monthGroup.dates.reduce<
+                                    Array<{
+                                      key: string;
+                                      label: string;
+                                      dates: string[];
+                                      totalMinutes: number;
+                                    }>
+                                  >((groups, date) => {
+                                    const jsDate = new Date(`${date}T00:00:00`);
+                                    const weekKey = getIsoWeekKey(jsDate);
+                                    const weekInfo = getIsoWeekInfo(jsDate);
+                                    const label = `Semana ${weekInfo.week} · ${weekInfo.year}`;
+                                    const entriesForDate = entriesByDate.get(date) ?? [];
+                                    const dateTotalMinutes = entriesForDate.reduce((acc, entry) => {
+                                      if (!entry.checkIn || !entry.checkOut) return acc;
+                                      return acc + diffMinutes(entry.checkIn, new Date(entry.checkOut));
+                                    }, 0);
+
+                                    const existing = groups.find((group) => group.key === weekKey);
+                                    if (existing) {
+                                      existing.dates.push(date);
+                                      existing.totalMinutes += dateTotalMinutes;
+                                    } else {
+                                      groups.push({
+                                        key: weekKey,
+                                        label,
+                                        dates: [date],
+                                        totalMinutes: dateTotalMinutes,
+                                      });
+                                    }
+
+                                    return groups;
+                                  }, []);
+
+                                  return weekGroups.map((weekGroup) => (
+                                    <Fragment key={weekGroup.key}>
+                                      <tr className="table-light">
+                                        <td colSpan={4} className="fw-semibold">
+                                          {weekGroup.label}
+                                        </td>
+                                      </tr>
+                                      {weekGroup.dates.map((date) => {
+                                        const entriesForDate = entriesByDate.get(date) ?? [];
+                                        const totalMinutes = entriesForDate.reduce((acc, entry) => {
+                                          if (!entry.checkIn || !entry.checkOut) return acc;
+                                          return acc + diffMinutes(entry.checkIn, new Date(entry.checkOut));
+                                        }, 0);
+                                        return (
+                                          <tr key={date}>
+                                            <td>{dateFormatter.format(new Date(`${date}T00:00:00`))}</td>
+                                            <td>
+                                              {entriesForDate.length ? (
+                                                <div className="d-flex flex-column gap-2">
+                                                  {entriesForDate.map((entry) => {
+                                                    const hasEnd = Boolean(entry.checkOut);
+                                                    return (
+                                                      <div key={entry.id} className="d-flex align-items-center gap-2">
+                                                        <span>
+                                                          {entry.checkIn
+                                                            ? timeShortFormatter.format(new Date(entry.checkIn))
+                                                            : '—'}{' '}
+                                                          →{' '}
+                                                          {entry.checkOut
+                                                            ? timeShortFormatter.format(new Date(entry.checkOut))
+                                                            : '—'}
+                                                        </span>
+                                                        {!hasEnd ? (
+                                                          <Badge bg="warning" text="dark">
+                                                            En curso
+                                                          </Badge>
+                                                        ) : null}
+                                                      </div>
+                                                    );
+                                                  })}
                                                 </div>
-                                              );
-                                            })}
-                                          </div>
-                                        ) : (
-                                          <span className="text-muted">Sin fichajes</span>
-                                        )}
-                                      </td>
-                                      <td>{totalMinutes ? formatDuration(totalMinutes) : '—'}</td>
-                                      <td>
-                                        <span className="text-muted">Bloqueado</span>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
+                                              ) : (
+                                                <span className="text-muted">Sin fichajes</span>
+                                              )}
+                                            </td>
+                                            <td>{totalMinutes ? formatDuration(totalMinutes) : '—'}</td>
+                                            <td>
+                                              <span className="text-muted">Bloqueado</span>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                      <tr className="table-secondary">
+                                        <td colSpan={2} className="fw-semibold">
+                                          Total semana
+                                        </td>
+                                        <td className="fw-semibold">
+                                          {weekGroup.totalMinutes ? formatDuration(weekGroup.totalMinutes) : '—'}
+                                        </td>
+                                        <td />
+                                      </tr>
+                                    </Fragment>
+                                  ));
+                                })()}
                               </tbody>
                             </Table>
                           </div>
