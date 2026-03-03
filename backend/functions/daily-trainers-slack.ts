@@ -3,11 +3,10 @@ import type { Handler } from '@netlify/functions';
 import { getPrisma } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
 import { nowInMadridISO } from './_shared/timezone';
+import { isScheduledInvocation, isWithinMadridAutomationWindow } from './_shared/slackSchedule';
 
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
 const SLACK_CHANNEL_ID = 'C063C7QRHK4';
-const NETLIFY_SCHEDULE_HEADER = 'x-netlify-event';
-
 type SessionSummary = {
   company: string;
   sessionName: string;
@@ -50,18 +49,6 @@ function buildSlackMessage(sessions: SessionSummary[]): string {
   );
 
   return ['Hoy tenemos a', ...lines, 'De tu querido Bot', '¡Gracias!'].join('\n');
-}
-
-function isScheduledInvocation(event: Parameters<Handler>[0]): boolean {
-  const scheduleHeader = event.headers?.[NETLIFY_SCHEDULE_HEADER] ?? event.headers?.[NETLIFY_SCHEDULE_HEADER.toUpperCase()];
-  return String(scheduleHeader ?? '').toLowerCase() === 'schedule';
-}
-
-function isWithinMadridSendWindow(isoDateTime: string, startMinute: number, endMinute: number): boolean {
-  const timePart = isoDateTime.split('T')[1] ?? '';
-  const [hour = '', minute = ''] = timePart.split(':');
-  const minuteNumber = Number.parseInt(minute, 10);
-  return hour === '07' && Number.isInteger(minuteNumber) && minuteNumber >= startMinute && minuteNumber <= endMinute;
 }
 
 async function postSlackMessage(token: string, text: string): Promise<void> {
@@ -111,7 +98,7 @@ export const handler: Handler = async (event) => {
     const prisma = getPrisma();
     const todayIso = nowInMadridISO();
 
-    if (isScheduledInvocation(event) && !isWithinMadridSendWindow(todayIso, 0, 4)) {
+    if (isScheduledInvocation(event) && !isWithinMadridAutomationWindow(todayIso)) {
       return successResponse({
         message: 'Invocación programada fuera del horario de envío. Se omite.',
         nowMadrid: todayIso,

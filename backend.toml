@@ -11,3 +11,11 @@ included_files = ["node_modules/.prisma/**"]
 [build.environment]
 NODE_VERSION = "20"
 
+
+[[scheduled]]
+function = "daily-availability-slack"
+cron = "0 5,6 * * *"
+
+[[scheduled]]
+function = "daily-trainers-slack"
+cron = "0 5,6 * * *"
