@@ -33,6 +33,7 @@ type OfficePayrollRow = office_payrolls & {
   contingencias_comunes?: DecimalLike;
   contingencias_comunes_detalle?: string | null;
   total_empresa?: DecimalLike;
+  comment_payroll?: string | null;
 };
 
 type OfficePayrollResponseItem = {
@@ -54,6 +55,7 @@ type OfficePayrollResponseItem = {
   variable: number | null;
   totalExtras: number | null;
   commentCost: string | null;
+  commentPayroll: string | null;
   startDate: string | null;
   convenio: string | null;
   categoria: string | null;
@@ -109,6 +111,7 @@ type OfficePayrollPayload = {
   variable?: unknown;
   totalExtras?: unknown;
   commentCost?: unknown;
+  commentPayroll?: unknown;
   convenio?: unknown;
   antiguedad?: unknown;
   horasSemana?: unknown;
@@ -353,6 +356,7 @@ function serializeRecord(
     variable: decimalToNumber(record.variable),
     totalExtras,
     commentCost: sanitizeText((record as { comment_cost?: unknown }).comment_cost),
+    commentPayroll: sanitizeText(record.comment_payroll),
     startDate: toIsoDateString(record.antiguedad ?? startDate),
     convenio: sanitizeText(record.convenio),
     categoria: sanitizeText(record.categoria),
@@ -535,6 +539,7 @@ async function handleGet(prisma = getPrisma(), request: any): Promise<ReturnType
             totalEmpresa: null,
             totalExtras: null,
             commentCost: null,
+            commentPayroll: null,
             defaultConvenio: sanitizeText(user.payroll?.convenio),
             defaultCategoria: sanitizeText(user.payroll?.categoria),
             defaultAntiguedad: toIsoDateString(user.payroll?.antiguedad as Date | null | undefined),
@@ -600,6 +605,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
   const hasVariable = hasField('variable');
   const hasTotalExtras = hasField('totalExtras');
   const hasCommentCost = hasField('commentCost');
+  const hasCommentPayroll = hasField('commentPayroll');
   const hasAntiguedad = hasField('antiguedad');
   const hasHorasSemana = hasField('horasSemana');
   const hasBaseRetencion = hasField('baseRetencion');
@@ -626,6 +632,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
   const variable = hasVariable ? parseDecimal(payload.variable) : undefined;
   const totalExtrasInput = hasTotalExtras ? parseDecimal(payload.totalExtras) : undefined;
   const commentCost = hasCommentCost ? sanitizeText(payload.commentCost) : undefined;
+  const commentPayroll = hasCommentPayroll ? sanitizeText(payload.commentPayroll) : undefined;
   const antiguedad = hasAntiguedad ? parseDateOnly(payload.antiguedad) : undefined;
   const horasSemana = hasHorasSemana ? parseDecimal(payload.horasSemana) : undefined;
   const baseRetencion = hasBaseRetencion ? parseDecimal(payload.baseRetencion) : undefined;
@@ -768,6 +775,8 @@ async function handlePut(prisma = getPrisma(), request: any) {
       resolvedTotalExtras === null ? null : toDecimalOrNull(resolvedTotalExtras);
   }
   if (hasCommentCost) (updateData as Record<string, unknown>).comment_cost = commentCost ?? null;
+  if (hasCommentPayroll)
+    (updateData as Record<string, unknown>).comment_payroll = commentPayroll ?? null;
   if (hasAntiguedad) updateData.antiguedad = antiguedad ?? null;
   if (hasHorasSemana)
     updateData.horas_semana = horasSemana === null ? null : toDecimalOrNull(horasSemana);
@@ -845,6 +854,9 @@ async function handlePut(prisma = getPrisma(), request: any) {
       variable: hasVariable ? (variable === null ? null : toDecimalOrNull(variable)) : null,
       total_extras: createTotalExtras === null ? null : toDecimalOrNull(createTotalExtras),
       ...(hasCommentCost ? ({ comment_cost: commentCost ?? null } as Record<string, string | null>) : {}),
+      ...(hasCommentPayroll
+        ? ({ comment_payroll: commentPayroll ?? null } as Record<string, string | null>)
+        : {}),
       antiguedad: antiguedad ?? null,
       horas_semana: hasHorasSemana
         ? horasSemana === null

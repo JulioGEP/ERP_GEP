@@ -254,6 +254,7 @@ const PAYROLL_BASE_FIELDS: Array<keyof OfficePayrollRecord> = [
   'year',
   'month',
   'commentCost',
+  'commentPayroll',
   'startDate',
   'convenio',
   'categoria',
@@ -763,6 +764,7 @@ const payrollInitialFields = {
   horasExtras: '',
   otrosGastos: '',
   variable: '',
+  commentPayroll: '',
 };
 
 type PayrollFieldKey = keyof typeof payrollInitialFields;
@@ -805,6 +807,7 @@ function buildPayrollFieldsFromEntry(entry: OfficePayrollRecord): typeof payroll
     horasExtras: resolveValue(entry.horasExtras),
     otrosGastos: resolveValue(entry.otrosGastos),
     variable: resolveValue(entry.variable),
+    commentPayroll: resolveValue(entry.commentPayroll),
   });
 }
 
@@ -922,6 +925,7 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
         contingenciasComunesDetalle: fields.contingenciasComunesDetalle,
         contingenciasComunes: fields.contingenciasComunes,
         totalEmpresa: fields.totalEmpresa,
+        commentPayroll: fields.commentPayroll,
       }),
     onSuccess: (saved) => {
       onSaved(saved);
@@ -1131,6 +1135,15 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
             </Row>
           </div>
         </div>
+        <Form.Group controlId="payroll-comment-payroll">
+          <Form.Label>Observaciones</Form.Label>
+          <Form.Control
+            as="textarea"
+            rows={3}
+            value={fields.commentPayroll}
+            onChange={(event) => handleFieldChange('commentPayroll', event.target.value)}
+          />
+        </Form.Group>
         <div className="d-flex justify-content-end gap-2">
           <Button variant="secondary" onClick={onHide} disabled={mutation.isPending}>
             Cancelar
@@ -1318,6 +1331,7 @@ export default function NominasOficinaPage({
         'festivo',
         'horas_extras',
         'gastos_extras',
+        'observaciones',
       ],
       ...entriesToExport.map((entry) => [
         entry.fullName,
@@ -1341,6 +1355,7 @@ export default function NominasOficinaPage({
         entry.festivo,
         entry.horasExtras,
         entry.otrosGastos,
+        entry.commentPayroll ?? '',
       ]),
     ];
 
