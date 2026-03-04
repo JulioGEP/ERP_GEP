@@ -941,6 +941,7 @@ export type OfficePayrollRecord = {
   festivo: number | null;
   horasExtras: number | null;
   otrosGastos: number | null;
+  variable: number | null;
   totalExtras: number | null;
   startDate: string | null;
   convenio: string | null;
@@ -1014,6 +1015,7 @@ export type OfficePayrollUpsertPayload = {
   festivo?: number | string | null;
   horasExtras?: number | string | null;
   otrosGastos?: number | string | null;
+  variable?: number | string | null;
   totalExtras?: number | string | null;
   antiguedad?: string | null;
   horasSemana?: number | string | null;
