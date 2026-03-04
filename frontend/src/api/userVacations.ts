@@ -19,7 +19,7 @@ export type VacationType =
 
 export type UserVacationDay = {
   date: string; // ISO YYYY-MM-DD
-  type: VacationType;
+  type: string;
 };
 
 export type UserVacationsResponse = {
@@ -127,7 +127,7 @@ export async function fetchVacationsSummary(year?: number): Promise<VacationSumm
 
 export async function applyBulkVacationDay(payload: {
   dates: string[];
-  type: VacationType;
+  type: string;
   userIds: string[];
 }): Promise<{
   dates: string[];

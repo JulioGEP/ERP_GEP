@@ -46,6 +46,7 @@ import {
   VACATION_TYPE_COLORS,
   VACATION_TYPE_INFO,
   VACATION_TYPE_LABELS,
+  isKnownVacationType,
 } from '../../constants/vacations';
 import { VacationCalendar } from '../../components/vacations/VacationCalendar';
 import { fetchTrainerDocuments } from '../../features/recursos/api';
@@ -1440,7 +1441,7 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
   const holidayDays = useMemo(() => {
     return new Set(
       (data?.days ?? [])
-        .filter((day) => HOLIDAY_TYPES.includes(day.type))
+        .filter((day) => HOLIDAY_TYPES.includes(day.type as VacationType))
         .map((day) => day.date),
     );
   }, [data?.days]);
@@ -1520,7 +1521,7 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
       ? (userDocumentsQuery.error as Error | undefined)?.message ?? 'No se pudieron cargar los documentos.'
       : null;
 
-  const handleDayClick = (date: string, type: VacationType | '') => {
+  const handleDayClick = (date: string, type: string | '') => {
     if (!selectionStart || selectionEnd) {
       setSelectionStart(date);
       setSelectionEnd(null);
@@ -1531,7 +1532,7 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
       setSelectionEnd(date);
     }
 
-    setSelectedType(type || '');
+    setSelectedType(type && isKnownVacationType(type) ? type : '');
   };
 
   const handleSaveDays = async () => {

@@ -1,6 +1,6 @@
 // frontend/src/components/vacations/VacationCalendar.tsx
-import type { VacationType, UserVacationDay } from '../../api/userVacations';
-import { VACATION_TYPE_LABELS } from '../../constants/vacations';
+import type { UserVacationDay } from '../../api/userVacations';
+import { getVacationTypeVisual } from '../../constants/vacations';
 
 const MONTH_FORMATTER = new Intl.DateTimeFormat('es-ES', { month: 'long' });
 const WEEKDAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
@@ -8,10 +8,21 @@ const WEEKDAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 export type VacationCalendarProps = {
   year: number;
   days: UserVacationDay[];
-  onDayClick?: (date: string, type: VacationType | '') => void;
+  onDayClick?: (date: string, type: string | '') => void;
   selectedDates?: string[];
   readOnly?: boolean;
 };
+
+function toTransparentColor(hexColor: string, opacity: number): string {
+  const hex = hexColor.replace('#', '');
+  if (hex.length !== 6) return `rgba(15, 23, 42, ${opacity})`;
+
+  const red = Number.parseInt(hex.slice(0, 2), 16);
+  const green = Number.parseInt(hex.slice(2, 4), 16);
+  const blue = Number.parseInt(hex.slice(4, 6), 16);
+
+  return `rgba(${red}, ${green}, ${blue}, ${opacity})`;
+}
 
 function buildDate(year: number, monthIndex: number, day: number): string {
   const iso = new Date(Date.UTC(year, monthIndex, day)).toISOString();
@@ -19,7 +30,7 @@ function buildDate(year: number, monthIndex: number, day: number): string {
 }
 
 export function VacationCalendar({ year, days, onDayClick, selectedDates = [], readOnly }: VacationCalendarProps) {
-  const daysMap = new Map<string, VacationType>();
+  const daysMap = new Map<string, string>();
   for (const day of days) {
     daysMap.set(day.date, day.type);
   }
@@ -32,7 +43,7 @@ export function VacationCalendar({ year, days, onDayClick, selectedDates = [], r
           const monthName = MONTH_FORMATTER.format(monthStart);
           const daysInMonth = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
           const weekdayOffset = (monthStart.getUTCDay() + 6) % 7; // Monday first
-          const cells: Array<{ date: string | null; dayLabel: string | null; type: VacationType | '' }> = [];
+          const cells: Array<{ date: string | null; dayLabel: string | null; type: string | '' }> = [];
 
           for (let i = 0; i < weekdayOffset; i += 1) {
             cells.push({ date: null, dayLabel: null, type: '' });
@@ -70,7 +81,18 @@ export function VacationCalendar({ year, days, onDayClick, selectedDates = [], r
 
                   const isSelected = selectedDates.includes(cell.date as string);
                   const typeClass = cell.type ? `type-${cell.type}` : '';
-                  const typeLabel = cell.type ? VACATION_TYPE_LABELS[cell.type] : '';
+                  const typeVisual = cell.type ? getVacationTypeVisual(cell.type) : null;
+                  const dayTypeStyle = typeVisual
+                    ? {
+                        backgroundColor: typeVisual.color,
+                      }
+                    : undefined;
+                  const dayStyle = typeVisual
+                    ? {
+                        borderColor: typeVisual.color,
+                        backgroundColor: toTransparentColor(typeVisual.color, 0.16),
+                      }
+                    : undefined;
 
                   return (
                     <button
@@ -79,6 +101,7 @@ export function VacationCalendar({ year, days, onDayClick, selectedDates = [], r
                       className={`vacation-day ${typeClass} ${isSelected ? 'selected' : ''} ${
                         readOnly ? 'is-readonly' : ''
                       }`.trim()}
+                      style={dayStyle}
                       onClick={
                         onDayClick && !readOnly ? () => onDayClick(cell.date as string, cell.type) : undefined
                       }
@@ -87,8 +110,10 @@ export function VacationCalendar({ year, days, onDayClick, selectedDates = [], r
                       <span className="day-number">{cell.dayLabel}</span>
                       {cell.type ? (
                         <>
-                          <span className="day-type">{cell.type}</span>
-                          <span className="day-type-toggle">{typeLabel}</span>
+                          <span className="day-type" style={dayTypeStyle}>
+                            {cell.type}
+                          </span>
+                          <span className="day-type-toggle">{typeVisual?.fullLabel ?? cell.type}</span>
                         </>
                       ) : null}
                     </button>

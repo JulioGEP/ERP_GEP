@@ -23,6 +23,7 @@ import {
   VACATION_TYPE_INFO,
   VACATION_TYPE_LABELS,
   VACATION_TYPE_ORDER,
+  isKnownVacationType,
 } from '../../constants/vacations';
 import { fetchTrainerDocuments, fetchTrainers, uploadTrainerDocument } from '../../features/recursos/api';
 import { fetchOfficePayrolls, type OfficePayrollRecord } from '../../features/reporting/api';
@@ -589,7 +590,7 @@ export default function ProfilePage() {
   const holidayDays = useMemo(() => {
     return new Set(
       (vacationData?.days ?? [])
-        .filter((day) => HOLIDAY_TYPES.includes(day.type))
+        .filter((day) => isKnownVacationType(day.type) && HOLIDAY_TYPES.includes(day.type))
         .map((day) => day.date),
     );
   }, [vacationData?.days]);
