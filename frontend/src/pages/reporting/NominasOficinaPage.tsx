@@ -191,11 +191,11 @@ type ExtrasModalProps = {
 };
 
 type ExtrasFieldConfig = {
-  key: 'dietas' | 'kilometraje' | 'pernocta' | 'nocturnidad' | 'festivo' | 'horasExtras' | 'otrosGastos';
+  key: 'dietas' | 'kilometraje' | 'pernocta' | 'nocturnidad' | 'festivo' | 'horasExtras' | 'otrosGastos' | 'variable';
   label: string;
   col: number;
   entryKey: keyof OfficePayrollRecord;
-  costsKey: TrainerExtraCostFieldKey;
+  costsKey?: TrainerExtraCostFieldKey;
 };
 
 type ExtrasSummaryKey = ExtrasFieldConfig['key'];
@@ -208,6 +208,7 @@ const EXTRAS_SUMMARY_FIELDS = [
   { key: 'festivo', label: 'Festivo', col: 6, entryKey: 'festivo', costsKey: 'festivo' },
   { key: 'horasExtras', label: 'Horas extras', col: 6, entryKey: 'horasExtras', costsKey: 'horasExtras' },
   { key: 'otrosGastos', label: 'Otros gastos', col: 12, entryKey: 'otrosGastos', costsKey: 'gastosExtras' },
+  { key: 'variable', label: 'Variable', col: 12, entryKey: 'variable' },
 ] as const satisfies ExtrasFieldConfig[];
 const EXTRAS_TOTAL_FIELDS: ExtrasSummaryKey[] = [
   'dietas',
@@ -217,6 +218,7 @@ const EXTRAS_TOTAL_FIELDS: ExtrasSummaryKey[] = [
   'festivo',
   'horasExtras',
   'otrosGastos',
+  'variable',
 ];
 
 const extrasInitialFields = EXTRAS_SUMMARY_FIELDS.reduce((acc, field) => {
@@ -321,6 +323,9 @@ function buildExtrasUpdatePayload(
         break;
       case 'otrosGastos':
         payload.otrosGastos = fields[field.key];
+        break;
+      case 'variable':
+        payload.variable = fields[field.key];
         break;
       default:
         payload[field.key] = fields[field.key];
@@ -428,7 +433,7 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
 
     for (const item of matchingExtraCosts) {
       for (const field of EXTRAS_SUMMARY_FIELDS) {
-        totals[field.key] += item.costs[field.costsKey] ?? 0;
+        totals[field.key] += field.costsKey ? item.costs[field.costsKey] ?? 0 : 0;
       }
     }
 
@@ -670,6 +675,7 @@ const payrollInitialFields = {
   festivo: '',
   horasExtras: '',
   otrosGastos: '',
+  variable: '',
 };
 
 type PayrollFieldKey = keyof typeof payrollInitialFields;
@@ -711,6 +717,7 @@ function buildPayrollFieldsFromEntry(entry: OfficePayrollRecord): typeof payroll
     festivo: resolveValue(entry.festivo),
     horasExtras: resolveValue(entry.horasExtras),
     otrosGastos: resolveValue(entry.otrosGastos),
+    variable: resolveValue(entry.variable),
   });
 }
 
@@ -735,10 +742,11 @@ function applyPayrollCalculations(fields: typeof payrollInitialFields): typeof p
   const festivo = normalizeNumber(fields.festivo);
   const horasExtras = normalizeNumber(fields.horasExtras);
   const otrosGastos = normalizeNumber(fields.otrosGastos);
+  const variable = normalizeNumber(fields.variable);
   const brutoExtrasTotal =
-    pernocta === null && nocturnidad === null && festivo === null && horasExtras === null && otrosGastos === null
+    pernocta === null && nocturnidad === null && festivo === null && horasExtras === null && otrosGastos === null && variable === null
       ? null
-      : (pernocta ?? 0) + (nocturnidad ?? 0) + (festivo ?? 0) + (horasExtras ?? 0) + (otrosGastos ?? 0);
+      : (pernocta ?? 0) + (nocturnidad ?? 0) + (festivo ?? 0) + (horasExtras ?? 0) + (otrosGastos ?? 0) + (variable ?? 0);
   const salarioBrutoTotal =
     salarioBruto === null && brutoExtrasTotal === null ? null : (salarioBruto ?? 0) + (brutoExtrasTotal ?? 0);
   const retencionPorcentaje = parsePercentageInput(fields.retencion ?? '');

@@ -21,6 +21,7 @@ type OfficePayrollRow = office_payrolls & {
   festivo?: DecimalLike;
   horas_extras?: DecimalLike;
   otros_gastos?: DecimalLike;
+  variable?: DecimalLike;
   convenio?: string | null;
   antiguedad?: Date | null;
   horas_semana?: DecimalLike;
@@ -50,6 +51,7 @@ type OfficePayrollResponseItem = {
   festivo: number | null;
   horasExtras: number | null;
   otrosGastos: number | null;
+  variable: number | null;
   totalExtras: number | null;
   startDate: string | null;
   convenio: string | null;
@@ -103,6 +105,7 @@ type OfficePayrollPayload = {
   festivo?: unknown;
   horasExtras?: unknown;
   otrosGastos?: unknown;
+  variable?: unknown;
   totalExtras?: unknown;
   convenio?: unknown;
   antiguedad?: unknown;
@@ -280,6 +283,7 @@ function calculateBrutoExtras(record: {
   nocturnidad?: DecimalLike;
   festivo?: DecimalLike;
   horas_extras?: DecimalLike;
+  variable?: DecimalLike;
 }): number | null {
   const values = [
     record.otros_gastos,
@@ -287,6 +291,7 @@ function calculateBrutoExtras(record: {
     record.nocturnidad,
     record.festivo,
     record.horas_extras,
+    record.variable,
   ]
     .map((value) => decimalToNumber(value))
     .filter((value): value is number => value !== null);
@@ -343,6 +348,7 @@ function serializeRecord(
     festivo: decimalToNumber(record.festivo),
     horasExtras: decimalToNumber(record.horas_extras),
     otrosGastos: decimalToNumber(record.otros_gastos),
+    variable: decimalToNumber(record.variable),
     totalExtras,
     startDate: toIsoDateString(record.antiguedad ?? startDate),
     convenio: sanitizeText(record.convenio),
@@ -507,6 +513,7 @@ async function handleGet(prisma = getPrisma(), request: any): Promise<ReturnType
             festivo: null,
             horasExtras: null,
             otrosGastos: null,
+            variable: null,
             startDate: toIsoDateString(periodStart),
             convenio: null,
             categoria: null,
@@ -586,6 +593,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
   const hasFestivo = hasField('festivo');
   const hasHorasExtras = hasField('horasExtras');
   const hasOtrosGastos = hasField('otrosGastos');
+  const hasVariable = hasField('variable');
   const hasTotalExtras = hasField('totalExtras');
   const hasAntiguedad = hasField('antiguedad');
   const hasHorasSemana = hasField('horasSemana');
@@ -610,6 +618,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
   const festivo = hasFestivo ? parseDecimal(payload.festivo) : undefined;
   const horasExtras = hasHorasExtras ? parseDecimal(payload.horasExtras) : undefined;
   const otrosGastos = hasOtrosGastos ? parseDecimal(payload.otrosGastos) : undefined;
+  const variable = hasVariable ? parseDecimal(payload.variable) : undefined;
   const totalExtrasInput = hasTotalExtras ? parseDecimal(payload.totalExtras) : undefined;
   const antiguedad = hasAntiguedad ? parseDateOnly(payload.antiguedad) : undefined;
   const horasSemana = hasHorasSemana ? parseDecimal(payload.horasSemana) : undefined;
@@ -682,6 +691,9 @@ async function handlePut(prisma = getPrisma(), request: any) {
     hasHorasExtras ||
     hasOtrosGastos;
 
+  const hasAnyBrutoExtraField =
+    hasPernocta || hasNocturnidad || hasFestivo || hasHorasExtras || hasOtrosGastos || hasVariable;
+
   const currentDietas = decimalToNumber(existingRecord?.dietas);
   const currentKilometrajes = decimalToNumber(existingRecord?.kilometrajes);
   const currentPernocta = decimalToNumber(existingRecord?.pernocta);
@@ -689,6 +701,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
   const currentFestivo = decimalToNumber(existingRecord?.festivo);
   const currentHorasExtras = decimalToNumber(existingRecord?.horas_extras);
   const currentOtrosGastos = decimalToNumber(existingRecord?.otros_gastos);
+  const currentVariable = decimalToNumber(existingRecord?.variable);
 
   const resolvedDietas = hasDietas ? dietas ?? null : currentDietas;
   const resolvedKilometrajes = hasKilometrajes ? kilometrajes ?? null : currentKilometrajes;
@@ -697,6 +710,23 @@ async function handlePut(prisma = getPrisma(), request: any) {
   const resolvedFestivo = hasFestivo ? festivo ?? null : currentFestivo;
   const resolvedHorasExtras = hasHorasExtras ? horasExtras ?? null : currentHorasExtras;
   const resolvedOtrosGastos = hasOtrosGastos ? otrosGastos ?? null : currentOtrosGastos;
+  const resolvedVariable = hasVariable ? variable ?? null : currentVariable;
+
+
+  const currentSalarioBruto = decimalToNumber(existingRecord?.salario_bruto);
+  const resolvedSalarioBruto = hasSalarioBruto ? salarioBruto ?? null : currentSalarioBruto;
+  const resolvedSalarioBrutoExtras = calculateBrutoExtras({
+    pernocta: resolvedPernocta,
+    nocturnidad: resolvedNocturnidad,
+    festivo: resolvedFestivo,
+    horas_extras: resolvedHorasExtras,
+    otros_gastos: resolvedOtrosGastos,
+    variable: resolvedVariable,
+  });
+  const resolvedSalarioBrutoTotal =
+    resolvedSalarioBruto === null && resolvedSalarioBrutoExtras === null
+      ? null
+      : (resolvedSalarioBruto ?? 0) + (resolvedSalarioBrutoExtras ?? 0);
 
   const resolvedTotalExtras = hasAnyExtrasField
     ? calculateExtrasTotal({
@@ -726,6 +756,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
     updateData.horas_extras = horasExtras === null ? null : toDecimalOrNull(horasExtras);
   if (hasOtrosGastos)
     updateData.otros_gastos = otrosGastos === null ? null : toDecimalOrNull(otrosGastos);
+  if (hasVariable) updateData.variable = variable === null ? null : toDecimalOrNull(variable);
   if (hasAnyExtrasField || hasTotalExtras) {
     updateData.total_extras =
       resolvedTotalExtras === null ? null : toDecimalOrNull(resolvedTotalExtras);
@@ -741,6 +772,9 @@ async function handlePut(prisma = getPrisma(), request: any) {
   if (hasSalarioBrutoTotal) {
     updateData.salario_bruto_total =
       salarioBrutoTotalInput === null ? null : toDecimalOrNull(salarioBrutoTotalInput);
+  } else if (hasSalarioBruto || hasAnyBrutoExtraField) {
+    updateData.salario_bruto_total =
+      resolvedSalarioBrutoTotal === null ? null : toDecimalOrNull(resolvedSalarioBrutoTotal);
   }
   if (hasRetencion) updateData.retencion = retencion === null ? null : toDecimalOrNull(retencion);
   if (hasAportacionSsIrpf)
@@ -801,6 +835,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
           ? null
           : toDecimalOrNull(otrosGastos)
         : null,
+      variable: hasVariable ? (variable === null ? null : toDecimalOrNull(variable)) : null,
       total_extras: createTotalExtras === null ? null : toDecimalOrNull(createTotalExtras),
       antiguedad: antiguedad ?? null,
       horas_semana: hasHorasSemana
@@ -823,7 +858,11 @@ async function handlePut(prisma = getPrisma(), request: any) {
         ? salarioBrutoTotalInput === null
           ? null
           : toDecimalOrNull(salarioBrutoTotalInput)
-        : null,
+        : hasSalarioBruto || hasAnyBrutoExtraField
+          ? resolvedSalarioBrutoTotal === null
+            ? null
+            : toDecimalOrNull(resolvedSalarioBrutoTotal)
+          : null,
       retencion: hasRetencion ? (retencion === null ? null : toDecimalOrNull(retencion)) : null,
       aportacion_ss_irpf: hasAportacionSsIrpf
         ? aportacionSsIrpf === null
