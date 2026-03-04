@@ -41,7 +41,7 @@ import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 
 const MONTH_FORMATTER = new Intl.DateTimeFormat('es-ES', { month: 'long' });
-const PDF_VISIBLE_TYPES = new Set<VacationType>(['V', 'T', 'L', 'A', 'N', 'C', 'Y']);
+const PDF_VISIBLE_TYPES = new Set<VacationType>(['V', 'T', 'L', 'A', 'N', 'C', 'O', 'Y']);
 const PDF_PRIVATE_MARK = '■';
 const PDF_PRIVATE_COLOR = '#9ca3af';
 

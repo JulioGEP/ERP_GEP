@@ -14,6 +14,7 @@ export const VACATION_TYPE_ORDER: VacationType[] = [
   'I',
   'N',
   'C',
+  'O',
   'Y',
 ];
 
@@ -42,6 +43,7 @@ export const VACATION_TYPE_INFO: Record<
   I: { label: 'Incapacidad', fullLabel: 'Incapacidad temporal', color: '#475569' },
   N: { label: 'Festivos nacionales', fullLabel: 'Festivos nacionales', color: '#facc15' },
   C: { label: 'Fiesta autonómica', fullLabel: 'Fiesta autonómica', color: '#14b8a6' },
+  O: { label: 'Compensación horas', fullLabel: 'Compensación horas', color: '#d946ef' },
   Y: { label: 'Año anterior', fullLabel: 'Vacaciones año anterior', color: '#0891b2' },
 };
 
