@@ -9,7 +9,7 @@ import { uploadTrainerDocumentToGoogleDrive, uploadUserDocumentToGoogleDrive } f
 
 const RECIPIENT = 'people@gepgroup.es';
 const VACATION_TAG_LABELS: Record<
-  'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'J' | 'I' | 'N' | 'C' | 'Y',
+  'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'J' | 'I' | 'N' | 'C' | 'O' | 'Y',
   string
 > = {
   V: 'Vacaciones',
@@ -25,6 +25,7 @@ const VACATION_TAG_LABELS: Record<
   I: 'Incapacidad temporal',
   N: 'Festivos nacionales',
   C: 'Fiesta autonómica',
+  O: 'Compensación horas',
   Y: 'Vacaciones año anterior',
 };
 
@@ -194,7 +195,7 @@ async function handleCreateRequest(request: any, prisma: ReturnType<typeof getPr
   const endDate = parseDateOnly(request.body.endDate ?? request.body.end_date);
   const notes = typeof request.body.notes === 'string' ? request.body.notes.trim() : '';
   const rawTag = typeof request.body.tag === 'string' ? request.body.tag.trim().toUpperCase() : '';
-  const tag = (['V', 'L', 'A', 'T', 'M', 'H', 'F', 'R', 'P', 'J', 'I', 'N', 'C', 'Y'] as const).includes(
+  const tag = (['V', 'L', 'A', 'T', 'M', 'H', 'F', 'R', 'P', 'J', 'I', 'N', 'C', 'O', 'Y'] as const).includes(
     rawTag as any,
   )
     ? (rawTag as keyof typeof VACATION_TAG_LABELS)

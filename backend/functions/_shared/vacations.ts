@@ -1,9 +1,9 @@
 // backend/functions/_shared/vacations.ts
 import type { PrismaClient } from '@prisma/client';
 
-export const VACATION_TYPES = new Set(['V', 'L', 'A', 'T', 'M', 'H', 'F', 'R', 'P', 'J', 'I', 'N', 'C', 'Y']);
+export const VACATION_TYPES = new Set(['V', 'L', 'A', 'T', 'M', 'H', 'F', 'R', 'P', 'J', 'I', 'N', 'C', 'O', 'Y']);
 
-export type VacationCounts = Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'J' | 'I' | 'N' | 'C' | 'Y', number>;
+export type VacationCounts = Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'J' | 'I' | 'N' | 'C' | 'O' | 'Y', number>;
 
 export const DEFAULT_VACATION_ALLOWANCE = 24;
 export const THIRTY_THREE_DAYS_VACATION_ALLOWANCE = 33;
@@ -22,7 +22,7 @@ export function getEffectiveVacationDays(
   days: Array<{ date: Date; type: string }>,
   options?: { countNaturalVacationDays?: boolean },
 ): { effectiveVacationDays: number; counts: VacationCounts } {
-  const counts: VacationCounts = { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, J: 0, I: 0, N: 0, C: 0, Y: 0 };
+  const counts: VacationCounts = { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, J: 0, I: 0, N: 0, C: 0, O: 0, Y: 0 };
   const holidayDates = new Set<string>();
 
   for (const day of days) {

@@ -15,6 +15,7 @@ export type VacationType =
   | 'I'
   | 'N'
   | 'C'
+  | 'O'
   | 'Y';
 
 export type UserVacationDay = {
