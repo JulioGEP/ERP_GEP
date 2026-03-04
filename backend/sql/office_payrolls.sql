@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS office_payrolls (
   contingencias_comunes numeric(12,2),
   contingencias_comunes_detalle text,
   total_empresa numeric(12,2),
+  comment_cost text,
   created_at timestamptz(6) DEFAULT now(),
   updated_at timestamptz(6) DEFAULT now()
 );

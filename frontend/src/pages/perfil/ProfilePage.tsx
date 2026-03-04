@@ -73,6 +73,24 @@ function formatFileSize(file: File): string {
   return `${size} B`;
 }
 
+
+type PayrollCommentCostEntry = {
+  comment?: string;
+  category?: string;
+};
+
+function resolveLatestExpenseComment(commentCost: string | null | undefined, category: string): string {
+  if (!commentCost) return '';
+  try {
+    const parsed = JSON.parse(commentCost) as Record<string, PayrollCommentCostEntry>;
+    const entries = Object.values(parsed ?? {}).filter((item) => item?.category === category);
+    const latest = entries[entries.length - 1];
+    return typeof latest?.comment === 'string' ? latest.comment : '';
+  } catch {
+    return '';
+  }
+}
+
 function resolveDocumentLink(doc: ProfileDocument): string | null {
   if ('download_url' in doc) {
     return doc.drive_web_view_link ?? doc.drive_web_content_link ?? doc.download_url;
@@ -110,6 +128,7 @@ export default function ProfilePage() {
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseAmountTouched, setExpenseAmountTouched] = useState(false);
   const [expenseDate, setExpenseDate] = useState('');
+  const [expenseComment, setExpenseComment] = useState('');
   const [expenseValidationError, setExpenseValidationError] = useState<string | null>(null);
   const [showJustificationModal, setShowJustificationModal] = useState(false);
   const [justificationFile, setJustificationFile] = useState<File | null>(null);
@@ -250,6 +269,7 @@ export default function ProfilePage() {
       setExpenseAmount('');
       setExpenseAmountTouched(false);
       setExpenseDate('');
+      setExpenseComment('');
       setExpenseValidationError(null);
       setShowExpenseModal(false);
     }
@@ -264,6 +284,15 @@ export default function ProfilePage() {
     }
     setExpenseAmount(String(payrollFieldValue));
   }, [expenseAmountTouched, payrollFieldValue, showExpenseModal]);
+
+  useEffect(() => {
+    if (!showExpenseModal || !payrollEntry) {
+      return;
+    }
+
+    const latestComment = resolveLatestExpenseComment(payrollEntry.commentCost, selectedDocumentType);
+    setExpenseComment(latestComment);
+  }, [payrollEntry, selectedDocumentType, showExpenseModal]);
 
   const shouldShowVacations = trainerId ? trainerDetailsQuery.data?.contrato_fijo === true : true;
 
@@ -398,7 +427,7 @@ export default function ProfilePage() {
       const normalizedExpenseAmount = Number.parseFloat(expenseAmount.replace(',', '.'));
       const payrollExpense =
         requiresExpenseDetails && expenseDate && Number.isFinite(normalizedExpenseAmount)
-          ? { amount: normalizedExpenseAmount, date: expenseDate }
+          ? { amount: normalizedExpenseAmount, date: expenseDate, comment: expenseComment.trim() }
           : null;
 
       if (trainerId) {
@@ -436,6 +465,7 @@ export default function ProfilePage() {
       setExpenseAmount('');
       setExpenseAmountTouched(false);
       setExpenseDate('');
+      setExpenseComment('');
       setExpenseValidationError(null);
       setShowExpenseModal(false);
       if (fileInputRef.current) {
@@ -519,10 +549,15 @@ export default function ProfilePage() {
         return;
       }
 
+      if (!expenseComment.trim()) {
+        setExpenseValidationError('El comentario del gasto es obligatorio.');
+        return;
+      }
+
       setShowExpenseModal(false);
       uploadMutation.mutate();
     },
-    [expenseAmount, expenseDate, selectedDocument, uploadMutation],
+    [expenseAmount, expenseComment, expenseDate, selectedDocument, uploadMutation],
   );
 
   const handleVacationRequest = useCallback(
@@ -1255,6 +1290,17 @@ export default function ProfilePage() {
               type="date"
               value={expenseDate}
               onChange={(event) => setExpenseDate(event.target.value)}
+              required
+            />
+          </Form.Group>
+          <Form.Group>
+            <Form.Label>Comentario del gasto</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={3}
+              value={expenseComment}
+              onChange={(event) => setExpenseComment(event.target.value)}
+              placeholder="Breve descripción del gasto"
               required
             />
           </Form.Group>

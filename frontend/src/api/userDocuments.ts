@@ -20,6 +20,7 @@ export type UserDocument = {
 export type PayrollExpensePayload = {
   amount: number;
   date: string;
+  comment: string;
 };
 
 const DEFAULT_DOCUMENT_TYPE: DocumentTypeValue = 'otros';

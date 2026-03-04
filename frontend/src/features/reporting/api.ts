@@ -943,6 +943,7 @@ export type OfficePayrollRecord = {
   otrosGastos: number | null;
   variable: number | null;
   totalExtras: number | null;
+  commentCost: string | null;
   startDate: string | null;
   convenio: string | null;
   categoria: string | null;
@@ -1017,6 +1018,7 @@ export type OfficePayrollUpsertPayload = {
   otrosGastos?: number | string | null;
   variable?: number | string | null;
   totalExtras?: number | string | null;
+  commentCost?: string | null;
   antiguedad?: string | null;
   horasSemana?: number | string | null;
   baseRetencion?: number | string | null;

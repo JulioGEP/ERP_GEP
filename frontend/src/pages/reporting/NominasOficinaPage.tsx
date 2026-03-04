@@ -27,6 +27,24 @@ type NominasOficinaPageProps = {
 
 const DEFAULT_WEEKLY_HOURS = '40';
 
+type ExpenseCommentMapEntry = {
+  comment?: string;
+  category?: string | null;
+  amount?: number | null;
+  date?: string | null;
+};
+
+function parseExpenseCommentMap(rawValue: string | null | undefined): Record<string, ExpenseCommentMapEntry> {
+  if (!rawValue) return {};
+  try {
+    const parsed = JSON.parse(rawValue) as Record<string, ExpenseCommentMapEntry>;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+
 function parseLocaleNumber(value: string): number | null {
   const trimmed = value.trim();
   if (!trimmed.length) return null;
@@ -235,6 +253,7 @@ const PAYROLL_BASE_FIELDS: Array<keyof OfficePayrollRecord> = [
   'trainerFixedContract',
   'year',
   'month',
+  'commentCost',
   'startDate',
   'convenio',
   'categoria',
@@ -301,6 +320,8 @@ function buildExtrasUpdatePayload(
   fields: Record<ExtrasSummaryKey, string>,
   initialFields: Record<ExtrasSummaryKey, string>,
   totalExtras: string,
+  commentCost: string | null,
+  initialCommentCost: string | null,
 ): OfficePayrollUpsertPayload | null {
   let hasChanges = false;
   const payload: OfficePayrollUpsertPayload = {
@@ -333,6 +354,13 @@ function buildExtrasUpdatePayload(
     }
   }
 
+  const normalizedCommentCost = commentCost?.trim() ? commentCost : null;
+  const normalizedInitialCommentCost = initialCommentCost?.trim() ? initialCommentCost : null;
+  if (normalizedCommentCost !== normalizedInitialCommentCost) {
+    payload.commentCost = normalizedCommentCost;
+    hasChanges = true;
+  }
+
   if (hasChanges) {
     payload.totalExtras = totalExtras;
     return payload;
@@ -346,6 +374,8 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
   const [fields, setFields] = useState<Record<ExtrasSummaryKey, string>>(extrasInitialFields);
   const [initialFields, setInitialFields] =
     useState<Record<ExtrasSummaryKey, string>>(extrasInitialFields);
+  const [documentComments, setDocumentComments] = useState<Record<string, string>>({});
+  const [initialCommentCost, setInitialCommentCost] = useState<string | null>(null);
 
   const refreshedPayrollQuery = useQuery({
     queryKey: ['reporting', 'nominas-oficina-entry', entry?.userId ?? null, entry?.year ?? null, entry?.month ?? null],
@@ -372,6 +402,8 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
     if (!entry) {
       setFields(extrasInitialFields);
       setInitialFields(extrasInitialFields);
+      setDocumentComments({});
+      setInitialCommentCost(null);
       return;
     }
     const sourceEntry = refreshedPayrollQuery.data ?? entry;
@@ -433,7 +465,7 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
 
     for (const item of matchingExtraCosts) {
       for (const field of EXTRAS_SUMMARY_FIELDS) {
-        totals[field.key] += field.costsKey ? item.costs[field.costsKey] ?? 0 : 0;
+        totals[field.key] += ("costsKey" in field && field.costsKey ? item.costs[field.costsKey] ?? 0 : 0);
       }
     }
 
@@ -462,7 +494,14 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
       if (!entry) {
         throw new Error('No hay datos de nómina para guardar.');
       }
-      const payload = buildExtrasUpdatePayload(entry, fields, initialFields, editableTotalExtras);
+      const payload = buildExtrasUpdatePayload(
+        entry,
+        fields,
+        initialFields,
+        editableTotalExtras,
+        serializedCommentCost,
+        initialCommentCost,
+      );
       if (!payload) {
         return entry;
       }
@@ -493,6 +532,38 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
       );
     });
   }, [documents, entry]);
+
+
+  const serializedCommentCost = useMemo(() => {
+    if (!entry) return null;
+    const commentMap = parseExpenseCommentMap(entry.commentCost);
+    for (const document of matchingExpenseDocuments) {
+      const value = documentComments[document.id];
+      const trimmed = typeof value === 'string' ? value.trim() : '';
+      if (!trimmed.length) {
+        delete commentMap[document.id];
+        continue;
+      }
+      commentMap[document.id] = {
+        ...commentMap[document.id],
+        comment: trimmed,
+        category: document.document_type ?? commentMap[document.id]?.category ?? null,
+      };
+    }
+    return Object.keys(commentMap).length ? JSON.stringify(commentMap) : null;
+  }, [documentComments, entry, matchingExpenseDocuments]);
+
+  useEffect(() => {
+    if (!entry) return;
+    const commentMap = parseExpenseCommentMap(entry.commentCost);
+    const nextComments: Record<string, string> = {};
+    for (const document of matchingExpenseDocuments) {
+      const existingComment = commentMap[document.id]?.comment;
+      nextComments[document.id] = typeof existingComment === 'string' ? existingComment : '';
+    }
+    setDocumentComments(nextComments);
+    setInitialCommentCost(entry.commentCost ?? null);
+  }, [entry, matchingExpenseDocuments]);
 
   if (!entry) return null;
   const monthLabel = MONTH_LABELS[entry.month - 1] ?? `${entry.month}`;
@@ -532,6 +603,22 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
                     {document.title ?? document.file_name}
                   </a>
                   {document.document_type_label ? ` · ${document.document_type_label}` : null}
+                  {allowEdit ? (
+                    <Form.Control
+                      className="mt-2"
+                      type="text"
+                      value={documentComments[document.id] ?? ''}
+                      onChange={(event) =>
+                        setDocumentComments((prev) => ({
+                          ...prev,
+                          [document.id]: event.target.value,
+                        }))
+                      }
+                      placeholder="Comentario del gasto"
+                    />
+                  ) : documentComments[document.id]?.trim() ? (
+                    <div className="small text-muted mt-1">{documentComments[document.id]}</div>
+                  ) : null}
                 </li>
               ))}
             </ul>

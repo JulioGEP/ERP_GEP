@@ -53,6 +53,7 @@ type OfficePayrollResponseItem = {
   otrosGastos: number | null;
   variable: number | null;
   totalExtras: number | null;
+  commentCost: string | null;
   startDate: string | null;
   convenio: string | null;
   categoria: string | null;
@@ -107,6 +108,7 @@ type OfficePayrollPayload = {
   otrosGastos?: unknown;
   variable?: unknown;
   totalExtras?: unknown;
+  commentCost?: unknown;
   convenio?: unknown;
   antiguedad?: unknown;
   horasSemana?: unknown;
@@ -350,6 +352,7 @@ function serializeRecord(
     otrosGastos: decimalToNumber(record.otros_gastos),
     variable: decimalToNumber(record.variable),
     totalExtras,
+    commentCost: sanitizeText((record as { comment_cost?: unknown }).comment_cost),
     startDate: toIsoDateString(record.antiguedad ?? startDate),
     convenio: sanitizeText(record.convenio),
     categoria: sanitizeText(record.categoria),
@@ -531,6 +534,7 @@ async function handleGet(prisma = getPrisma(), request: any): Promise<ReturnType
             contingenciasComunesDetalle: null,
             totalEmpresa: null,
             totalExtras: null,
+            commentCost: null,
             defaultConvenio: sanitizeText(user.payroll?.convenio),
             defaultCategoria: sanitizeText(user.payroll?.categoria),
             defaultAntiguedad: toIsoDateString(user.payroll?.antiguedad as Date | null | undefined),
@@ -595,6 +599,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
   const hasOtrosGastos = hasField('otrosGastos');
   const hasVariable = hasField('variable');
   const hasTotalExtras = hasField('totalExtras');
+  const hasCommentCost = hasField('commentCost');
   const hasAntiguedad = hasField('antiguedad');
   const hasHorasSemana = hasField('horasSemana');
   const hasBaseRetencion = hasField('baseRetencion');
@@ -620,6 +625,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
   const otrosGastos = hasOtrosGastos ? parseDecimal(payload.otrosGastos) : undefined;
   const variable = hasVariable ? parseDecimal(payload.variable) : undefined;
   const totalExtrasInput = hasTotalExtras ? parseDecimal(payload.totalExtras) : undefined;
+  const commentCost = hasCommentCost ? sanitizeText(payload.commentCost) : undefined;
   const antiguedad = hasAntiguedad ? parseDateOnly(payload.antiguedad) : undefined;
   const horasSemana = hasHorasSemana ? parseDecimal(payload.horasSemana) : undefined;
   const baseRetencion = hasBaseRetencion ? parseDecimal(payload.baseRetencion) : undefined;
@@ -761,6 +767,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
     updateData.total_extras =
       resolvedTotalExtras === null ? null : toDecimalOrNull(resolvedTotalExtras);
   }
+  if (hasCommentCost) (updateData as Record<string, unknown>).comment_cost = commentCost ?? null;
   if (hasAntiguedad) updateData.antiguedad = antiguedad ?? null;
   if (hasHorasSemana)
     updateData.horas_semana = horasSemana === null ? null : toDecimalOrNull(horasSemana);
@@ -837,6 +844,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
         : null,
       variable: hasVariable ? (variable === null ? null : toDecimalOrNull(variable)) : null,
       total_extras: createTotalExtras === null ? null : toDecimalOrNull(createTotalExtras),
+      ...(hasCommentCost ? ({ comment_cost: commentCost ?? null } as Record<string, string | null>) : {}),
       antiguedad: antiguedad ?? null,
       horas_semana: hasHorasSemana
         ? horasSemana === null

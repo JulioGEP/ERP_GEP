@@ -42,6 +42,9 @@ type PayrollExpense = {
   year: number;
   month: number;
   column: PayrollExpenseColumn;
+  comment: string;
+  documentType: string;
+  date: string;
 };
 
 function parsePath(path: string | undefined | null) {
@@ -56,6 +59,43 @@ function toStringOrNull(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   const text = String(value).trim();
   return text.length ? text : null;
+}
+
+type PayrollCommentEntry = {
+  comment: string;
+  category: string | null;
+  amount: number | null;
+  date: string | null;
+};
+
+function parseCommentCostMap(rawValue: unknown): Record<string, PayrollCommentEntry> {
+  if (typeof rawValue !== 'string' || !rawValue.trim().length) return {};
+  try {
+    const parsed = JSON.parse(rawValue) as unknown;
+    if (!parsed || typeof parsed !== 'object') return {};
+    const result: Record<string, PayrollCommentEntry> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!value || typeof value !== 'object') continue;
+      const entry = value as Record<string, unknown>;
+      const comment = toStringOrNull(entry.comment);
+      if (!comment) continue;
+      result[key] = {
+        comment,
+        category: toStringOrNull(entry.category),
+        amount: typeof entry.amount === 'number' && Number.isFinite(entry.amount) ? entry.amount : null,
+        date: toStringOrNull(entry.date),
+      };
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function stringifyCommentCostMap(entries: Record<string, PayrollCommentEntry>): string | null {
+  const keys = Object.keys(entries);
+  if (!keys.length) return null;
+  return JSON.stringify(entries);
 }
 
 function decimalToNumber(value: unknown): number {
@@ -172,7 +212,7 @@ function resolveExpenseColumn(documentType: string | null) {
   }
 }
 
-function parsePayrollExpense(value: any, column: PayrollExpenseColumn) {
+function parsePayrollExpense(value: any, column: PayrollExpenseColumn, documentType: string) {
   if (!value || typeof value !== 'object') {
     return { expense: null, error: null } as { expense: PayrollExpense | null; error: any };
   }
@@ -180,6 +220,7 @@ function parsePayrollExpense(value: any, column: PayrollExpenseColumn) {
   const rawDate = toStringOrNull(value.date ?? value.expenseDate);
   const rawAmount = value.amount ?? value.value ?? value.otros_gastos;
   const amount = typeof rawAmount === 'string' ? Number.parseFloat(rawAmount) : Number(rawAmount);
+  const comment = toStringOrNull(value.comment ?? value.commentCost ?? value.comment_cost);
 
   if (rawDate === null && (rawAmount === undefined || rawAmount === null)) {
     return { expense: null, error: null };
@@ -189,6 +230,13 @@ function parsePayrollExpense(value: any, column: PayrollExpenseColumn) {
     return {
       expense: null,
       error: errorResponse('VALIDATION_ERROR', 'El importe del gasto no es válido', 400),
+    };
+  }
+
+  if (!comment) {
+    return {
+      expense: null,
+      error: errorResponse('VALIDATION_ERROR', 'El comentario del gasto es obligatorio', 400),
     };
   }
 
@@ -238,6 +286,9 @@ function parsePayrollExpense(value: any, column: PayrollExpenseColumn) {
       year: parsedYear,
       month: parsedMonth,
       column,
+      comment,
+      documentType,
+      date: datePart,
     },
     error: null,
   };
@@ -247,6 +298,7 @@ async function persistPayrollExpense(
   prisma: Pick<ReturnType<typeof getPrisma>, 'office_payrolls'>,
   userId: string,
   expense: PayrollExpense,
+  documentMeta: { documentId: string },
 ) {
   const existing = await prisma.office_payrolls.findUnique({
     where: { user_id_year_month: { user_id: userId, year: expense.year, month: expense.month } },
@@ -263,11 +315,20 @@ async function persistPayrollExpense(
   const nextTotalExtras = Number(
     PAYROLL_EXTRA_FIELDS.reduce((acc, field) => acc + nextValues[field], 0).toFixed(2),
   );
+  const commentMap = parseCommentCostMap((existing as { comment_cost?: unknown } | null)?.comment_cost);
+  commentMap[documentMeta.documentId] = {
+    comment: expense.comment,
+    category: expense.documentType,
+    amount: expense.amount,
+    date: expense.date,
+  };
+  const serializedComments = stringifyCommentCostMap(commentMap);
 
   if (existing) {
     const updateData = {
       [column]: new Prisma.Decimal(totalAmount),
       total_extras: new Prisma.Decimal(nextTotalExtras),
+      comment_cost: serializedComments,
     } as Prisma.office_payrollsUpdateInput;
     await prisma.office_payrolls.update({
       where: { user_id_year_month: { user_id: userId, year: expense.year, month: expense.month } },
@@ -282,6 +343,7 @@ async function persistPayrollExpense(
     month: expense.month,
     [column]: new Prisma.Decimal(totalAmount),
     total_extras: new Prisma.Decimal(nextTotalExtras),
+    comment_cost: serializedComments,
   } as Prisma.office_payrollsUncheckedCreateInput;
   await prisma.office_payrolls.create({
     data: createData,
@@ -360,7 +422,7 @@ export const handler = async (event: any) => {
     const documentType = resolveDocumentType(payload.documentType ?? payload.document_type);
     const expenseColumn = resolveExpenseColumn(documentType.key);
     const payrollExpenseResult = expenseColumn
-      ? parsePayrollExpense(payload.payrollExpense ?? payload.payroll_expense, expenseColumn)
+      ? parsePayrollExpense(payload.payrollExpense ?? payload.payroll_expense, expenseColumn, documentType.key)
       : null;
 
     if (payrollExpenseResult?.error) {
@@ -412,7 +474,7 @@ export const handler = async (event: any) => {
       });
 
       if (payrollExpenseResult?.expense) {
-        await persistPayrollExpense(tx, userId, payrollExpenseResult.expense);
+        await persistPayrollExpense(tx, userId, payrollExpenseResult.expense, { documentId: document.id });
       }
 
       return document;
