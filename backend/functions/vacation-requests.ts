@@ -502,7 +502,7 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
 
     await sendEmail({
       to: existing.user.email,
-      subject: 'Petición de vacaciones aceptada',
+      subject: 'Petición aceptada',
       html,
       text: `Tu petición ha sido aceptada.\nFechas: ${humanStart} -> ${humanEnd}\nTipo: ${typeLabel}${
         notes ? `\nNotas: ${notes}` : ''
