@@ -64,3 +64,30 @@ export const VACATION_TAG_OPTIONS: Array<{ value: VacationType | ''; label: stri
     label: VACATION_TYPE_LABELS[value],
   })),
 ];
+
+const FALLBACK_VACATION_COLORS = ['#0ea5e9', '#a855f7', '#f97316', '#14b8a6', '#e11d48', '#65a30d', '#475569'];
+
+export function isKnownVacationType(type: string): type is VacationType {
+  return type in VACATION_TYPE_INFO;
+}
+
+function getFallbackColor(type: string): string {
+  const normalized = type.trim().toUpperCase();
+  if (!normalized.length) return FALLBACK_VACATION_COLORS[0];
+
+  const hash = Array.from(normalized).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return FALLBACK_VACATION_COLORS[hash % FALLBACK_VACATION_COLORS.length];
+}
+
+export function getVacationTypeVisual(type: string): { label: string; fullLabel: string; color: string } {
+  const normalized = type.trim().toUpperCase();
+  if (isKnownVacationType(normalized)) {
+    return VACATION_TYPE_INFO[normalized];
+  }
+
+  return {
+    label: normalized || type,
+    fullLabel: normalized || type,
+    color: getFallbackColor(normalized || type),
+  };
+}

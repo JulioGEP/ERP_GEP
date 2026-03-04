@@ -33,6 +33,8 @@ import {
   VACATION_TYPE_COLORS,
   VACATION_TYPE_FULL_LABELS,
   VACATION_TYPE_LABELS,
+  getVacationTypeVisual,
+  isKnownVacationType,
 } from '../../constants/vacations';
 import { VacationManagerModal } from './UsersPage';
 import pdfMake from 'pdfmake/build/pdfmake';
@@ -72,35 +74,46 @@ function ensurePdfMakeFontsLoaded(): void {
   }
 }
 
-function getPdfCellDisplay(type: VacationType | ''): { label: string; color?: string; title?: string } {
+function getPdfCellDisplay(type: string | ''): { label: string; color?: string; title?: string } {
   if (!type) {
     return { label: '' };
   }
 
-  if (PDF_VISIBLE_TYPES.has(type)) {
+  if (isKnownVacationType(type)) {
+    if (PDF_VISIBLE_TYPES.has(type)) {
+      return {
+        label: type,
+        color: VACATION_TYPE_COLORS[type],
+        title: `${VACATION_TYPE_FULL_LABELS[type]} (${type})`,
+      };
+    }
+
     return {
-      label: type,
-      color: VACATION_TYPE_COLORS[type],
-      title: `${VACATION_TYPE_FULL_LABELS[type]} (${type})`,
+      label: PDF_PRIVATE_MARK,
+      color: PDF_PRIVATE_COLOR,
+      title: 'Ausencia privada',
     };
   }
 
+  const visual = getVacationTypeVisual(type);
   return {
-    label: PDF_PRIVATE_MARK,
-    color: PDF_PRIVATE_COLOR,
-    title: 'Ausencia privada',
+    label: type,
+    color: visual.color,
+    title: `${visual.fullLabel} (${type})`,
   };
 }
 
-function getCalendarCellDisplay(type: VacationType | ''): { label: string; color?: string; title?: string } {
+function getCalendarCellDisplay(type: string | ''): { label: string; color?: string; title?: string } {
   if (!type) {
     return { label: '' };
   }
 
+  const visual = getVacationTypeVisual(type);
+
   return {
     label: type,
-    color: VACATION_TYPE_COLORS[type],
-    title: `${VACATION_TYPE_FULL_LABELS[type]} (${type})`,
+    color: visual.color,
+    title: `${visual.fullLabel} (${type})`,
   };
 }
 
@@ -160,9 +173,9 @@ export default function UsersVacationsPage() {
   }, [selectedUsers, users]);
 
   const userDayMap = useMemo(() => {
-    const map = new Map<string, Map<string, VacationType>>();
+    const map = new Map<string, Map<string, string>>();
     for (const user of users) {
-      const days = new Map<string, VacationType>();
+      const days = new Map<string, string>();
       for (const day of user.days ?? []) {
         days.set(day.date, day.type);
       }
@@ -444,8 +457,12 @@ export default function UsersVacationsPage() {
                         request.startDate === request.endDate
                           ? request.startDate
                           : `${request.startDate} → ${request.endDate}`;
-                      const tagLabel = request.tag ? VACATION_TYPE_LABELS[request.tag] ?? 'Otro' : 'Vacaciones';
-                      const typeColor = request.tag ? VACATION_TYPE_COLORS[request.tag] : '#0ea5e9';
+                      const tagLabel = request.tag
+                        ? isKnownVacationType(request.tag)
+                          ? VACATION_TYPE_LABELS[request.tag]
+                          : request.tag
+                        : 'Vacaciones';
+                      const typeColor = request.tag ? getVacationTypeVisual(request.tag).color : '#0ea5e9';
 
                       return (
                         <tr key={request.id}>
@@ -807,7 +824,7 @@ type VacationsCalendarModalProps = {
   onHide: () => void;
   users: VacationSummaryUser[];
   year: number;
-  userDayMap: Map<string, Map<string, VacationType>>;
+  userDayMap: Map<string, Map<string, string>>;
 };
 
 function VacationsCalendarModal({ show, onHide, users, year, userDayMap }: VacationsCalendarModalProps) {
