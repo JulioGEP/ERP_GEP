@@ -260,6 +260,7 @@ export type ReportingControlHorarioPerson = {
   email: string | null;
   role: string;
   isFixedTrainer: boolean;
+  weeklyContractHours: number | null;
 };
 
 export type ReportingControlHorarioEntry = {
@@ -268,7 +269,13 @@ export type ReportingControlHorarioEntry = {
   date: string;
   checkIn: string | null;
   checkOut: string | null;
-  holidayType: 'A' | 'N' | null;
+  holidayType: string | null;
+};
+
+export type ReportingControlHorarioAbsence = {
+  userId: string;
+  date: string;
+  type: string;
 };
 
 export type ReportingControlHorarioResponse = {
@@ -278,6 +285,7 @@ export type ReportingControlHorarioResponse = {
   };
   people: ReportingControlHorarioPerson[];
   entries: ReportingControlHorarioEntry[];
+  absences: ReportingControlHorarioAbsence[];
 };
 
 export type AuditLogEntry = {
@@ -306,8 +314,25 @@ function sanitizeReportingPerson(entry: unknown): ReportingControlHorarioPerson 
     name,
     email: sanitizeText(raw.email),
     role: sanitizeText(raw.role) ?? 'Desconocido',
-    isFixedTrainer: Boolean(raw.isFixedTrainer ?? raw.is_fixed_trainer)
+    isFixedTrainer: Boolean(raw.isFixedTrainer ?? raw.is_fixed_trainer),
+    weeklyContractHours:
+      raw.weeklyContractHours === null || raw.weekly_contract_hours === null
+        ? null
+        : sanitizeOptionalNumber(raw.weeklyContractHours ?? raw.weekly_contract_hours),
   };
+}
+
+
+function sanitizeOptionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed.length) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function sanitizeReportingEntry(entry: unknown): ReportingControlHorarioEntry | null {
@@ -327,13 +352,20 @@ function sanitizeReportingEntry(entry: unknown): ReportingControlHorarioEntry | 
     date,
     checkIn: sanitizeDate(raw.checkIn ?? raw.check_in),
     checkOut: sanitizeDate(raw.checkOut ?? raw.check_out),
-    holidayType:
-      raw.holidayType === 'N' || raw.holiday_type === 'N'
-        ? 'N'
-        : raw.holidayType === 'A' || raw.holiday_type === 'A'
-          ? 'A'
-          : null
+    holidayType: sanitizeText(raw.holidayType ?? raw.holiday_type)
   };
+}
+
+function sanitizeReportingAbsence(entry: unknown): ReportingControlHorarioAbsence | null {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+  const raw = entry as Record<string, unknown>;
+  const userId = sanitizeText(raw.userId ?? raw.user_id);
+  const date = sanitizeText(raw.date);
+  const type = sanitizeText(raw.type);
+  if (!userId || !date || !type) return null;
+  return { userId, date, type };
 }
 
 export type ReportingControlHorarioFilters = {
@@ -353,7 +385,7 @@ export async function fetchReportingControlHorario(
   }
   const query = params.toString();
   const url = query.length ? `/reporting-control-horario?${query}` : '/reporting-control-horario';
-  const data = await getJson<{ range?: unknown; people?: unknown; entries?: unknown }>(url);
+  const data = await getJson<{ range?: unknown; people?: unknown; entries?: unknown; absences?: unknown }>(url);
   const people = Array.isArray(data?.people)
     ? data.people
         .map(sanitizeReportingPerson)
@@ -364,6 +396,11 @@ export async function fetchReportingControlHorario(
         .map(sanitizeReportingEntry)
         .filter((item): item is ReportingControlHorarioEntry => item !== null)
     : [];
+  const absences = Array.isArray(data?.absences)
+    ? data.absences
+        .map(sanitizeReportingAbsence)
+        .filter((item): item is ReportingControlHorarioAbsence => item !== null)
+    : [];
   const range = (data?.range ?? {}) as { start?: string; end?: string };
   return {
     range: {
@@ -371,7 +408,8 @@ export async function fetchReportingControlHorario(
       end: sanitizeText(range.end) ?? ''
     },
     people,
-    entries
+    entries,
+    absences,
   };
 }
 
