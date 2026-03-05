@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Card, Collapse, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { isApiError } from '../../api/client';
+import { getVacationTypeVisual } from '../../constants/vacations';
 import {
   createReportingControlHorarioEntry,
   deleteReportingControlHorarioEntry,
@@ -134,6 +135,27 @@ function escapeCsvValue(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
+
+function isWeekend(date: string): boolean {
+  const day = new Date(`${date}T00:00:00`).getDay();
+  return day === 0 || day === 6;
+}
+
+function getContractHoursLabel(weeklyHours: number | null): string {
+  if (weeklyHours === null || !Number.isFinite(weeklyHours)) return '—';
+  const dailyHours = weeklyHours / 5;
+  const rounded = Math.round(dailyHours * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+}
+
+function getAbsenceLabel(absenceType: string | null, date: string): string {
+  if (isWeekend(date)) return 'Fin de semana';
+  if (!absenceType) return 'laborable';
+  const normalized = absenceType.trim().toUpperCase();
+  if (normalized === 'T') return 'laborable';
+  return getVacationTypeVisual(normalized).fullLabel;
+}
+
 type ModalState = {
   person: ReportingControlHorarioPerson;
   date: string;
@@ -223,6 +245,7 @@ export default function ControlHorarioPage() {
 
   const people = recordsQuery.data?.people ?? [];
   const entries = recordsQuery.data?.entries ?? [];
+  const absences = recordsQuery.data?.absences ?? [];
 
   const filteredPeople = useMemo(() => {
     return people.filter((person) => {
@@ -260,20 +283,40 @@ export default function ControlHorarioPage() {
     return map;
   }, [filteredEntries]);
 
+
+  const absencesByUserDate = useMemo(() => {
+    const map = new Map<string, string>();
+    absences.forEach((absence) => {
+      map.set(`${absence.userId}-${absence.date}`, absence.type);
+    });
+    return map;
+  }, [absences]);
+
   const rows = useMemo(() => {
-    const output: Array<{ person: ReportingControlHorarioPerson; date: string; entries: ReportingControlHorarioEntry[] }> = [];
+    const output: Array<{
+      person: ReportingControlHorarioPerson;
+      date: string;
+      entries: ReportingControlHorarioEntry[];
+      absenceType: string | null;
+      contractHoursLabel: string;
+      absenceLabel: string;
+    }> = [];
     dates.forEach((date) => {
       filteredPeople.forEach((person) => {
         const key = `${person.id}-${date}`;
+        const absenceType = absencesByUserDate.get(key) ?? null;
         output.push({
           person,
           date,
           entries: entriesByUserDate.get(key) ?? [],
+          absenceType,
+          contractHoursLabel: getContractHoursLabel(person.weeklyContractHours),
+          absenceLabel: getAbsenceLabel(absenceType, date),
         });
       });
     });
     return output;
-  }, [dates, entriesByUserDate, filteredPeople]);
+  }, [absencesByUserDate, dates, entriesByUserDate, filteredPeople]);
 
   const rowsWithTotals = useMemo(
     () =>
@@ -465,6 +508,8 @@ export default function ControlHorarioPage() {
       'Rol',
       'Fecha',
       'Fichajes',
+      'Contrato',
+      'Ausencia',
       'Total',
       'Horas diurnas',
       'Horas nocturnas',
@@ -490,6 +535,8 @@ export default function ControlHorarioPage() {
         escapeCsvValue(row.person.role),
         escapeCsvValue(dateFormatter.format(new Date(`${row.date}T00:00:00`))),
         escapeCsvValue(entriesLabel),
+        escapeCsvValue(row.contractHoursLabel),
+        escapeCsvValue(row.absenceLabel),
         escapeCsvValue(totalMinutes ? formatDuration(totalMinutes) : '—'),
         escapeCsvValue(row.dayMinutes ? formatDuration(row.dayMinutes) : '—'),
         escapeCsvValue(row.nightMinutes ? formatDuration(row.nightMinutes) : '—'),
@@ -537,20 +584,24 @@ export default function ControlHorarioPage() {
         <Table striped bordered hover className="align-middle">
           <colgroup>
             <col style={{ width: '20%' }} />
-            <col style={{ width: '10%' }} />
+            <col style={{ width: '8%' }} />
             <col style={{ width: '22%' }} />
+            <col style={{ width: '6%' }} />
+            <col style={{ width: '8%' }} />
             <col style={{ width: '7%' }} />
             <col style={{ width: '7%' }} />
             <col style={{ width: '8%' }} />
             <col style={{ width: '8%' }} />
             <col style={{ width: '8%' }} />
-            <col style={{ width: '10%' }} />
+            <col style={{ width: '8%' }} />
           </colgroup>
           <thead>
             <tr>
               <th>Usuario</th>
               <th>Fecha</th>
               <th>Fichajes</th>
+              <th>Contrato</th>
+              <th>Ausencia</th>
               <th>Total</th>
               <th>Diurnas</th>
               <th>Nocturnas</th>
@@ -563,7 +614,7 @@ export default function ControlHorarioPage() {
             {weekGroups.map((group) => (
               <Fragment key={group.key}>
                 <tr className="table-light">
-                  <td colSpan={9} className="fw-semibold">
+                  <td colSpan={11} className="fw-semibold">
                     {group.label}
                   </td>
                 </tr>
@@ -619,6 +670,8 @@ export default function ControlHorarioPage() {
                           <span className="text-muted">Sin fichajes</span>
                         )}
                       </td>
+                      <td>{row.contractHoursLabel}</td>
+                      <td>{row.absenceLabel}</td>
                       <td className={totalClassName}>
                         {row.totalMinutes ? formatDuration(row.totalMinutes) : '—'}
                       </td>
@@ -635,7 +688,7 @@ export default function ControlHorarioPage() {
                   );
                 })}
                 <tr className="table-secondary">
-                  <td colSpan={3} className="fw-semibold">
+                  <td colSpan={5} className="fw-semibold">
                     Total semana
                   </td>
                   <td className="fw-semibold">
