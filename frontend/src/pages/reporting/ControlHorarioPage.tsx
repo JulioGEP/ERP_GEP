@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Card, Collapse, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -156,6 +156,14 @@ function getAbsenceLabel(absenceType: string | null, date: string): string {
   return getVacationTypeVisual(normalized).fullLabel;
 }
 
+function isPastDate(date: string, todayKey: string): boolean {
+  return date < todayKey;
+}
+
+function isMissingLaborableClockIn(date: string, todayKey: string, absenceLabel: string, entriesCount: number): boolean {
+  return isPastDate(date, todayKey) && absenceLabel.trim().toLowerCase() === 'laborable' && entriesCount === 0;
+}
+
 type ModalState = {
   person: ReportingControlHorarioPerson;
   date: string;
@@ -174,6 +182,7 @@ export default function ControlHorarioPage() {
   const userDropdownRef = useRef<HTMLDivElement | null>(null);
 
   const queryClient = useQueryClient();
+  const todayKey = useMemo(() => formatDateKey(new Date()), []);
 
   const dateRange = useMemo(() => getMonthRange(filters.year, filters.month), [filters.month, filters.year]);
 
@@ -620,8 +629,21 @@ export default function ControlHorarioPage() {
                 </tr>
                 {group.rows.map((row) => {
                   const totalClassName = row.totalMinutes ? getTotalMinutesClassName(row.totalMinutes) : undefined;
+                  const highlightMissingClockIn = isMissingLaborableClockIn(
+                    row.date,
+                    todayKey,
+                    row.absenceLabel,
+                    row.entries.length,
+                  );
+                  const rowStyle = highlightMissingClockIn
+                    ? ({
+                        '--bs-table-bg': 'rgba(220, 53, 69, 0.06)',
+                        '--bs-table-striped-bg': 'rgba(220, 53, 69, 0.08)',
+                        '--bs-table-hover-bg': 'rgba(220, 53, 69, 0.12)',
+                      } as CSSProperties)
+                    : undefined;
                   return (
-                    <tr key={`${row.person.id}-${row.date}`}>
+                    <tr key={`${row.person.id}-${row.date}`} style={rowStyle}>
                       <td>
                         <div className="fw-semibold">
                           {row.person.isFixedTrainer ? (
