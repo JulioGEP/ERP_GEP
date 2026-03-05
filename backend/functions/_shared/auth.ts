@@ -224,6 +224,8 @@ export function getPermissionsForUser(user: UserRecord): readonly string[] {
 
   if (normalizedEmail === 'manuela@gepgroup.es') {
     permissions.add('/usuarios/formadores_bomberos');
+    permissions.add('/usuarios/control_horario_discontinuos');
+    permissions.add('/usuarios/control_horario_fijos');
   }
 
   return Array.from(permissions);
