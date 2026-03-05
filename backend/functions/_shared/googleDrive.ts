@@ -559,17 +559,50 @@ async function ensureFolderWithCandidates(params: {
   const candidates = uniqueSanitizedNames([preferredName, ...legacyNames]);
 
   for (const name of candidates) {
-    const existing = await findFolder({
-      name,
-      parentId: params.parentId,
+    const query = [
+      `'${params.parentId}' in parents`,
+      "mimeType = 'application/vnd.google-apps.folder'",
+      "trashed = false",
+      `name = '${name.replace(/'/g, "\\'")}'`,
+    ].join(" and ");
+
+    const list = await driveFilesList({
+      corpora: "drive",
       driveId: params.driveId,
+      includeItemsFromAllDrives: "true",
+      supportsAllDrives: "true",
+      q: query,
+      fields: "files(id, createdTime)",
+      orderBy: "createdTime asc",
+      pageSize: "100",
     });
+
+    const folders: DriveFolderSummary[] = Array.isArray(list.files) ? list.files : [];
+    const existing = folders[0]?.id ? String(folders[0].id) : null;
     if (existing) {
       if (name !== preferredName) {
         try {
           await renameDriveFile(existing, preferredName);
           removeFolderFromCache(params.parentId, name);
           driveFolderCache.set(cacheKey(params.parentId, preferredName), existing);
+
+          await consolidateDuplicateNamedFolders({
+            driveId: params.driveId,
+            parentId: params.parentId,
+            folderName: name,
+            keepFolderId: existing,
+            context: params.context,
+            existingFolders: folders,
+          });
+
+          await consolidateDuplicateNamedFolders({
+            driveId: params.driveId,
+            parentId: params.parentId,
+            folderName: preferredName,
+            keepFolderId: existing,
+            context: params.context,
+          });
+
           return { folderId: existing, folderName: preferredName };
         } catch (err) {
           console.warn("[google-drive-sync] No se pudo renombrar carpeta en Drive", {
@@ -582,6 +615,16 @@ async function ensureFolderWithCandidates(params: {
           return { folderId: existing, folderName: name };
         }
       }
+
+      await consolidateDuplicateNamedFolders({
+        driveId: params.driveId,
+        parentId: params.parentId,
+        folderName: preferredName,
+        keepFolderId: existing,
+        context: params.context,
+        existingFolders: folders,
+      });
+
       return { folderId: existing, folderName: preferredName };
     }
   }
@@ -595,6 +638,15 @@ async function ensureFolderWithCandidates(params: {
     parentId: params.parentId,
     driveId: params.driveId,
   });
+
+  await consolidateDuplicateNamedFolders({
+    driveId: params.driveId,
+    parentId: params.parentId,
+    folderName: preferredName,
+    keepFolderId: folderId,
+    context: params.context,
+  });
+
   return { folderId, folderName: preferredName };
 }
 
