@@ -731,7 +731,6 @@ export function AppRouter({
           element={
             <GuardedRoute
               path="/usuarios/control_horario_fijos"
-              roles={['Admin']}
               element={<ControlHorarioPage />}
             />
           }
@@ -741,7 +740,6 @@ export function AppRouter({
           element={
             <GuardedRoute
               path="/usuarios/control_horario_discontinuos"
-              roles={['Admin']}
               element={<ControlHorasFormadoresPage />}
             />
           }
