@@ -168,6 +168,10 @@ function isMissingLaborableClockIn(date: string, todayKey: string, absenceLabel:
   return isPastDate(date, todayKey) && absenceLabel.trim().toLowerCase() === 'laborable' && entriesCount === 0;
 }
 
+function isLaborableAbsence(absenceLabel: string): boolean {
+  return absenceLabel.trim().toLowerCase() === 'laborable';
+}
+
 type ModalState = {
   person: ReportingControlHorarioPerson;
   date: string;
@@ -321,7 +325,7 @@ export default function ControlHorarioPage() {
         const absenceType = absencesByUserDate.get(key) ?? null;
         const absenceLabel = getAbsenceLabel(absenceType, date);
         const baseContractHoursValue = getContractHoursValue(person.weeklyContractHours);
-        const contractHoursValue = absenceLabel === 'Fin de semana' ? 0 : baseContractHoursValue;
+        const contractHoursValue = isLaborableAbsence(absenceLabel) ? baseContractHoursValue : 0;
         output.push({
           person,
           date,
