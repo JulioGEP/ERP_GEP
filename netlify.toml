@@ -29,13 +29,15 @@
     "node_modules/.prisma/client/libquery_engine-rhel-openssl-3.0.x.so.node"
   ]
 
-[[scheduled]]
-  function = "daily-availability-slack"
-  cron = "0 5,6 * * 1-5"
-
+# Programación en UTC para ejecutar a las 07:00 en Madrid
+# (05:00 UTC en horario de verano, 06:00 UTC en horario de invierno).
 [[scheduled]]
   function = "daily-trainers-slack"
   cron = "0 5,6 * * *"
+
+[[scheduled]]
+  function = "daily-availability-slack"
+  cron = "0 5,6 * * 1-5"
 
 # --------- Redirects ---------
 

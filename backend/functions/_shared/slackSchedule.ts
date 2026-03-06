@@ -11,7 +11,7 @@ export function isScheduledInvocation(event: Parameters<Handler>[0]): boolean {
 export function isWithinMadridAutomationWindow(
   isoDateTime: string,
   startMinuteInclusive = 0,
-  endMinuteInclusive = 4,
+  endMinuteInclusive = 59,
 ): boolean {
   const timePart = isoDateTime.split('T')[1] ?? '';
   const [hour = '', minute = ''] = timePart.split(':');
