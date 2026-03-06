@@ -607,7 +607,7 @@ export default function ControlHorarioPage() {
   } else {
     content = (
       <div className="table-responsive">
-        <Table striped bordered hover className="align-middle">
+        <Table bordered hover className="align-middle">
           <colgroup>
             <col style={{ width: '20%' }} />
             <col style={{ width: '8%' }} />
@@ -646,19 +646,25 @@ export default function ControlHorarioPage() {
                 </tr>
                 {group.rows.map((row) => {
                   const totalClassName = row.totalMinutes ? getTotalMinutesClassName(row.totalMinutes) : undefined;
+                  const laborableAbsence = isLaborableAbsence(row.absenceLabel);
                   const highlightMissingClockIn = isMissingLaborableClockIn(
                     row.date,
                     todayKey,
                     row.absenceLabel,
                     row.entries.length,
                   );
-                  const rowStyle = highlightMissingClockIn
-                    ? ({
-                        '--bs-table-bg': 'rgba(220, 53, 69, 0.06)',
-                        '--bs-table-striped-bg': 'rgba(220, 53, 69, 0.08)',
-                        '--bs-table-hover-bg': 'rgba(220, 53, 69, 0.12)',
-                      } as CSSProperties)
-                    : undefined;
+                  const rowStyle = {
+                    '--bs-table-bg': highlightMissingClockIn
+                      ? 'rgba(220, 53, 69, 0.06)'
+                      : laborableAbsence
+                        ? '#ffffff'
+                        : '#f2f2f2',
+                    '--bs-table-hover-bg': highlightMissingClockIn
+                      ? 'rgba(220, 53, 69, 0.12)'
+                      : laborableAbsence
+                        ? '#f8f9fa'
+                        : '#e9ecef',
+                  } as CSSProperties;
                   return (
                     <tr key={`${row.person.id}-${row.date}`} style={rowStyle}>
                       <td>
