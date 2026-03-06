@@ -55,9 +55,13 @@ function buildDateRange(startDate: string | null, endDate: string | null): { sta
 
 export const handler = createHttpHandler(async (request) => {
   const prisma = getPrisma();
-  const auth = await requireAuth(request, prisma, { requireRoles: ['Admin'] });
+  const auth = await requireAuth(request, prisma);
   if ('error' in auth) {
     return auth.error;
+  }
+
+  if (!auth.permissions.includes('ALL') && !auth.permissions.includes('/usuarios/control_horario_fijos')) {
+    return errorResponse('FORBIDDEN', 'No tienes permisos para consultar este control horario.', 403);
   }
 
   if (request.method === 'GET') {
