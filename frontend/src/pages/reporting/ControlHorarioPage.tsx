@@ -141,10 +141,14 @@ function isWeekend(date: string): boolean {
   return day === 0 || day === 6;
 }
 
-function getContractHoursLabel(weeklyHours: number | null): string {
-  if (weeklyHours === null || !Number.isFinite(weeklyHours)) return '—';
+function getContractHoursValue(weeklyHours: number | null): number | null {
+  if (weeklyHours === null || !Number.isFinite(weeklyHours)) return null;
   const dailyHours = weeklyHours / 5;
-  const rounded = Math.round(dailyHours * 100) / 100;
+  return Math.round(dailyHours * 100) / 100;
+}
+
+function formatContractHoursValue(hours: number): string {
+  const rounded = Math.round(hours * 100) / 100;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 }
 
@@ -307,6 +311,7 @@ export default function ControlHorarioPage() {
       date: string;
       entries: ReportingControlHorarioEntry[];
       absenceType: string | null;
+      contractHoursValue: number | null;
       contractHoursLabel: string;
       absenceLabel: string;
     }> = [];
@@ -314,13 +319,18 @@ export default function ControlHorarioPage() {
       filteredPeople.forEach((person) => {
         const key = `${person.id}-${date}`;
         const absenceType = absencesByUserDate.get(key) ?? null;
+        const absenceLabel = getAbsenceLabel(absenceType, date);
+        const baseContractHoursValue = getContractHoursValue(person.weeklyContractHours);
+        const contractHoursValue = absenceLabel === 'Fin de semana' ? 0 : baseContractHoursValue;
         output.push({
           person,
           date,
           entries: entriesByUserDate.get(key) ?? [],
           absenceType,
-          contractHoursLabel: getContractHoursLabel(person.weeklyContractHours),
-          absenceLabel: getAbsenceLabel(absenceType, date),
+          contractHoursValue,
+          contractHoursLabel:
+            contractHoursValue === null ? '—' : formatContractHoursValue(contractHoursValue),
+          absenceLabel,
         });
       });
     });
@@ -416,6 +426,7 @@ export default function ControlHorarioPage() {
       nightMinutes: number;
       regionalHolidayMinutes: number;
       nationalHolidayMinutes: number;
+      contractHoursTotal: number;
     }> = [];
     const groupMap = new Map<string, typeof groups[number]>();
     rowsWithTotalsFiltered.forEach((row) => {
@@ -432,6 +443,7 @@ export default function ControlHorarioPage() {
           nightMinutes: 0,
           regionalHolidayMinutes: 0,
           nationalHolidayMinutes: 0,
+          contractHoursTotal: 0,
         };
         groupMap.set(key, group);
         groups.push(group);
@@ -442,6 +454,7 @@ export default function ControlHorarioPage() {
       group.nightMinutes += row.nightMinutes;
       group.regionalHolidayMinutes += row.regionalHolidayMinutes;
       group.nationalHolidayMinutes += row.nationalHolidayMinutes;
+      group.contractHoursTotal += row.contractHoursValue ?? 0;
     });
     return groups;
   }, [rowsWithTotalsFiltered]);
@@ -710,9 +723,11 @@ export default function ControlHorarioPage() {
                   );
                 })}
                 <tr className="table-secondary">
-                  <td colSpan={5} className="fw-semibold">
+                  <td colSpan={3} className="fw-semibold">
                     Total semana
                   </td>
+                  <td className="fw-semibold">{formatContractHoursValue(group.contractHoursTotal)}</td>
+                  <td className="fw-semibold">—</td>
                   <td className="fw-semibold">
                     {group.totalMinutes ? formatDuration(group.totalMinutes) : '—'}
                   </td>
