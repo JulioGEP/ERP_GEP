@@ -153,6 +153,21 @@ export function ReportsFlow({ type, title, initialDraft }: ReportsFlowProps) {
     setStage('form');
   };
 
+  const isTrainerReportsFlow = location.pathname.startsWith(TRAINER_REPORT_BASE_PATH);
+
+  const chooseAnotherOptions = useMemo(() => {
+    if (!isTrainerReportsFlow) return [];
+    return REPORT_TYPE_OPTIONS.filter((option) => option.value !== type).map((option) => ({
+      ...option,
+      onClick: () => {
+        const nextPath = `${TRAINER_REPORT_BASE_PATH}/${REPORT_ROUTE_SEGMENT[option.value]}`;
+        navigate(nextPath, {
+          state: trainerReportPrefill ? { reportPrefill: trainerReportPrefill } : undefined,
+        });
+      },
+    }));
+  }, [isTrainerReportsFlow, navigate, trainerReportPrefill, type]);
+
   const formInitial = draft ?? resolvedInitialDraft;
 
   if (stage === 'preview') {
@@ -170,21 +185,6 @@ export function ReportsFlow({ type, title, initialDraft }: ReportsFlowProps) {
     setDraft(createEmptyDraft(type));
     setStage('form');
   };
-
-  const isTrainerReportsFlow = location.pathname.startsWith(TRAINER_REPORT_BASE_PATH);
-
-  const chooseAnotherOptions = useMemo(() => {
-    if (!isTrainerReportsFlow) return [];
-    return REPORT_TYPE_OPTIONS.filter((option) => option.value !== type).map((option) => ({
-      ...option,
-      onClick: () => {
-        const nextPath = `${TRAINER_REPORT_BASE_PATH}/${REPORT_ROUTE_SEGMENT[option.value]}`;
-        navigate(nextPath, {
-          state: trainerReportPrefill ? { reportPrefill: trainerReportPrefill } : undefined,
-        });
-      },
-    }));
-  }, [isTrainerReportsFlow, navigate, trainerReportPrefill, type]);
 
   return (
     <Form
