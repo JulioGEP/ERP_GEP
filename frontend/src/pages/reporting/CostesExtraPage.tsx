@@ -1216,12 +1216,6 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                 </div>
               </Form.Group>
               <div className="d-flex flex-column gap-2 border rounded p-2" style={{ minWidth: '320px' }}>
-                <Form.Label className="mb-0">Edición masiva</Form.Label>
-                <div className="small text-muted">
-                  {selectedItemsCount
-                    ? `${selectedItemsCount} registro(s) seleccionado(s)`
-                    : 'Selecciona registros desde la tabla'}
-                </div>
                 <div className="d-flex gap-2 align-items-end flex-wrap">
                   <Form.Group controlId="costes-extra-bulk-field" className="mb-0">
                     <Form.Label className="small mb-1">Campo</Form.Label>
