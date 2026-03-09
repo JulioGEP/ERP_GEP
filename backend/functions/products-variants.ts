@@ -1516,7 +1516,6 @@ function normalizeVariant(record: VariantRecord) {
     new Set([
       ...trainerIdsFromLinks,
       ...(trimmedTrainerId ? [trimmedTrainerId] : []),
-      ...inviteTrainerIds,
     ]),
   );
 
