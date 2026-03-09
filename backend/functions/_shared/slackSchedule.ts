@@ -1,11 +1,21 @@
 import type { Handler } from '@netlify/functions';
 
-const NETLIFY_SCHEDULE_HEADER = 'x-netlify-event';
+const NETLIFY_SCHEDULE_HEADERS = ['x-netlify-event', 'x-nf-event'];
 const MADRID_AUTOMATION_HOUR = '07';
 
 export function isScheduledInvocation(event: Parameters<Handler>[0]): boolean {
-  const scheduleHeader = event.headers?.[NETLIFY_SCHEDULE_HEADER] ?? event.headers?.[NETLIFY_SCHEDULE_HEADER.toUpperCase()];
-  return String(scheduleHeader ?? '').toLowerCase() === 'schedule';
+  const headers = event.headers ?? {};
+
+  for (const [headerKey, headerValue] of Object.entries(headers)) {
+    const normalizedHeaderKey = headerKey.toLowerCase();
+    if (!NETLIFY_SCHEDULE_HEADERS.includes(normalizedHeaderKey)) continue;
+
+    if (String(headerValue ?? '').toLowerCase() === 'schedule') {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export function isWithinMadridAutomationWindow(
