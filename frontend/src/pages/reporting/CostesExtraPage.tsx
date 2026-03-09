@@ -843,11 +843,14 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
     }
 
     return (
-      <div className="table-responsive">
-        <Table striped bordered hover>
+      <div className="table-responsive" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+        <Table striped bordered hover className="mb-0">
           <thead>
             <tr>
-              <th style={{ width: '60px' }} className="text-center">
+              <th
+                style={{ width: '60px', position: 'sticky', top: 0, zIndex: 3 }}
+                className="text-center bg-light"
+              >
                 <Form.Check
                   type="checkbox"
                   checked={allItemsSelected}
@@ -855,19 +858,36 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                   aria-label="Seleccionar todos los registros"
                 />
               </th>
-              <th style={{ minWidth: '120px' }}>Fecha</th>
-              <th style={{ minWidth: '220px' }}>Formador</th>
-              <th style={{ minWidth: '260px' }}>Sesiones</th>
-              <th style={{ minWidth: '200px' }}>Documentos</th>
-              <th style={{ minWidth: '120px' }} className="text-end">
+              <th style={{ minWidth: '120px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+                Fecha
+              </th>
+              <th style={{ minWidth: '220px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+                Formador
+              </th>
+              <th style={{ minWidth: '260px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+                Sesiones
+              </th>
+              <th style={{ minWidth: '200px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+                Documentos
+              </th>
+              <th
+                style={{ minWidth: '120px', position: 'sticky', top: 0, zIndex: 3 }}
+                className="text-end bg-light"
+              >
                 Horas
               </th>
               {COST_FIELD_DEFINITIONS.map((definition) => (
-                <th key={definition.key} className="text-end" style={{ minWidth: '140px' }}>
+                <th
+                  key={definition.key}
+                  className="text-end bg-light"
+                  style={{ minWidth: '140px', position: 'sticky', top: 0, zIndex: 3 }}
+                >
                   {definition.label}
                 </th>
               ))}
-              <th style={{ width: '120px' }}>Acciones</th>
+              <th style={{ width: '120px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+                Acciones
+              </th>
             </tr>
           </thead>
           <tbody>
