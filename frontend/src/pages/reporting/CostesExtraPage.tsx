@@ -842,6 +842,14 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
       return <Alert variant="info">No hay registros de costes extra disponibles.</Alert>;
     }
 
+    const stickySummaryCellStyle = {
+      position: 'sticky',
+      bottom: 0,
+      zIndex: 2,
+      backgroundColor: 'var(--bs-table-bg)',
+      boxShadow: '0 -1px 0 rgba(0, 0, 0, 0.08)',
+    } as const;
+
     return (
       <div className="table-responsive" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
         <Table striped bordered hover className="mb-0">
@@ -1058,16 +1066,18 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
           </tbody>
           <tfoot>
             <tr className="table-light fw-semibold">
-              <td colSpan={5} className="text-end align-middle">
+              <td colSpan={5} className="text-end align-middle" style={stickySummaryCellStyle}>
                 Totales / medias
               </td>
-              <td className="text-end align-middle">{hoursFormatter.format(tableSummary.workedHoursTotal)}</td>
+              <td className="text-end align-middle" style={stickySummaryCellStyle}>
+                {hoursFormatter.format(tableSummary.workedHoursTotal)}
+              </td>
               {COST_FIELD_DEFINITIONS.map((definition) => (
-                <td key={definition.key} className="text-end align-middle">
+                <td key={definition.key} className="text-end align-middle" style={stickySummaryCellStyle}>
                   {hoursFormatter.format(tableSummary.costValues[definition.key] ?? 0)}
                 </td>
               ))}
-              <td className="align-middle text-muted small">—</td>
+              <td className="align-middle text-muted small" style={stickySummaryCellStyle}>—</td>
             </tr>
           </tfoot>
         </Table>
