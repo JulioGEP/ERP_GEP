@@ -845,9 +845,9 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
     return (
       <div className="table-responsive">
         <Table striped bordered hover>
-          <thead className="position-sticky top-0 z-1">
+          <thead>
             <tr>
-              <th style={{ width: '60px' }} className="text-center bg-body">
+              <th style={{ width: '60px' }} className="text-center">
                 <Form.Check
                   type="checkbox"
                   checked={allItemsSelected}
@@ -855,19 +855,19 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                   aria-label="Seleccionar todos los registros"
                 />
               </th>
-              <th style={{ minWidth: '120px' }} className="bg-body">Fecha</th>
-              <th style={{ minWidth: '220px' }} className="bg-body">Formador</th>
-              <th style={{ minWidth: '260px' }} className="bg-body">Sesiones</th>
-              <th style={{ minWidth: '200px' }} className="bg-body">Documentos</th>
-              <th style={{ minWidth: '120px' }} className="text-end bg-body">
+              <th style={{ minWidth: '120px' }}>Fecha</th>
+              <th style={{ minWidth: '220px' }}>Formador</th>
+              <th style={{ minWidth: '260px' }}>Sesiones</th>
+              <th style={{ minWidth: '200px' }}>Documentos</th>
+              <th style={{ minWidth: '120px' }} className="text-end">
                 Horas
               </th>
               {COST_FIELD_DEFINITIONS.map((definition) => (
-                <th key={definition.key} className="text-end bg-body" style={{ minWidth: '140px' }}>
+                <th key={definition.key} className="text-end" style={{ minWidth: '140px' }}>
                   {definition.label}
                 </th>
               ))}
-              <th style={{ width: '120px' }} className="bg-body">Acciones</th>
+              <th style={{ width: '120px' }}>Acciones</th>
             </tr>
           </thead>
           <tbody>
