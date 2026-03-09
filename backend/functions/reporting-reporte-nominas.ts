@@ -183,8 +183,46 @@ function isPreventiveService(tipo: string | null | undefined): boolean {
   return tipo.toLowerCase().includes('preventivo');
 }
 
+const DEFAULT_SERVICE_COSTS = {
+  formacion: 30,
+  preventivo: 15,
+} as const;
+
+function normalizeForMatching(value: string | null | undefined): string {
+  if (!value) return '';
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim();
+}
+
+function isPreventivePipeline(
+  pipelineLabel: string | null | undefined,
+  pipelineId: string | null | undefined,
+): boolean {
+  const normalizedLabel = normalizeForMatching(pipelineLabel);
+  const normalizedId = normalizeForMatching(pipelineId);
+
+  return (
+    normalizedLabel === 'gep services'
+    || normalizedLabel === 'preventivos'
+    || normalizedId === 'gep services'
+    || normalizedId === 'preventivos'
+  );
+}
+
 function applyTrainerServiceCostMetrics(target: MetricTotals, extraCost: trainer_extra_costs & {
-  sesion?: { fecha_inicio_utc: Date | null; fecha_fin_utc: Date | null; tiempo_parada: DecimalLike | null; deals: { tipo_servicio: string | null } | null } | null;
+  sesion?: {
+    fecha_inicio_utc: Date | null;
+    fecha_fin_utc: Date | null;
+    tiempo_parada: DecimalLike | null;
+    deals: {
+      tipo_servicio: string | null;
+      pipeline_label: string | null;
+      pipeline_id: string | null;
+    } | null;
+  } | null;
   variant?: { date: Date | null; products: { hora_inicio: Date | null; hora_fin: Date | null } | null } | null;
 }): void {
   const breakHours = decimalToNumber(extraCost.sesion?.tiempo_parada);
@@ -193,15 +231,25 @@ function applyTrainerServiceCostMetrics(target: MetricTotals, extraCost: trainer
   const workedHours = sessionHours + variantHours;
 
   const serviceType = isPreventiveService(extraCost.sesion?.deals?.tipo_servicio)
+    || isPreventivePipeline(
+      extraCost.sesion?.deals?.pipeline_label,
+      extraCost.sesion?.deals?.pipeline_id,
+    )
     ? 'preventivo'
     : 'formacion';
 
   if (serviceType === 'preventivo') {
-    target.costeServicioPreventivo += workedHours * decimalToNumber(extraCost.precio_coste_preventivo);
-  } else {
-    target.costeServicioFormacion += workedHours * decimalToNumber(extraCost.precio_coste_formacion);
+    const preventiveRate = decimalToNumber(extraCost.precio_coste_preventivo);
+    const rate = preventiveRate > 0 ? preventiveRate : DEFAULT_SERVICE_COSTS.preventivo;
+    target.costeServicioPreventivo += workedHours * rate;
+    return;
   }
+
+  const trainingRate = decimalToNumber(extraCost.precio_coste_formacion);
+  const rate = trainingRate > 0 ? trainingRate : DEFAULT_SERVICE_COSTS.formacion;
+  target.costeServicioFormacion += workedHours * rate;
 }
+
 
 function applyOfficePayrollMetrics(target: MetricTotals, payroll: office_payrolls): void {
   target.salarioBruto += decimalToNumber(payroll.salario_bruto);
@@ -340,10 +388,24 @@ export const handler = createHttpHandler(async (request) => {
       }),
       prisma.trainer_extra_costs.findMany({
         where: {
-          created_at: {
-            gte: monthRange.start,
-            lt: monthRange.end,
-          },
+          OR: [
+            {
+              sesion: {
+                fecha_inicio_utc: {
+                  gte: monthRange.start,
+                  lt: monthRange.end,
+                },
+              },
+            },
+            {
+              variant: {
+                date: {
+                  gte: monthRange.start,
+                  lt: monthRange.end,
+                },
+              },
+            },
+          ],
         },
         include: {
           trainer: {
@@ -359,6 +421,8 @@ export const handler = createHttpHandler(async (request) => {
               deals: {
                 select: {
                   tipo_servicio: true,
+                  pipeline_label: true,
+                  pipeline_id: true,
                 },
               },
             },
