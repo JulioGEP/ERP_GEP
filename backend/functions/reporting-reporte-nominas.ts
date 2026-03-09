@@ -393,10 +393,13 @@ export const handler = createHttpHandler(async (request) => {
 
     trainerExtraCosts.forEach((cost) => {
       const isFixedTrainer = Boolean(cost.trainer?.contrato_fijo);
-      if (!isFixedTrainer) {
-        applyTrainerServiceCostMetrics(discontinuousTrainers.metrics, cost);
-        applyTrainerExtraCostMetrics(discontinuousTrainers.metrics, cost);
+      if (isFixedTrainer) {
+        applyTrainerExtraCostMetrics(fixedTrainers.metrics, cost);
+        return;
       }
+
+      applyTrainerServiceCostMetrics(discontinuousTrainers.metrics, cost);
+      applyTrainerExtraCostMetrics(discontinuousTrainers.metrics, cost);
     });
 
     const finalizedFixedTrainers = finalizeCategoryTotals(fixedTrainers);
