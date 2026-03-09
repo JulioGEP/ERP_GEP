@@ -402,7 +402,7 @@ export default function HorasFormadoresPage() {
               </Button>
             </div>
           </Form>
-          <div className="d-flex gap-3 flex-wrap mb-3">
+          <div className="d-flex gap-3 flex-nowrap mb-3 overflow-auto pb-1">
             <div>
               <span className="text-muted d-block small">Total de formadores</span>
               <span className="fw-semibold h5 mb-0">{summaryTrainers}</span>
@@ -416,27 +416,27 @@ export default function HorasFormadoresPage() {
               <span className="fw-semibold h5 mb-0">{summaryHours}</span>
             </div>
             <div>
-              <span className="text-muted d-block small">Total horas preventivos</span>
+              <span className="text-muted d-block small">Horas prev.</span>
               <span className="fw-semibold h5 mb-0">{summaryPreventiveHours}</span>
             </div>
             <div>
-              <span className="text-muted d-block small">Total horas formación</span>
+              <span className="text-muted d-block small">Horas form.</span>
               <span className="fw-semibold h5 mb-0">{summaryTrainingHours}</span>
             </div>
             <div>
-              <span className="text-muted d-block small">Coste preventivo</span>
+              <span className="text-muted d-block small">Coste prev.</span>
               <span className="fw-semibold h5 mb-0">{summaryPreventiveServiceCost}</span>
             </div>
             <div>
-              <span className="text-muted d-block small">Coste formación</span>
+              <span className="text-muted d-block small">Coste form.</span>
               <span className="fw-semibold h5 mb-0">{summaryTrainingServiceCost}</span>
             </div>
             <div>
-              <span className="text-muted d-block small">Coste extra preventivo</span>
+              <span className="text-muted d-block small">Extra prev.</span>
               <span className="fw-semibold h5 mb-0">{summaryPreventiveExtraCost}</span>
             </div>
             <div>
-              <span className="text-muted d-block small">Coste extra formación</span>
+              <span className="text-muted d-block small">Extra form.</span>
               <span className="fw-semibold h5 mb-0">{summaryTrainingExtraCost}</span>
             </div>
             <div>
