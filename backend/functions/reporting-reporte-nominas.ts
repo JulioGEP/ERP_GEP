@@ -340,10 +340,28 @@ export const handler = createHttpHandler(async (request) => {
       }),
       prisma.trainer_extra_costs.findMany({
         where: {
-          created_at: {
-            gte: monthRange.start,
-            lt: monthRange.end,
-          },
+          OR: [
+            {
+              sesion: {
+                is: {
+                  fecha_inicio_utc: {
+                    gte: monthRange.start,
+                    lt: monthRange.end,
+                  },
+                },
+              },
+            },
+            {
+              variant: {
+                is: {
+                  date: {
+                    gte: monthRange.start,
+                    lt: monthRange.end,
+                  },
+                },
+              },
+            },
+          ],
         },
         include: {
           trainer: {
