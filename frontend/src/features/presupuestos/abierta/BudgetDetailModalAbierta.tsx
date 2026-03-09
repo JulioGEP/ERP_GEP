@@ -531,6 +531,7 @@ export function BudgetDetailModalAbierta({
   const noteWarningSignatureRef = useRef<string | null>(null);
   const autoRefreshTriggeredRef = useRef(false);
   const lastAutoRefreshDealIdRef = useRef<string | null>(null);
+  const noteDrivenRefreshSignatureRef = useRef<string | null>(null);
 
   const isFollowUpFieldLoading = (field: FollowUpFieldKey) =>
     followUpLoading && followUpPendingField === field;
@@ -1397,6 +1398,42 @@ export function BudgetDetailModalAbierta({
   const handleRefresh = useCallback(() => {
     triggerRefresh(true);
   }, [triggerRefresh]);
+
+
+  useEffect(() => {
+    if (!normalizedDealId) {
+      noteDrivenRefreshSignatureRef.current = null;
+      return;
+    }
+    if (!noteSignature || !noteStudents.length) {
+      noteDrivenRefreshSignatureRef.current = null;
+      return;
+    }
+    if (studentsLoading || sessionsLoading || refreshMutation.isPending) {
+      return;
+    }
+    if (automaticStudentsSessionId) {
+      noteDrivenRefreshSignatureRef.current = null;
+      return;
+    }
+
+    const refreshSignature = `${normalizedDealId}:${noteSignature}`;
+    if (noteDrivenRefreshSignatureRef.current === refreshSignature) {
+      return;
+    }
+
+    noteDrivenRefreshSignatureRef.current = refreshSignature;
+    triggerRefresh(false);
+  }, [
+    normalizedDealId,
+    noteSignature,
+    noteStudents,
+    studentsLoading,
+    sessionsLoading,
+    refreshMutation.isPending,
+    automaticStudentsSessionId,
+    triggerRefresh,
+  ]);
 
   useEffect(() => {
     if (!dealId || !autoRefreshOnOpen) {
