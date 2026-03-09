@@ -55,7 +55,7 @@ type TrainerHoursAccumulator = {
 };
 
 const DEFAULT_SERVICE_COSTS = {
-  formacion: 15,
+  formacion: 30,
   preventivo: 15,
 } as const;
 
