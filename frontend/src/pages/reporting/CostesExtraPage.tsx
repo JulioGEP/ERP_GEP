@@ -45,6 +45,11 @@ const AVERAGE_COST_KEYS = new Set<TrainerExtraCostFieldKey>([
   'precioCostePreventivo',
 ]);
 
+const TABLE_VISIBLE_COST_FIELD_DEFINITIONS = COST_FIELD_DEFINITIONS.filter(
+  (definition) =>
+    definition.key !== 'precioCosteFormacion' && definition.key !== 'precioCostePreventivo',
+);
+
 function formatDateForInput(date: Date): string {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
@@ -884,7 +889,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
               >
                 Horas
               </th>
-              {COST_FIELD_DEFINITIONS.map((definition) => (
+              {TABLE_VISIBLE_COST_FIELD_DEFINITIONS.map((definition) => (
                 <th
                   key={definition.key}
                   className="text-end bg-light"
@@ -1033,7 +1038,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                       ? hoursFormatter.format(item.workedHours)
                       : '—'}
                   </td>
-                  {COST_FIELD_DEFINITIONS.map((definition) => (
+                  {TABLE_VISIBLE_COST_FIELD_DEFINITIONS.map((definition) => (
                     <td key={definition.key} className="align-middle">
                       <Form.Control
                         type="text"
@@ -1072,7 +1077,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
               <td className="text-end align-middle" style={stickySummaryCellStyle}>
                 {hoursFormatter.format(tableSummary.workedHoursTotal)}
               </td>
-              {COST_FIELD_DEFINITIONS.map((definition) => (
+              {TABLE_VISIBLE_COST_FIELD_DEFINITIONS.map((definition) => (
                 <td key={definition.key} className="text-end align-middle" style={stickySummaryCellStyle}>
                   {hoursFormatter.format(tableSummary.costValues[definition.key] ?? 0)}
                 </td>
