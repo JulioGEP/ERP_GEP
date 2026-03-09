@@ -84,6 +84,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       stock: true,
       stock_status: true,
       sede: true,
+      trainer_id: true,
       sala_id: true,
       unidad_movil_id: true,
       products: {
@@ -150,7 +151,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       minute: startMinute,
     });
 
-    const trainerId = session.trainerIds[0] ?? null;
+    const trainerId = session.trainerIds[0] ?? baseVariant.trainer_id ?? null;
 
     const created = await prisma.variants.create({
       data: {
