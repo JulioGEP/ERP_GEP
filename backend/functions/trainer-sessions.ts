@@ -60,7 +60,11 @@ type VariantRecord = {
   id_woo: bigint | number | string | null;
   date: Date | string | null;
   sede: string | null;
-  products: { name: string | null } | null;
+  products: {
+    name: string | null;
+    hora_inicio: Date | string | null;
+    hora_fin: Date | string | null;
+  } | null;
 };
 
 type VariantDealRecord = {
@@ -103,6 +107,8 @@ type VariantPayload = {
   productName: string | null;
   site: string | null;
   date: string | null;
+  startTime: string | null;
+  endTime: string | null;
   wooId: string | null;
   studentCount: number;
   organizationNames: string[];
@@ -691,7 +697,7 @@ export const handler = createHttpHandler(async (request) => {
         id_woo: true,
         date: true,
         sede: true,
-        products: { select: { name: true } },
+        products: { select: { name: true, hora_inicio: true, hora_fin: true } },
       },
     })) as VariantRecord[];
 
@@ -809,6 +815,8 @@ export const handler = createHttpHandler(async (request) => {
             productName: sanitizeString(variant.products?.name ?? null),
             site: sanitizeString(variant.sede ?? null),
             date: toMadridISOString(variant.date),
+            startTime: formatTimeFromDb(variant.products?.hora_inicio ?? null),
+            endTime: formatTimeFromDb(variant.products?.hora_fin ?? null),
             wooId,
             studentCount,
             organizationNames,
