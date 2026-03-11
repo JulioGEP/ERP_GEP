@@ -24,7 +24,8 @@ type MetricKey =
   | 'nocturnidad'
   | 'festivo'
   | 'horasExtras'
-  | 'gastosExtras';
+  | 'gastosExtras'
+  | 'variable';
 
 type MetricTotals = Record<MetricKey, number>;
 
@@ -63,6 +64,7 @@ const METRIC_KEYS: MetricKey[] = [
   'festivo',
   'horasExtras',
   'gastosExtras',
+  'variable',
 ];
 
 function decimalToNumber(value: DecimalLike | number | string | null | undefined): number {
@@ -101,6 +103,7 @@ function emptyMetrics(): MetricTotals {
     festivo: 0,
     horasExtras: 0,
     gastosExtras: 0,
+    variable: 0,
   };
 }
 
@@ -119,7 +122,8 @@ function computeTotalCost(metrics: MetricTotals): number {
       + metrics.nocturnidad
       + metrics.festivo
       + metrics.horasExtras
-      + metrics.gastosExtras,
+      + metrics.gastosExtras
+      + metrics.variable,
   );
 }
 
@@ -373,6 +377,7 @@ function applyOfficePayrollMetrics(target: MetricTotals, payroll: office_payroll
   target.festivo += decimalToNumber(payroll.festivo);
   target.horasExtras += decimalToNumber(payroll.horas_extras);
   target.gastosExtras += decimalToNumber(payroll.otros_gastos);
+  target.variable += decimalToNumber(payroll.variable);
 }
 
 function applyTrainerExtraCostMetrics(target: MetricTotals, extraCost: trainer_extra_costs): void {
