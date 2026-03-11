@@ -1102,7 +1102,8 @@ export type PayrollReportMetricKey =
   | 'nocturnidad'
   | 'festivo'
   | 'horasExtras'
-  | 'gastosExtras';
+  | 'gastosExtras'
+  | 'variable';
 
 export type PayrollReportTotals = {
   metrics: Record<PayrollReportMetricKey, number>;
