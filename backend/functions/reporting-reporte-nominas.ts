@@ -24,7 +24,8 @@ type MetricKey =
   | 'nocturnidad'
   | 'festivo'
   | 'horasExtras'
-  | 'gastosExtras';
+  | 'gastosExtras'
+  | 'variable';
 
 type MetricTotals = Record<MetricKey, number>;
 
@@ -63,6 +64,7 @@ const METRIC_KEYS: MetricKey[] = [
   'festivo',
   'horasExtras',
   'gastosExtras',
+  'variable',
 ];
 
 function decimalToNumber(value: DecimalLike | number | string | null | undefined): number {
@@ -101,6 +103,7 @@ function emptyMetrics(): MetricTotals {
     festivo: 0,
     horasExtras: 0,
     gastosExtras: 0,
+    variable: 0,
   };
 }
 
@@ -119,7 +122,8 @@ function computeTotalCost(metrics: MetricTotals): number {
       + metrics.nocturnidad
       + metrics.festivo
       + metrics.horasExtras
-      + metrics.gastosExtras,
+      + metrics.gastosExtras
+      + metrics.variable,
   );
 }
 
@@ -183,25 +187,181 @@ function isPreventiveService(tipo: string | null | undefined): boolean {
   return tipo.toLowerCase().includes('preventivo');
 }
 
-function applyTrainerServiceCostMetrics(target: MetricTotals, extraCost: trainer_extra_costs & {
-  sesion?: { fecha_inicio_utc: Date | null; fecha_fin_utc: Date | null; tiempo_parada: DecimalLike | null; deals: { tipo_servicio: string | null } | null } | null;
-  variant?: { date: Date | null; products: { hora_inicio: Date | null; hora_fin: Date | null } | null } | null;
-}): void {
-  const breakHours = decimalToNumber(extraCost.sesion?.tiempo_parada);
-  const sessionHours = computeSessionHours(extraCost.sesion?.fecha_inicio_utc ?? null, extraCost.sesion?.fecha_fin_utc ?? null, breakHours);
-  const variantHours = computeVariantHours(extraCost.variant?.date ?? null, extraCost.variant?.products ?? { hora_inicio: null, hora_fin: null });
-  const workedHours = sessionHours + variantHours;
+const DEFAULT_SERVICE_COSTS = {
+  formacion: 30,
+  preventivo: 15,
+} as const;
 
-  const serviceType = isPreventiveService(extraCost.sesion?.deals?.tipo_servicio)
-    ? 'preventivo'
-    : 'formacion';
+const CANCELLED_VARIANT_STATUS = 'cancelado';
+const EXCLUDED_SESSION_STATES: Array<'SUSPENDIDA' | 'CANCELADA'> = ['SUSPENDIDA', 'CANCELADA'];
 
-  if (serviceType === 'preventivo') {
-    target.costeServicioPreventivo += workedHours * decimalToNumber(extraCost.precio_coste_preventivo);
-  } else {
-    target.costeServicioFormacion += workedHours * decimalToNumber(extraCost.precio_coste_formacion);
-  }
+function normalizeForMatching(value: string | null | undefined): string {
+  if (!value) return '';
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim();
 }
+
+function isPreventivePipeline(
+  pipelineLabel: string | null | undefined,
+  pipelineId: string | null | undefined,
+): boolean {
+  const normalizedLabel = normalizeForMatching(pipelineLabel);
+  const normalizedId = normalizeForMatching(pipelineId);
+
+  return (
+    normalizedLabel === 'gep services'
+    || normalizedLabel === 'preventivos'
+    || normalizedId === 'gep services'
+    || normalizedId === 'preventivos'
+  );
+}
+
+async function applyDiscontinuousServiceCosts(
+  prisma: ReturnType<typeof getPrisma>,
+  monthRange: { start: Date; end: Date },
+  target: MetricTotals,
+): Promise<void> {
+  const sesionTrainers = await prisma.sesion_trainers.findMany({
+    where: {
+      trainers: {
+        is: {
+          contrato_fijo: false,
+        },
+      },
+      sesiones: {
+        fecha_inicio_utc: {
+          gte: monthRange.start,
+          lt: monthRange.end,
+        },
+        fecha_fin_utc: {
+          not: null,
+        },
+        estado: {
+          notIn: EXCLUDED_SESSION_STATES,
+        },
+      },
+    },
+    select: {
+      sesion_id: true,
+      trainer_id: true,
+      sesiones: {
+        select: {
+          fecha_inicio_utc: true,
+          fecha_fin_utc: true,
+          tiempo_parada: true,
+          deals: {
+            select: {
+              tipo_servicio: true,
+              pipeline_label: true,
+              pipeline_id: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const sessionIds = new Set<string>();
+  const sessionTrainerIds = new Set<string>();
+  sesionTrainers.forEach((row) => {
+    if (row.sesion_id) sessionIds.add(row.sesion_id);
+    if (row.trainer_id) sessionTrainerIds.add(row.trainer_id);
+  });
+
+  const variants = await prisma.variants.findMany({
+    where: {
+      trainer_id: {
+        not: null,
+      },
+      date: {
+        not: null,
+        gte: monthRange.start,
+        lt: monthRange.end,
+      },
+      NOT: {
+        status: { equals: CANCELLED_VARIANT_STATUS, mode: 'insensitive' },
+      },
+      trainers: {
+        is: {
+          contrato_fijo: false,
+        },
+      },
+    },
+    select: {
+      id: true,
+      trainer_id: true,
+      date: true,
+      products: {
+        select: {
+          hora_inicio: true,
+          hora_fin: true,
+        },
+      },
+    },
+  });
+
+  const variantIds = new Set<string>();
+  const variantTrainerIds = new Set<string>();
+  variants.forEach((variant) => {
+    variantIds.add(variant.id);
+    if (variant.trainer_id) variantTrainerIds.add(variant.trainer_id);
+  });
+
+  const trainerIds = new Set<string>([...sessionTrainerIds, ...variantTrainerIds]);
+  const extraCostRows = trainerIds.size
+    ? await prisma.trainer_extra_costs.findMany({
+        where: {
+          trainer_id: {
+            in: Array.from(trainerIds),
+          },
+          OR: [
+            ...(sessionIds.size ? [{ session_id: { in: Array.from(sessionIds) } }] : []),
+            ...(variantIds.size ? [{ variant_id: { in: Array.from(variantIds) } }] : []),
+          ],
+        },
+      })
+    : [];
+
+  const extraCostMap = new Map<string, trainer_extra_costs>();
+  extraCostRows.forEach((row) => {
+    if (row.session_id) {
+      extraCostMap.set(`session:${row.session_id}:${row.trainer_id}`, row);
+    }
+    if (row.variant_id) {
+      extraCostMap.set(`variant:${row.variant_id}:${row.trainer_id}`, row);
+    }
+  });
+
+  sesionTrainers.forEach((row) => {
+    if (!row.trainer_id || !row.sesion_id) return;
+    const breakHours = decimalToNumber(row.sesiones?.tiempo_parada);
+    const hours = computeSessionHours(row.sesiones?.fecha_inicio_utc ?? null, row.sesiones?.fecha_fin_utc ?? null, breakHours);
+    const extraCost = extraCostMap.get(`session:${row.sesion_id}:${row.trainer_id}`) ?? null;
+    const isPreventive = isPreventiveService(row.sesiones?.deals?.tipo_servicio)
+      || isPreventivePipeline(row.sesiones?.deals?.pipeline_label, row.sesiones?.deals?.pipeline_id);
+
+    if (isPreventive) {
+      const rate = Math.max(decimalToNumber(extraCost?.precio_coste_preventivo), 0) || DEFAULT_SERVICE_COSTS.preventivo;
+      target.costeServicioPreventivo += hours * rate;
+      return;
+    }
+
+    const rate = Math.max(decimalToNumber(extraCost?.precio_coste_formacion), 0) || DEFAULT_SERVICE_COSTS.formacion;
+    target.costeServicioFormacion += hours * rate;
+  });
+
+  variants.forEach((variant) => {
+    if (!variant.trainer_id) return;
+    const hours = computeVariantHours(variant.date, variant.products ?? { hora_inicio: null, hora_fin: null });
+    const extraCost = extraCostMap.get(`variant:${variant.id}:${variant.trainer_id}`) ?? null;
+    const rate = Math.max(decimalToNumber(extraCost?.precio_coste_formacion), 0) || DEFAULT_SERVICE_COSTS.formacion;
+    target.costeServicioFormacion += hours * rate;
+  });
+}
+
 
 function applyOfficePayrollMetrics(target: MetricTotals, payroll: office_payrolls): void {
   target.salarioBruto += decimalToNumber(payroll.salario_bruto);
@@ -217,6 +377,7 @@ function applyOfficePayrollMetrics(target: MetricTotals, payroll: office_payroll
   target.festivo += decimalToNumber(payroll.festivo);
   target.horasExtras += decimalToNumber(payroll.horas_extras);
   target.gastosExtras += decimalToNumber(payroll.otros_gastos);
+  target.variable += decimalToNumber(payroll.variable);
 }
 
 function applyTrainerExtraCostMetrics(target: MetricTotals, extraCost: trainer_extra_costs): void {
@@ -340,10 +501,24 @@ export const handler = createHttpHandler(async (request) => {
       }),
       prisma.trainer_extra_costs.findMany({
         where: {
-          created_at: {
-            gte: monthRange.start,
-            lt: monthRange.end,
-          },
+          OR: [
+            {
+              sesion: {
+                fecha_inicio_utc: {
+                  gte: monthRange.start,
+                  lt: monthRange.end,
+                },
+              },
+            },
+            {
+              variant: {
+                date: {
+                  gte: monthRange.start,
+                  lt: monthRange.end,
+                },
+              },
+            },
+          ],
         },
         include: {
           trainer: {
@@ -359,6 +534,8 @@ export const handler = createHttpHandler(async (request) => {
               deals: {
                 select: {
                   tipo_servicio: true,
+                  pipeline_label: true,
+                  pipeline_id: true,
                 },
               },
             },
@@ -393,11 +570,15 @@ export const handler = createHttpHandler(async (request) => {
 
     trainerExtraCosts.forEach((cost) => {
       const isFixedTrainer = Boolean(cost.trainer?.contrato_fijo);
-      if (!isFixedTrainer) {
-        applyTrainerServiceCostMetrics(discontinuousTrainers.metrics, cost);
-        applyTrainerExtraCostMetrics(discontinuousTrainers.metrics, cost);
+      if (isFixedTrainer) {
+        applyTrainerExtraCostMetrics(fixedTrainers.metrics, cost);
+        return;
       }
+
+      applyTrainerExtraCostMetrics(discontinuousTrainers.metrics, cost);
     });
+
+    await applyDiscontinuousServiceCosts(prisma, monthRange, discontinuousTrainers.metrics);
 
     const finalizedFixedTrainers = finalizeCategoryTotals(fixedTrainers);
     const finalizedFixedStaff = finalizeCategoryTotals(fixedStaff);

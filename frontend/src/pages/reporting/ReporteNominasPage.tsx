@@ -32,6 +32,7 @@ const METRIC_LABELS: Record<PayrollReportMetricKey, string> = {
   festivo: 'Festivo',
   horasExtras: 'Horas extras',
   gastosExtras: 'Gastos extras',
+  variable: 'Variable',
 };
 
 const METRIC_ORDER: PayrollReportMetricKey[] = [
@@ -50,6 +51,7 @@ const METRIC_ORDER: PayrollReportMetricKey[] = [
   'festivo',
   'horasExtras',
   'gastosExtras',
+  'variable',
 ];
 
 function buildCurrentMonthPeriod(): string {

@@ -95,6 +95,34 @@ function formatDateTime(value: string | null): string | null {
   return formatter.format(parsed);
 }
 
+function formatDate(value: string | null): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const formatter = new Intl.DateTimeFormat('es-ES', { dateStyle: 'short' });
+  return formatter.format(parsed);
+}
+
+function normalizeTimeLabel(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return /^([01]\d|2[0-3]):([0-5]\d)$/.test(trimmed) ? trimmed : null;
+}
+
+function formatVariantSchedule(date: string | null, startTime: string | null, endTime: string | null): string | null {
+  const formattedDate = formatDate(date);
+  if (!formattedDate) return null;
+  const start = normalizeTimeLabel(startTime);
+  const end = normalizeTimeLabel(endTime);
+  if (start && end) {
+    return `${formattedDate}, ${start} - ${end}`;
+  }
+  if (start) {
+    return `${formattedDate}, ${start}`;
+  }
+  return formattedDate;
+}
+
 function formatDateTimeLocalInput(value: string | null): string {
   if (!value) return '';
   const parsed = new Date(value);
@@ -2059,7 +2087,10 @@ type VariantStudentsQueryData = {
 function VariantDetailCard({ variant, showTimeLogSection }: VariantDetailCardProps) {
   const queryClient = useQueryClient();
   const { userId, userName } = useCurrentUserIdentity();
-  const formattedDate = useMemo(() => formatDateTime(variant.date), [variant.date]);
+  const formattedDate = useMemo(
+    () => formatVariantSchedule(variant.date, variant.startTime, variant.endTime),
+    [variant.date, variant.endTime, variant.startTime],
+  );
 
   const variantCommentTarget = useMemo(() => {
     const normalizedId = (variant.variantId ?? '').trim();

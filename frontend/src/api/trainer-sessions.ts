@@ -67,6 +67,8 @@ export type TrainerVariantDetail = {
   productName: string | null;
   site: string | null;
   date: string | null;
+  startTime: string | null;
+  endTime: string | null;
   wooId: string | null;
   studentCount: number;
   organizationNames: string[];
@@ -348,6 +350,8 @@ function sanitizeVariant(value: unknown): TrainerVariantDetail | null {
     productName: sanitizeString(raw.productName),
     site: sanitizeString(raw.site),
     date: sanitizeDate(raw.date),
+    startTime: sanitizeString(raw.startTime ?? (raw as { start_time?: unknown }).start_time ?? null),
+    endTime: sanitizeString(raw.endTime ?? (raw as { end_time?: unknown }).end_time ?? null),
     wooId,
     studentCount,
     organizationNames,
