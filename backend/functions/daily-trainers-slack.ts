@@ -3,7 +3,6 @@ import type { Handler } from '@netlify/functions';
 import { getPrisma } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
 import { nowInMadridISO } from './_shared/timezone';
-import { isScheduledInvocation, isWithinMadridAutomationWindow } from './_shared/slackSchedule';
 
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
 const SLACK_CHANNEL_ID = 'C063C7QRHK4';
@@ -98,12 +97,6 @@ export const handler: Handler = async (event) => {
     const prisma = getPrisma();
     const todayIso = nowInMadridISO();
 
-    if (isScheduledInvocation(event) && !isWithinMadridAutomationWindow(todayIso)) {
-      return successResponse({
-        message: 'Invocación programada fuera del horario de envío. Se omite.',
-        nowMadrid: todayIso,
-      });
-    }
 
     const { day, startUtc, endUtc } = buildMadridDayRange(todayIso);
 
