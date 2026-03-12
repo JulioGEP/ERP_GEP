@@ -278,12 +278,6 @@ export default function ReporteNominasPage() {
             </Card.Body>
           </Card>
 
-          <AccumulatedComparisonTable
-            title="Acumulado anual vs acumulado mismo día del año pasado"
-            totalCost={query.data.comparisons.yearToDateVsSameDateLastYear.totalCost}
-            metrics={query.data.comparisons.yearToDateVsSameDateLastYear.metrics}
-          />
-
           <Row className="g-3">
             <Col xl={6}>
               <ComparisonTable
@@ -314,6 +308,13 @@ export default function ReporteNominasPage() {
               />
             </Col>
           </Row>
+
+          <AccumulatedComparisonTable
+            title="Acumulado anual vs acumulado mismo día del año pasado"
+            totalCost={query.data.comparisons.yearToDateVsSameDateLastYear.totalCost}
+            metrics={query.data.comparisons.yearToDateVsSameDateLastYear.metrics}
+          />
+
         </>
       ) : null}
     </div>
