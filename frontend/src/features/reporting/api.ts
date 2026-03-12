@@ -1102,7 +1102,8 @@ export type PayrollReportMetricKey =
   | 'nocturnidad'
   | 'festivo'
   | 'horasExtras'
-  | 'gastosExtras';
+  | 'gastosExtras'
+  | 'variable';
 
 export type PayrollReportTotals = {
   metrics: Record<PayrollReportMetricKey, number>;
@@ -1149,6 +1150,10 @@ export type PayrollReportResponse = {
       totalCost: PayrollReportComparisonMetric;
     };
     quarterVsSameQuarterLastYear: {
+      metrics: Record<PayrollReportMetricKey, PayrollReportComparisonMetric>;
+      totalCost: PayrollReportComparisonMetric;
+    };
+    yearToDateVsSameDateLastYear: {
       metrics: Record<PayrollReportMetricKey, PayrollReportComparisonMetric>;
       totalCost: PayrollReportComparisonMetric;
     };

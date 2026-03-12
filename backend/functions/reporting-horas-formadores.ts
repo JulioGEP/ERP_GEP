@@ -14,7 +14,11 @@ type SessionTrainerRow = {
     fecha_inicio_utc: Date | null;
     fecha_fin_utc: Date | null;
     tiempo_parada: DecimalLike | number | string | null;
-    deals: { tipo_servicio: string | null } | null;
+    deals: {
+      tipo_servicio: string | null;
+      pipeline_label: string | null;
+      pipeline_id: string | null;
+    } | null;
   } | null;
   trainers: { trainer_id: string; name: string | null; apellido: string | null } | null;
 };
@@ -51,7 +55,7 @@ type TrainerHoursAccumulator = {
 };
 
 const DEFAULT_SERVICE_COSTS = {
-  formacion: 15,
+  formacion: 30,
   preventivo: 15,
 } as const;
 
@@ -136,11 +140,35 @@ function roundToTwoDecimals(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function isPreventiveService(tipo: string | null | undefined): boolean {
-  if (!tipo) {
-    return false;
+function normalizeForMatching(value: string | null | undefined): string {
+  if (!value) {
+    return '';
   }
-  return tipo.toLowerCase().includes('preventivo');
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim();
+}
+
+function isPreventiveService(tipo: string | null | undefined): boolean {
+  const normalizedType = normalizeForMatching(tipo);
+  return normalizedType.includes('preventivo');
+}
+
+function isPreventivePipeline(
+  pipelineLabel: string | null | undefined,
+  pipelineId: string | null | undefined,
+): boolean {
+  const normalizedLabel = normalizeForMatching(pipelineLabel);
+  const normalizedId = normalizeForMatching(pipelineId);
+
+  return (
+    normalizedLabel === 'gep services' ||
+    normalizedLabel === 'preventivos' ||
+    normalizedId === 'gep services' ||
+    normalizedId === 'preventivos'
+  );
 }
 
 type TimeParts = { hour: number; minute: number };
@@ -386,7 +414,7 @@ export const handler = createHttpHandler(async (request) => {
             fecha_inicio_utc: true,
             fecha_fin_utc: true,
             tiempo_parada: true,
-            deals: { select: { tipo_servicio: true } },
+            deals: { select: { tipo_servicio: true, pipeline_label: true, pipeline_id: true } },
           },
         },
       trainers: {
@@ -493,11 +521,14 @@ export const handler = createHttpHandler(async (request) => {
 
     const extraCostKey = sessionId ? `session:${sessionId}:${trainerId}` : null;
     const extraCostRecord = extraCostKey ? extraCostMap.get(extraCostKey) ?? null : null;
-    const sessionType: 'formacion' | 'preventivo' = isPreventiveService(
-      row.sesiones?.deals?.tipo_servicio ?? null,
-    )
-      ? 'preventivo'
-      : 'formacion';
+    const sessionType: 'formacion' | 'preventivo' =
+      isPreventiveService(row.sesiones?.deals?.tipo_servicio ?? null) ||
+      isPreventivePipeline(
+        row.sesiones?.deals?.pipeline_label ?? null,
+        row.sesiones?.deals?.pipeline_id ?? null,
+      )
+        ? 'preventivo'
+        : 'formacion';
     const serviceRate = resolveServiceRate(extraCostRecord, sessionType);
     const serviceCost = hours * serviceRate;
     const extraCost = sumExtraCosts(extraCostRecord);

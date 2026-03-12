@@ -32,6 +32,7 @@ const METRIC_LABELS: Record<PayrollReportMetricKey, string> = {
   festivo: 'Festivo',
   horasExtras: 'Horas extras',
   gastosExtras: 'Gastos extras',
+  variable: 'Variable',
 };
 
 const METRIC_ORDER: PayrollReportMetricKey[] = [
@@ -50,6 +51,7 @@ const METRIC_ORDER: PayrollReportMetricKey[] = [
   'festivo',
   'horasExtras',
   'gastosExtras',
+  'variable',
 ];
 
 function buildCurrentMonthPeriod(): string {
@@ -110,6 +112,53 @@ function ComparisonTable({
                 <td className="text-end">{formatPercentage(metrics[metricKey].percentageDifference)}</td>
               </tr>
             ))}
+          </tbody>
+        </Table>
+      </Card.Body>
+    </Card>
+  );
+}
+
+function AccumulatedComparisonTable({
+  title,
+  totalCost,
+  metrics,
+}: {
+  title: string;
+  totalCost: PayrollReportComparisonMetric;
+  metrics: Record<PayrollReportMetricKey, PayrollReportComparisonMetric>;
+}) {
+  return (
+    <Card className="shadow-sm">
+      <Card.Body>
+        <Card.Title className="h5">{title}</Card.Title>
+        <Table bordered hover responsive className="align-middle mb-0" size="sm">
+          <thead>
+            <tr>
+              <th>Línea</th>
+              <th className="text-end">Acumulado actual</th>
+              <th className="text-end">Acumulado año pasado</th>
+              <th className="text-end">Diferencia abs.</th>
+              <th className="text-end">Diferencia %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {METRIC_ORDER.map((metricKey) => (
+              <tr key={metricKey}>
+                <td>{METRIC_LABELS[metricKey]}</td>
+                <td className="text-end">{formatCurrency(metrics[metricKey].current)}</td>
+                <td className="text-end">{formatCurrency(metrics[metricKey].previous)}</td>
+                <td className="text-end">{formatCurrency(metrics[metricKey].absoluteDifference)}</td>
+                <td className="text-end">{formatPercentage(metrics[metricKey].percentageDifference)}</td>
+              </tr>
+            ))}
+            <tr className="table-primary">
+              <td><strong>Total nóminas acumulado</strong></td>
+              <td className="text-end"><strong>{formatCurrency(totalCost.current)}</strong></td>
+              <td className="text-end"><strong>{formatCurrency(totalCost.previous)}</strong></td>
+              <td className="text-end"><strong>{formatCurrency(totalCost.absoluteDifference)}</strong></td>
+              <td className="text-end"><strong>{formatPercentage(totalCost.percentageDifference)}</strong></td>
+            </tr>
           </tbody>
         </Table>
       </Card.Body>
@@ -228,6 +277,12 @@ export default function ReporteNominasPage() {
               </Table>
             </Card.Body>
           </Card>
+
+          <AccumulatedComparisonTable
+            title="Acumulado anual vs acumulado mismo día del año pasado"
+            totalCost={query.data.comparisons.yearToDateVsSameDateLastYear.totalCost}
+            metrics={query.data.comparisons.yearToDateVsSameDateLastYear.metrics}
+          />
 
           <Row className="g-3">
             <Col xl={6}>
