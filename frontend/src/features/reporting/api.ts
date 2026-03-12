@@ -1153,6 +1153,10 @@ export type PayrollReportResponse = {
       metrics: Record<PayrollReportMetricKey, PayrollReportComparisonMetric>;
       totalCost: PayrollReportComparisonMetric;
     };
+    yearToDateVsSameDateLastYear: {
+      metrics: Record<PayrollReportMetricKey, PayrollReportComparisonMetric>;
+      totalCost: PayrollReportComparisonMetric;
+    };
   };
 };
 
