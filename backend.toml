@@ -14,11 +14,11 @@ NODE_VERSION = "20"
 
 [[scheduled]]
 function = "daily-availability-slack"
-cron = "0 5 * * *"
+cron = "0 5 * * 1-5"
 
 [[scheduled]]
 function = "daily-availability-slack"
-cron = "0 6 * * *"
+cron = "0 6 * * 1-5"
 
 [[scheduled]]
 function = "daily-trainers-slack"
