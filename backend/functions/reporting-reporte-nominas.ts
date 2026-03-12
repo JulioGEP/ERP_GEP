@@ -636,6 +636,36 @@ export const handler = createHttpHandler(async (request) => {
   const quarter = getQuarter(month);
   const previousMonth = getPreviousMonth(year, month);
   const previousQuarter = getPreviousQuarter(year, quarter);
+  const today = new Date();
+  const currentMonthNumber = today.getUTCMonth() + 1;
+
+  const aggregateYearToDate = async (targetYear: number, targetMonth: number): Promise<AggregatedPeriod> => {
+    const months = Array.from({ length: targetMonth }, (_, index) => index + 1);
+    const monthAggregates = await Promise.all(months.map((monthValue) => aggregateMonth(targetYear, monthValue)));
+
+    const result: AggregatedPeriod = {
+      fixedTrainers: emptyCategoryTotals(),
+      fixedStaff: emptyCategoryTotals(),
+      discontinuousTrainers: emptyCategoryTotals(),
+      overall: emptyCategoryTotals(),
+    };
+
+    monthAggregates.forEach((aggregate) => {
+      (Object.keys(result) as Array<keyof AggregatedPeriod>).forEach((categoryKey) => {
+        METRIC_KEYS.forEach((metricKey) => {
+          result[categoryKey].metrics[metricKey] = roundToTwo(
+            result[categoryKey].metrics[metricKey] + aggregate[categoryKey].metrics[metricKey],
+          );
+        });
+      });
+    });
+
+    (Object.keys(result) as Array<keyof AggregatedPeriod>).forEach((categoryKey) => {
+      result[categoryKey] = finalizeCategoryTotals(result[categoryKey]);
+    });
+
+    return result;
+  };
 
   const [
     currentMonth,
@@ -644,6 +674,8 @@ export const handler = createHttpHandler(async (request) => {
     currentQuarter,
     quarterBefore,
     sameQuarterLastYear,
+    currentYearToDate,
+    lastYearToDate,
   ] = await Promise.all([
     aggregateMonth(year, month),
     aggregateMonth(previousMonth.year, previousMonth.month),
@@ -651,6 +683,8 @@ export const handler = createHttpHandler(async (request) => {
     aggregateQuarter(year, quarter),
     aggregateQuarter(previousQuarter.year, previousQuarter.quarter),
     aggregateQuarter(year - 1, quarter),
+    aggregateYearToDate(today.getUTCFullYear(), currentMonthNumber),
+    aggregateYearToDate(today.getUTCFullYear() - 1, currentMonthNumber),
   ]);
 
   return successResponse({
@@ -667,6 +701,7 @@ export const handler = createHttpHandler(async (request) => {
       monthVsSameMonthLastYear: buildComparison(currentMonth.overall, sameMonthLastYear.overall),
       quarterVsPreviousQuarter: buildComparison(currentQuarter.overall, quarterBefore.overall),
       quarterVsSameQuarterLastYear: buildComparison(currentQuarter.overall, sameQuarterLastYear.overall),
+      yearToDateVsSameDateLastYear: buildComparison(currentYearToDate.overall, lastYearToDate.overall),
     },
   });
 });
