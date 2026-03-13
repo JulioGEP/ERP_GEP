@@ -235,9 +235,9 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         path: '/usuarios/nominas_formadores_fijos',
       },
       {
-        key: 'Usuarios/NominasFormadoresExternos',
-        label: 'Nóminas Formadores Externos',
-        path: '/usuarios/nominas_formadores_externos',
+        key: 'Usuarios/NominasFormadoresDiscontinuos',
+        label: 'Nóminas Formadores Discontinuos',
+        path: '/usuarios/nominas_formadores_discontinuos',
       },
       {
         key: 'Usuarios/ControlHorarioDiscontinuos',
