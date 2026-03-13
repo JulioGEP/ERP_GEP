@@ -333,6 +333,113 @@ export default function ReporteNominasPage() {
         </Card.Body>
       </Card>
 
+      {query.isLoading ? (
+        <div className="d-flex align-items-center gap-2 text-muted">
+          <Spinner animation="border" size="sm" />
+          Cargando reporte...
+        </div>
+      ) : null}
+
+      {query.isError ? <Alert variant="danger">{queryError}</Alert> : null}
+
+      {query.data ? (
+        <>
+          <Card className="shadow-sm">
+            <Card.Body>
+              <Card.Title className="h5">Resumen mensual por grupo</Card.Title>
+              <Table bordered hover responsive className="align-middle mb-0" size="sm">
+                <thead>
+                  <tr>
+                    <th>Línea</th>
+                    <th className="text-end">Formadores fijos</th>
+                    <th className="text-end">Personal fijo</th>
+                    <th className="text-end">Formadores discontinuos</th>
+                    <th className="text-end">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {METRIC_ORDER.map((metricKey) => (
+                    <tr key={metricKey}>
+                      <td>{METRIC_LABELS[metricKey]}</td>
+                      <td className="text-end">{formatCurrency(query.data.totals.fixedTrainers.metrics[metricKey])}</td>
+                      <td className="text-end">{formatCurrency(query.data.totals.fixedStaff.metrics[metricKey])}</td>
+                      <td className="text-end">{formatCurrency(query.data.totals.discontinuousTrainers.metrics[metricKey])}</td>
+                      <td className="text-end">{formatCurrency(query.data.totals.overall.metrics[metricKey])}</td>
+                    </tr>
+                  ))}
+                  <tr className="table-primary">
+                    <td><strong>Coste total</strong></td>
+                    <td className="text-end"><strong>{formatCurrency(query.data.totals.fixedTrainers.totalCost)}</strong></td>
+                    <td className="text-end"><strong>{formatCurrency(query.data.totals.fixedStaff.totalCost)}</strong></td>
+                    <td className="text-end"><strong>{formatCurrency(query.data.totals.discontinuousTrainers.totalCost)}</strong></td>
+                    <td className="text-end"><strong>{formatCurrency(query.data.totals.overall.totalCost)}</strong></td>
+                  </tr>
+                </tbody>
+              </Table>
+            </Card.Body>
+          </Card>
+
+          <Card className="shadow-sm">
+            <Card.Body>
+              <Card.Title className="h5">Resumen trimestral (acumulado)</Card.Title>
+              <Table bordered hover responsive className="align-middle mb-0" size="sm">
+                <thead>
+                  <tr>
+                    <th>Grupo</th>
+                    <th className="text-end">Coste total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(Object.keys(CATEGORY_LABELS) as Array<keyof typeof CATEGORY_LABELS>).map((categoryKey) => (
+                    <tr key={categoryKey}>
+                      <td>{CATEGORY_LABELS[categoryKey]}</td>
+                      <td className="text-end">{formatCurrency(query.data.quarterTotals[categoryKey].totalCost)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </Card.Body>
+          </Card>
+
+          <Row className="g-3">
+            <Col xl={6}>
+              <ComparisonTable
+                title="Mensual vs mes anterior"
+                totalCost={query.data.comparisons.monthVsPreviousMonth.totalCost}
+                metrics={query.data.comparisons.monthVsPreviousMonth.metrics}
+              />
+            </Col>
+            <Col xl={6}>
+              <ComparisonTable
+                title="Mensual vs mismo mes año anterior"
+                totalCost={query.data.comparisons.monthVsSameMonthLastYear.totalCost}
+                metrics={query.data.comparisons.monthVsSameMonthLastYear.metrics}
+              />
+            </Col>
+            <Col xl={6}>
+              <ComparisonTable
+                title="Trimestral vs trimestre anterior"
+                totalCost={query.data.comparisons.quarterVsPreviousQuarter.totalCost}
+                metrics={query.data.comparisons.quarterVsPreviousQuarter.metrics}
+              />
+            </Col>
+            <Col xl={6}>
+              <ComparisonTable
+                title="Trimestral vs mismo trimestre año anterior"
+                totalCost={query.data.comparisons.quarterVsSameQuarterLastYear.totalCost}
+                metrics={query.data.comparisons.quarterVsSameQuarterLastYear.metrics}
+              />
+            </Col>
+          </Row>
+
+          <AccumulatedComparisonTable
+            title="Acumulado anual vs acumulado mismo día del año pasado"
+            totalCost={query.data.comparisons.yearToDateVsSameDateLastYear.totalCost}
+            metrics={query.data.comparisons.yearToDateVsSameDateLastYear.metrics}
+          />
+        </>
+      ) : null}
+
       <Card className="shadow-sm">
         <Card.Body className="d-flex flex-column gap-3">
           <div>
@@ -510,114 +617,6 @@ export default function ReporteNominasPage() {
           ) : null}
         </Card.Body>
       </Card>
-
-      {query.isLoading ? (
-        <div className="d-flex align-items-center gap-2 text-muted">
-          <Spinner animation="border" size="sm" />
-          Cargando reporte...
-        </div>
-      ) : null}
-
-      {query.isError ? <Alert variant="danger">{queryError}</Alert> : null}
-
-      {query.data ? (
-        <>
-          <Card className="shadow-sm">
-            <Card.Body>
-              <Card.Title className="h5">Resumen mensual por grupo</Card.Title>
-              <Table bordered hover responsive className="align-middle mb-0" size="sm">
-                <thead>
-                  <tr>
-                    <th>Línea</th>
-                    <th className="text-end">Formadores fijos</th>
-                    <th className="text-end">Personal fijo</th>
-                    <th className="text-end">Formadores discontinuos</th>
-                    <th className="text-end">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {METRIC_ORDER.map((metricKey) => (
-                    <tr key={metricKey}>
-                      <td>{METRIC_LABELS[metricKey]}</td>
-                      <td className="text-end">{formatCurrency(query.data.totals.fixedTrainers.metrics[metricKey])}</td>
-                      <td className="text-end">{formatCurrency(query.data.totals.fixedStaff.metrics[metricKey])}</td>
-                      <td className="text-end">{formatCurrency(query.data.totals.discontinuousTrainers.metrics[metricKey])}</td>
-                      <td className="text-end">{formatCurrency(query.data.totals.overall.metrics[metricKey])}</td>
-                    </tr>
-                  ))}
-                  <tr className="table-primary">
-                    <td><strong>Coste total</strong></td>
-                    <td className="text-end"><strong>{formatCurrency(query.data.totals.fixedTrainers.totalCost)}</strong></td>
-                    <td className="text-end"><strong>{formatCurrency(query.data.totals.fixedStaff.totalCost)}</strong></td>
-                    <td className="text-end"><strong>{formatCurrency(query.data.totals.discontinuousTrainers.totalCost)}</strong></td>
-                    <td className="text-end"><strong>{formatCurrency(query.data.totals.overall.totalCost)}</strong></td>
-                  </tr>
-                </tbody>
-              </Table>
-            </Card.Body>
-          </Card>
-
-          <Card className="shadow-sm">
-            <Card.Body>
-              <Card.Title className="h5">Resumen trimestral (acumulado)</Card.Title>
-              <Table bordered hover responsive className="align-middle mb-0" size="sm">
-                <thead>
-                  <tr>
-                    <th>Grupo</th>
-                    <th className="text-end">Coste total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(Object.keys(CATEGORY_LABELS) as Array<keyof typeof CATEGORY_LABELS>).map((categoryKey) => (
-                    <tr key={categoryKey}>
-                      <td>{CATEGORY_LABELS[categoryKey]}</td>
-                      <td className="text-end">{formatCurrency(query.data.quarterTotals[categoryKey].totalCost)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </Card.Body>
-          </Card>
-
-          <Row className="g-3">
-            <Col xl={6}>
-              <ComparisonTable
-                title="Mensual vs mes anterior"
-                totalCost={query.data.comparisons.monthVsPreviousMonth.totalCost}
-                metrics={query.data.comparisons.monthVsPreviousMonth.metrics}
-              />
-            </Col>
-            <Col xl={6}>
-              <ComparisonTable
-                title="Mensual vs mismo mes año anterior"
-                totalCost={query.data.comparisons.monthVsSameMonthLastYear.totalCost}
-                metrics={query.data.comparisons.monthVsSameMonthLastYear.metrics}
-              />
-            </Col>
-            <Col xl={6}>
-              <ComparisonTable
-                title="Trimestral vs trimestre anterior"
-                totalCost={query.data.comparisons.quarterVsPreviousQuarter.totalCost}
-                metrics={query.data.comparisons.quarterVsPreviousQuarter.metrics}
-              />
-            </Col>
-            <Col xl={6}>
-              <ComparisonTable
-                title="Trimestral vs mismo trimestre año anterior"
-                totalCost={query.data.comparisons.quarterVsSameQuarterLastYear.totalCost}
-                metrics={query.data.comparisons.quarterVsSameQuarterLastYear.metrics}
-              />
-            </Col>
-          </Row>
-
-          <AccumulatedComparisonTable
-            title="Acumulado anual vs acumulado mismo día del año pasado"
-            totalCost={query.data.comparisons.yearToDateVsSameDateLastYear.totalCost}
-            metrics={query.data.comparisons.yearToDateVsSameDateLastYear.metrics}
-          />
-
-        </>
-      ) : null}
     </div>
   );
 }
