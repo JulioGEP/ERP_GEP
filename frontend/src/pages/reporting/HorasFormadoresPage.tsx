@@ -188,12 +188,15 @@ export default function HorasFormadoresPage() {
     const roundToTwoDecimals = (value: number) => Math.round(value * 100) / 100;
 
     const headerRow = [
-      'Formador',
-      'ID formador',
+      'Formadores',
       'Sesiones',
-      'Horas totales',
-      'Coste servicio (€)',
-      'Coste extra (€)',
+      'Total horas',
+      'Horas preventivos',
+      'Horas formación',
+      'Coste preventivo (€)',
+      'Coste formación (€)',
+      'Extra preventivo (€)',
+      'Extra formación (€)',
       'Nómina (€)',
     ] as const;
 
@@ -201,11 +204,14 @@ export default function HorasFormadoresPage() {
       const displayName = formatTrainerName(item);
       return [
         displayName,
-        item.trainerId,
         item.sessionCount,
         roundToTwoDecimals(item.totalHours),
-        roundToTwoDecimals(item.serviceCost),
-        roundToTwoDecimals(item.extraCost),
+        roundToTwoDecimals(item.preventiveHours),
+        roundToTwoDecimals(item.trainingHours),
+        roundToTwoDecimals(item.preventiveServiceCost),
+        roundToTwoDecimals(item.trainingServiceCost),
+        roundToTwoDecimals(item.preventiveExtraCost),
+        roundToTwoDecimals(item.trainingExtraCost),
         roundToTwoDecimals(item.payrollCost),
       ] as const;
     });
@@ -215,11 +221,14 @@ export default function HorasFormadoresPage() {
       ...rows,
       [
         'Total',
-        '',
         summary.totalSessions,
         roundToTwoDecimals(summary.totalHours),
-        roundToTwoDecimals(summary.totalServiceCost),
-        roundToTwoDecimals(summary.totalExtraCost),
+        roundToTwoDecimals(summary.totalPreventiveHours),
+        roundToTwoDecimals(summary.totalTrainingHours),
+        roundToTwoDecimals(summary.totalPreventiveServiceCost),
+        roundToTwoDecimals(summary.totalTrainingServiceCost),
+        roundToTwoDecimals(summary.totalPreventiveExtraCost),
+        roundToTwoDecimals(summary.totalTrainingExtraCost),
         roundToTwoDecimals(summary.totalPayrollCost),
       ],
     ];
@@ -269,20 +278,32 @@ export default function HorasFormadoresPage() {
         <Table striped bordered hover>
           <thead>
             <tr>
-              <th style={{ width: '30%' }}>Formador</th>
-              <th style={{ width: '14%' }} className="text-end">
+              <th>Formadores</th>
+              <th className="text-end">
                 Sesiones
               </th>
-              <th style={{ width: '14%' }} className="text-end">
-                Horas totales
+              <th className="text-end">
+                Total horas
               </th>
-              <th style={{ width: '14%' }} className="text-end">
-                Coste servicio
+              <th className="text-end">
+                Horas preventivos
               </th>
-              <th style={{ width: '14%' }} className="text-end">
-                Coste extra
+              <th className="text-end">
+                Horas formación
               </th>
-              <th style={{ width: '14%' }} className="text-end">
+              <th className="text-end">
+                Coste preventivo
+              </th>
+              <th className="text-end">
+                Coste formación
+              </th>
+              <th className="text-end">
+                Extra preventivo
+              </th>
+              <th className="text-end">
+                Extra formación
+              </th>
+              <th className="text-end">
                 Nómina
               </th>
             </tr>
@@ -290,7 +311,6 @@ export default function HorasFormadoresPage() {
           <tbody>
             {items.map((item) => {
               const displayName = formatTrainerName(item);
-              const showIdentifier = displayName !== item.trainerId;
               return (
                 <tr key={item.trainerId}>
                   <td>
@@ -302,14 +322,15 @@ export default function HorasFormadoresPage() {
                     >
                       {displayName}
                     </Button>
-                    {showIdentifier ? (
-                      <div className="text-muted small">ID: {item.trainerId}</div>
-                    ) : null}
                   </td>
                   <td className="text-end align-middle">{integerFormatter.format(item.sessionCount)}</td>
                   <td className="text-end align-middle">{hoursFormatter.format(item.totalHours)}</td>
-                  <td className="text-end align-middle">{currencyFormatter.format(item.serviceCost)}</td>
-                  <td className="text-end align-middle">{currencyFormatter.format(item.extraCost)}</td>
+                  <td className="text-end align-middle">{hoursFormatter.format(item.preventiveHours)}</td>
+                  <td className="text-end align-middle">{hoursFormatter.format(item.trainingHours)}</td>
+                  <td className="text-end align-middle">{currencyFormatter.format(item.preventiveServiceCost)}</td>
+                  <td className="text-end align-middle">{currencyFormatter.format(item.trainingServiceCost)}</td>
+                  <td className="text-end align-middle">{currencyFormatter.format(item.preventiveExtraCost)}</td>
+                  <td className="text-end align-middle">{currencyFormatter.format(item.trainingExtraCost)}</td>
                   <td className="text-end align-middle">{currencyFormatter.format(item.payrollCost)}</td>
                 </tr>
               );
@@ -320,8 +341,12 @@ export default function HorasFormadoresPage() {
               <th scope="row">Total</th>
               <th className="text-end">{integerFormatter.format(summary.totalSessions)}</th>
               <th className="text-end">{hoursFormatter.format(summary.totalHours)}</th>
-              <th className="text-end">{currencyFormatter.format(summary.totalServiceCost)}</th>
-              <th className="text-end">{currencyFormatter.format(summary.totalExtraCost)}</th>
+              <th className="text-end">{hoursFormatter.format(summary.totalPreventiveHours)}</th>
+              <th className="text-end">{hoursFormatter.format(summary.totalTrainingHours)}</th>
+              <th className="text-end">{currencyFormatter.format(summary.totalPreventiveServiceCost)}</th>
+              <th className="text-end">{currencyFormatter.format(summary.totalTrainingServiceCost)}</th>
+              <th className="text-end">{currencyFormatter.format(summary.totalPreventiveExtraCost)}</th>
+              <th className="text-end">{currencyFormatter.format(summary.totalTrainingExtraCost)}</th>
               <th className="text-end">{currencyFormatter.format(summary.totalPayrollCost)}</th>
             </tr>
           </tfoot>
@@ -377,7 +402,7 @@ export default function HorasFormadoresPage() {
               </Button>
             </div>
           </Form>
-          <div className="d-flex gap-3 flex-wrap mb-3">
+          <div className="d-flex gap-3 flex-nowrap mb-3 overflow-auto pb-1">
             <div>
               <span className="text-muted d-block small">Total de formadores</span>
               <span className="fw-semibold h5 mb-0">{summaryTrainers}</span>
@@ -391,27 +416,27 @@ export default function HorasFormadoresPage() {
               <span className="fw-semibold h5 mb-0">{summaryHours}</span>
             </div>
             <div>
-              <span className="text-muted d-block small">Total horas preventivos</span>
+              <span className="text-muted d-block small">Horas prev.</span>
               <span className="fw-semibold h5 mb-0">{summaryPreventiveHours}</span>
             </div>
             <div>
-              <span className="text-muted d-block small">Total horas formación</span>
+              <span className="text-muted d-block small">Horas form.</span>
               <span className="fw-semibold h5 mb-0">{summaryTrainingHours}</span>
             </div>
             <div>
-              <span className="text-muted d-block small">Coste preventivo</span>
+              <span className="text-muted d-block small">Coste prev.</span>
               <span className="fw-semibold h5 mb-0">{summaryPreventiveServiceCost}</span>
             </div>
             <div>
-              <span className="text-muted d-block small">Coste formación</span>
+              <span className="text-muted d-block small">Coste form.</span>
               <span className="fw-semibold h5 mb-0">{summaryTrainingServiceCost}</span>
             </div>
             <div>
-              <span className="text-muted d-block small">Coste extra preventivo</span>
+              <span className="text-muted d-block small">Extra prev.</span>
               <span className="fw-semibold h5 mb-0">{summaryPreventiveExtraCost}</span>
             </div>
             <div>
-              <span className="text-muted d-block small">Coste extra formación</span>
+              <span className="text-muted d-block small">Extra form.</span>
               <span className="fw-semibold h5 mb-0">{summaryTrainingExtraCost}</span>
             </div>
             <div>

@@ -301,7 +301,7 @@ async function deleteProductFromDatabase(prisma: ReturnType<typeof getPrisma>, p
   return { deleted: deletion.count > 0 } as const;
 }
 
-async function refreshFormacionAbiertaDeal(
+async function refreshDealAfterWebhook(
   prisma: ReturnType<typeof getPrisma>,
   dealId: string,
 ): Promise<boolean> {
@@ -309,13 +309,20 @@ async function refreshFormacionAbiertaDeal(
     where: { deal_id: dealId },
     select: { pipeline_label: true, pipeline_id: true },
   });
-  const pipeline = stored?.pipeline_label ?? stored?.pipeline_id ?? null;
 
-  if (!isFormacionAbiertaPipeline(pipeline)) {
-    return false;
-  }
+  if (!stored) return false;
 
   await new Promise((resolve) => setTimeout(resolve, 1500));
+  await importDealFromPipedrive(dealId);
+
+  const pipeline = stored.pipeline_label ?? stored.pipeline_id ?? null;
+  if (isFormacionAbiertaPipeline(pipeline)) {
+    return true;
+  }
+
+  // Si el pipeline no quedó resuelto aún, reintentamos igualmente una vez más
+  // para capturar notas/alumnos que llegan con retraso desde Pipedrive.
+  await new Promise((resolve) => setTimeout(resolve, 3500));
   await importDealFromPipedrive(dealId);
   return true;
 }
@@ -446,7 +453,7 @@ export const handler: Handler = async (event) => {
       });
 
       await importDealFromPipedrive(dealId);
-      await refreshFormacionAbiertaDeal(prisma, dealId);
+      await refreshDealAfterWebhook(prisma, dealId);
 
       processedDealId = dealId;
       processedAction = existedBefore ? 'updated' : 'created';

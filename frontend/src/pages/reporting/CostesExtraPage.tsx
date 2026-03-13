@@ -45,6 +45,11 @@ const AVERAGE_COST_KEYS = new Set<TrainerExtraCostFieldKey>([
   'precioCostePreventivo',
 ]);
 
+const TABLE_VISIBLE_COST_FIELD_DEFINITIONS = COST_FIELD_DEFINITIONS.filter(
+  (definition) =>
+    definition.key !== 'precioCosteFormacion' && definition.key !== 'precioCostePreventivo',
+);
+
 function formatDateForInput(date: Date): string {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
@@ -842,12 +847,23 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
       return <Alert variant="info">No hay registros de costes extra disponibles.</Alert>;
     }
 
+    const stickySummaryCellStyle = {
+      position: 'sticky',
+      bottom: 0,
+      zIndex: 2,
+      backgroundColor: 'var(--bs-table-bg)',
+      boxShadow: '0 -1px 0 rgba(0, 0, 0, 0.08)',
+    } as const;
+
     return (
-      <div className="table-responsive">
-        <Table striped bordered hover>
+      <div className="table-responsive" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+        <Table striped bordered hover className="mb-0">
           <thead>
             <tr>
-              <th style={{ width: '60px' }} className="text-center">
+              <th
+                style={{ width: '60px', position: 'sticky', top: 0, zIndex: 3 }}
+                className="text-center bg-light"
+              >
                 <Form.Check
                   type="checkbox"
                   checked={allItemsSelected}
@@ -855,19 +871,36 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                   aria-label="Seleccionar todos los registros"
                 />
               </th>
-              <th style={{ minWidth: '120px' }}>Fecha</th>
-              <th style={{ minWidth: '220px' }}>Formador</th>
-              <th style={{ minWidth: '260px' }}>Sesiones</th>
-              <th style={{ minWidth: '200px' }}>Documentos</th>
-              <th style={{ minWidth: '120px' }} className="text-end">
+              <th style={{ minWidth: '120px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+                Fecha
+              </th>
+              <th style={{ minWidth: '220px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+                Formador
+              </th>
+              <th style={{ minWidth: '260px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+                Sesiones
+              </th>
+              <th style={{ minWidth: '200px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+                Documentos
+              </th>
+              <th
+                style={{ minWidth: '120px', position: 'sticky', top: 0, zIndex: 3 }}
+                className="text-end bg-light"
+              >
                 Horas
               </th>
-              {COST_FIELD_DEFINITIONS.map((definition) => (
-                <th key={definition.key} className="text-end" style={{ minWidth: '140px' }}>
+              {TABLE_VISIBLE_COST_FIELD_DEFINITIONS.map((definition) => (
+                <th
+                  key={definition.key}
+                  className="text-end bg-light"
+                  style={{ minWidth: '140px', position: 'sticky', top: 0, zIndex: 3 }}
+                >
                   {definition.label}
                 </th>
               ))}
-              <th style={{ width: '120px' }}>Acciones</th>
+              <th style={{ width: '120px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+                Acciones
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -1005,7 +1038,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                       ? hoursFormatter.format(item.workedHours)
                       : '—'}
                   </td>
-                  {COST_FIELD_DEFINITIONS.map((definition) => (
+                  {TABLE_VISIBLE_COST_FIELD_DEFINITIONS.map((definition) => (
                     <td key={definition.key} className="align-middle">
                       <Form.Control
                         type="text"
@@ -1038,16 +1071,18 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
           </tbody>
           <tfoot>
             <tr className="table-light fw-semibold">
-              <td colSpan={5} className="text-end align-middle">
+              <td colSpan={5} className="text-end align-middle" style={stickySummaryCellStyle}>
                 Totales / medias
               </td>
-              <td className="text-end align-middle">{hoursFormatter.format(tableSummary.workedHoursTotal)}</td>
-              {COST_FIELD_DEFINITIONS.map((definition) => (
-                <td key={definition.key} className="text-end align-middle">
+              <td className="text-end align-middle" style={stickySummaryCellStyle}>
+                {hoursFormatter.format(tableSummary.workedHoursTotal)}
+              </td>
+              {TABLE_VISIBLE_COST_FIELD_DEFINITIONS.map((definition) => (
+                <td key={definition.key} className="text-end align-middle" style={stickySummaryCellStyle}>
                   {hoursFormatter.format(tableSummary.costValues[definition.key] ?? 0)}
                 </td>
               ))}
-              <td className="align-middle text-muted small">—</td>
+              <td className="align-middle text-muted small" style={stickySummaryCellStyle}>—</td>
             </tr>
           </tfoot>
         </Table>
@@ -1196,12 +1231,6 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                 </div>
               </Form.Group>
               <div className="d-flex flex-column gap-2 border rounded p-2" style={{ minWidth: '320px' }}>
-                <Form.Label className="mb-0">Edición masiva</Form.Label>
-                <div className="small text-muted">
-                  {selectedItemsCount
-                    ? `${selectedItemsCount} registro(s) seleccionado(s)`
-                    : 'Selecciona registros desde la tabla'}
-                </div>
                 <div className="d-flex gap-2 align-items-end flex-wrap">
                   <Form.Group controlId="costes-extra-bulk-field" className="mb-0">
                     <Form.Label className="small mb-1">Campo</Form.Label>

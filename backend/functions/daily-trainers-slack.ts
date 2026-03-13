@@ -3,7 +3,7 @@ import type { Handler } from '@netlify/functions';
 import { getPrisma } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
 import { nowInMadridISO } from './_shared/timezone';
-import { isScheduledInvocation, isWithinMadridAutomationWindow } from './_shared/slackSchedule';
+import { isWithinMadridAutomationWindow } from './_shared/slackSchedule';
 
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
 const SLACK_CHANNEL_ID = 'C063C7QRHK4';
