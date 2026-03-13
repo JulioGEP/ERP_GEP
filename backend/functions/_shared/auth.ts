@@ -155,7 +155,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/usuarios/control_horario_fijos',
   '/usuarios/control_horario_discontinuos',
   '/reporting/control_horario_fijos',
-  '/usuarios/nominas_formadores_externos',
+  '/usuarios/nominas_formadores_discontinuos',
   '/usuarios',
 ];
 

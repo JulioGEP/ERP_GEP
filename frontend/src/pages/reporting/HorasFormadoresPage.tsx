@@ -67,7 +67,7 @@ export default function HorasFormadoresPage() {
   const trainerHoursQuery = useQuery({
     queryKey: [
       'reporting',
-      'nominas-formadores-externos',
+      'nominas-formadores-discontinuos',
       appliedFilters.startDate ?? null,
       appliedFilters.endDate ?? null,
     ],
@@ -235,10 +235,10 @@ export default function HorasFormadoresPage() {
 
     exportToExcel({
       rows: sheetRows,
-      fileName: `nominas_formadores_externos_${periodLabel}.xlsx`,
-      sheetName: 'Nóminas Formadores Externos',
+      fileName: `nominas_formadores_discontinuos_${periodLabel}.xlsx`,
+      sheetName: 'Nóminas Formadores Discontinuos',
       auditEvent: {
-        action: 'usuarios.nominas_formadores_externos.export',
+        action: 'usuarios.nominas_formadores_discontinuos.export',
         details: {
           period: periodLabel,
           itemCount: items.length,
@@ -270,7 +270,7 @@ export default function HorasFormadoresPage() {
     content = <Alert variant="danger">{message}</Alert>;
   } else if (!items.length) {
     content = (
-      <Alert variant="info">No hay sesiones con horas asignadas a formadores externos.</Alert>
+      <Alert variant="info">No hay sesiones con horas asignadas a formadores discontinuos.</Alert>
     );
   } else {
     content = (
@@ -359,11 +359,11 @@ export default function HorasFormadoresPage() {
     <section className="py-3">
       <Card className="shadow-sm">
         <Card.Header as="h1" className="h4 mb-0">
-          Nóminas Formadores Externos
+          Nóminas Formadores Discontinuos
         </Card.Header>
         <Card.Body>
           <p className="text-muted">
-            Informe agregado del total de horas y costes para formadores externos (sin contrato
+            Informe agregado del total de horas y costes para formadores discontinuos (sin contrato
             fijo) según las sesiones planificadas.
           </p>
           <Form className="mb-3">
