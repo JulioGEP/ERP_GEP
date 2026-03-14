@@ -1,8 +1,10 @@
 import { Alert, Spinner, Table } from 'react-bootstrap';
 import type { MaterialOrder } from '../../types/materialOrder';
+import type { DealSummary } from '../../types/deal';
 
 export type MaterialsOrdersPageProps = {
   orders: MaterialOrder[];
+  budgets: DealSummary[];
   isLoading: boolean;
   isFetching: boolean;
   error: unknown;
@@ -17,8 +19,59 @@ function formatOrderDate(dateIso: string | null | undefined): string {
   return parsed.toLocaleDateString('es-ES');
 }
 
+function getEstimatedDeliveryValue(budget: DealSummary): string | null | undefined {
+  return (
+    budget.fecha_estimada_entrega_material ??
+    (budget as DealSummary & { fecha_estimada_entrega?: string | null }).fecha_estimada_entrega
+  );
+}
+
+function buildBudgetLookup(budgets: DealSummary[]): Map<string, DealSummary> {
+  const map = new Map<string, DealSummary>();
+
+  budgets.forEach((budget) => {
+    const dealId = String(budget.deal_id ?? budget.dealId ?? '').trim();
+    if (dealId) {
+      map.set(dealId, budget);
+    }
+  });
+
+  return map;
+}
+
+function getOrderBudgetLabel(order: MaterialOrder): string {
+  if (!order.sourceBudgetIds?.length) return '—';
+  return order.sourceBudgetIds.map((id) => `#${id}`).join(', ');
+}
+
+function getOrderOrganizationLabel(order: MaterialOrder, budgetsById: Map<string, DealSummary>): string {
+  if (!order.sourceBudgetIds?.length) return '—';
+
+  const organizations = Array.from(
+    new Set(
+      order.sourceBudgetIds
+        .map((id) => budgetsById.get(id)?.organization?.name?.trim() ?? '')
+        .filter((name) => name.length > 0),
+    ),
+  );
+
+  return organizations.length ? organizations.join(', ') : '—';
+}
+
+function getOrderEstimatedDelivery(order: MaterialOrder, budgetsById: Map<string, DealSummary>): string {
+  if (!order.sourceBudgetIds?.length) return '—';
+
+  const firstDelivery = order.sourceBudgetIds
+    .map((id) => budgetsById.get(id))
+    .map((budget) => (budget ? getEstimatedDeliveryValue(budget) : null))
+    .find((value) => Boolean(value));
+
+  return formatOrderDate(firstDelivery);
+}
+
 export function MaterialsOrdersPage({
   orders,
+  budgets,
   isLoading,
   isFetching,
   error,
@@ -27,6 +80,7 @@ export function MaterialsOrdersPage({
 }: MaterialsOrdersPageProps) {
   const hasError = !!error;
   const hasOrders = orders.length > 0;
+  const budgetsById = buildBudgetLookup(budgets);
 
   return (
     <div className="d-grid gap-4">
@@ -60,18 +114,21 @@ export function MaterialsOrdersPage({
                 <th scope="col">Número de pedido</th>
                 <th scope="col">Proveedor</th>
                 <th scope="col">Fecha de realización</th>
+                <th scope="col">Organización</th>
+                <th scope="col">Presupuesto</th>
+                <th scope="col">Fecha estimada entrega</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={3} className="text-center py-4">
+                  <td colSpan={6} className="text-center py-4">
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
               ) : !hasOrders ? (
                 <tr>
-                  <td colSpan={3} className="text-center py-4 text-muted">
+                  <td colSpan={6} className="text-center py-4 text-muted">
                     No hay pedidos de materiales para mostrar.
                   </td>
                 </tr>
@@ -89,6 +146,9 @@ export function MaterialsOrdersPage({
                       <td className="fw-semibold">{order.orderNumber ? `#${order.orderNumber}` : '—'}</td>
                       <td>{order.supplierName ?? order.supplierEmail ?? '—'}</td>
                       <td>{formatOrderDate(order.createdAt)}</td>
+                      <td>{getOrderOrganizationLabel(order, budgetsById)}</td>
+                      <td>{getOrderBudgetLabel(order)}</td>
+                      <td>{getOrderEstimatedDelivery(order, budgetsById)}</td>
                     </tr>
                   );
                 })
