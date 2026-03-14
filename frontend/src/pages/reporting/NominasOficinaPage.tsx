@@ -580,6 +580,16 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
     navigate(`/usuarios/sesiones_y_costes_extra?${params.toString()}`);
   };
 
+  const trainerSessionsLink = (() => {
+    const [trainerName = entry.fullName, ...trainerLastNameParts] = entry.fullName.split(' ');
+    const params = new URLSearchParams({
+      trainerId: entry.userId,
+      trainerName,
+      trainerLastName: trainerLastNameParts.join(' ').trim(),
+    });
+    return `/usuarios/sesiones_y_costes_extra?${params.toString()}`;
+  })();
+
   return (
     <Modal show={Boolean(entry)} onHide={onHide} centered backdrop="static">
       <Modal.Header closeButton>
@@ -588,6 +598,14 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
         </Modal.Title>
       </Modal.Header>
       <Modal.Body className="d-grid gap-3">
+        {entry.canDeliverTraining ? (
+          <p className="mb-0 text-danger fw-semibold">
+            ¡Cuidado! Es Usuario - Formador, si eliminas un valor, puede afectar en las{' '}
+            <a href={trainerSessionsLink} className="text-danger text-decoration-underline">
+              sesiones y costes extras
+            </a>
+          </p>
+        ) : null}
         {isLoadingDocuments ? (
           <div className="text-muted">Cargando documentos de gasto…</div>
         ) : documentsError ? (
