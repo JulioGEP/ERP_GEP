@@ -4,6 +4,7 @@ const path = require('path');
 const MAX_ATTEMPTS = parseInt(process.env.PRISMA_MIGRATE_MAX_ATTEMPTS || '5', 10);
 const BACKOFF_MS = parseInt(process.env.PRISMA_MIGRATE_BACKOFF_MS || '10000', 10);
 const STATEMENT_TIMEOUT = parseInt(process.env.PRISMA_STATEMENT_TIMEOUT || '60000', 10);
+const LOCK_TIMEOUT = parseInt(process.env.PRISMA_LOCK_TIMEOUT || `${STATEMENT_TIMEOUT}`, 10);
 
 const resolvedMigrateLockTimeout =
   process.env.PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT || '120000';
@@ -19,6 +20,13 @@ if (databaseUrl) {
   try {
     const parsed = new URL(databaseUrl);
     parsed.searchParams.set('statement_timeout', `${STATEMENT_TIMEOUT}`);
+    parsed.searchParams.set('lock_timeout', `${LOCK_TIMEOUT}`);
+
+    // Neon pooler can enforce a low default statement_timeout; injecting startup options
+    // ensures Prisma's advisory lock query is allowed to wait longer than 10s.
+    const startupOptions = `-c statement_timeout=${STATEMENT_TIMEOUT} -c lock_timeout=${LOCK_TIMEOUT}`;
+    parsed.searchParams.set('options', startupOptions);
+
     databaseUrl = parsed.toString();
   } catch (error) {
     console.warn('Could not parse DATABASE_URL to inject statement_timeout; using raw value', error);
@@ -35,6 +43,8 @@ const env = {
 console.log('Prisma advisory lock timeouts (ms):', {
   migrate: resolvedMigrateLockTimeout,
   schema: resolvedSchemaLockTimeout,
+  statement: `${STATEMENT_TIMEOUT}`,
+  lock: `${LOCK_TIMEOUT}`,
 });
 
 const backendDir = path.join(__dirname, '..', 'backend');
