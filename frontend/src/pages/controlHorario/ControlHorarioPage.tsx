@@ -314,6 +314,7 @@ export default function ControlHorarioPage() {
                                       label: string;
                                       dates: string[];
                                       totalMinutes: number;
+                                      contractHoursTotal: number;
                                     }>
                                   >((groups, date) => {
                                     const jsDate = new Date(`${date}T00:00:00`);
@@ -325,17 +326,26 @@ export default function ControlHorarioPage() {
                                       if (!entry.checkIn || !entry.checkOut) return acc;
                                       return acc + diffMinutes(entry.checkIn, new Date(entry.checkOut));
                                     }, 0);
+                                    const [year, month] = date.split('-');
+                                    const monthKey = `${year}-${month}`;
+                                    const contractHoursValue = getContractHoursValue(contractHoursByMonth[monthKey] ?? null);
+                                    const absenceLabel = getAbsenceLabel(absencesByDate.get(date) ?? null, date);
+                                    const contractHoursForTotal = isLaborableAbsence(absenceLabel)
+                                      ? (contractHoursValue ?? 0)
+                                      : 0;
 
                                     const existing = groups.find((group) => group.key === weekKey);
                                     if (existing) {
                                       existing.dates.push(date);
                                       existing.totalMinutes += dateTotalMinutes;
+                                      existing.contractHoursTotal += contractHoursForTotal;
                                     } else {
                                       groups.push({
                                         key: weekKey,
                                         label,
                                         dates: [date],
                                         totalMinutes: dateTotalMinutes,
+                                        contractHoursTotal: contractHoursForTotal,
                                       });
                                     }
 
@@ -407,9 +417,13 @@ export default function ControlHorarioPage() {
                                         );
                                       })}
                                       <tr className="table-secondary">
-                                        <td colSpan={4} className="fw-semibold">
+                                        <td colSpan={2} className="fw-semibold">
                                           Total semana
                                         </td>
+                                        <td className="fw-semibold">
+                                          {formatContractHoursValue(weekGroup.contractHoursTotal)}
+                                        </td>
+                                        <td className="fw-semibold">—</td>
                                         <td className="fw-semibold">
                                           {weekGroup.totalMinutes ? formatDuration(weekGroup.totalMinutes) : '—'}
                                         </td>
