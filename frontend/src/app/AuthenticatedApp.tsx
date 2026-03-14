@@ -1676,7 +1676,7 @@ export default function AuthenticatedApp() {
       },
       queryKey: ['budget-table', 'materials'],
     },
-    pageSize: 10,
+    pageSize: 30,
   };
 
   const materialsPendingProductsPageProps: MaterialsPendingProductsPageProps = {
