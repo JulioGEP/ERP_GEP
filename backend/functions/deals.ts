@@ -1021,7 +1021,21 @@ export async function importDealFromPipedrive(dealIdRaw: any) {
         (d as any)?.pipeline_name ??
         null;
 
-      if (isFormacionAbiertaPipeline(pipelineLabelCandidate)) {
+      let shouldSyncFormacionAbierta = isFormacionAbiertaPipeline(pipelineLabelCandidate);
+
+      if (!shouldSyncFormacionAbierta) {
+        const persistedDeal = await getPrisma().deals.findUnique({
+          where: { deal_id: String(savedDealId) },
+          select: { pipeline_label: true, pipeline_id: true },
+        });
+
+        const persistedPipelineLabel =
+          persistedDeal?.pipeline_label ??
+          (await resolvePipelineLabelFromId(persistedDeal?.pipeline_id ?? null));
+        shouldSyncFormacionAbierta = isFormacionAbiertaPipeline(persistedPipelineLabel);
+      }
+
+      if (shouldSyncFormacionAbierta) {
         try {
           const prisma = getPrisma();
           const syncResult = await syncFormacionAbiertaSessionsAndStudents(
