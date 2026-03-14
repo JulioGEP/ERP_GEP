@@ -343,7 +343,6 @@ export function MaterialsPendingProductsPage({
   const pendingProducts = useMemo(() => buildPendingProducts(budgets), [budgets]);
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const [selectedProducts, setSelectedProducts] = useState<Record<string, SelectedProduct>>({});
-  const [orderedProductKeys, setOrderedProductKeys] = useState<Set<string>>(new Set());
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [nextOrderNumber, setNextOrderNumber] = useState(initialNextOrderNumber);
@@ -468,50 +467,8 @@ export function MaterialsPendingProductsPage({
     });
   }, [filters, pendingProducts]);
 
-  const visiblePendingProducts = useMemo(
-    () => pendingProducts.filter((row) => !orderedProductKeys.has(row.key)),
-    [orderedProductKeys, pendingProducts],
-  );
-
-  const visibleFilteredProducts = useMemo(
-    () => filteredProducts.filter((row) => !orderedProductKeys.has(row.key)),
-    [filteredProducts, orderedProductKeys],
-  );
-
-  useEffect(() => {
-    setOrderedProductKeys((current) => {
-      if (!current.size) return current;
-
-      const existingKeys = new Set(pendingProducts.map((row) => row.key));
-      let hasChanges = false;
-      const next = new Set<string>();
-
-      current.forEach((key) => {
-        if (existingKeys.has(key)) {
-          next.add(key);
-          return;
-        }
-        hasChanges = true;
-      });
-
-      return hasChanges ? next : current;
-    });
-  }, [pendingProducts]);
-
-  useEffect(() => {
-    setSelectedProducts((current) => {
-      const nextEntries = Object.entries(current).filter(([key]) => !orderedProductKeys.has(key));
-
-      if (nextEntries.length === Object.keys(current).length) {
-        return current;
-      }
-
-      return Object.fromEntries(nextEntries);
-    });
-  }, [orderedProductKeys]);
-
-  const hasRows = visiblePendingProducts.length > 0;
-  const hasFilteredRows = visibleFilteredProducts.length > 0;
+  const hasRows = pendingProducts.length > 0;
+  const hasFilteredRows = filteredProducts.length > 0;
   const hasActiveFilters = useMemo(() => Object.values(filters).some((value) => value.trim().length > 0), [filters]);
 
   const primaryBudget = selectedList[0]?.row.budget;
@@ -523,7 +480,7 @@ export function MaterialsPendingProductsPage({
   }, [defaultAdministrationEmail, showEmailModal]);
 
   const handleSelectAll = () => {
-    const allSelected = visibleFilteredProducts.reduce<Record<string, SelectedProduct>>((acc, row) => {
+    const allSelected = filteredProducts.reduce<Record<string, SelectedProduct>>((acc, row) => {
       const hasStock = (row.stockValue ?? 0) > 0;
       const remainingStock = getRemainingStockForProduct(row, acc);
       const defaultStockUsage = hasStock ? Math.min(getDefaultStockUsage(row), remainingStock) : 0;
@@ -740,10 +697,10 @@ export function MaterialsPendingProductsPage({
   }"\n\nEl telefono de contacto es "${primaryBudget?.person?.phone ?? '—'}"\n\n¡Gracias!`;
 
   const sortedProducts = useMemo(() => {
-    if (!sortConfig) return visibleFilteredProducts;
+    if (!sortConfig) return filteredProducts;
 
     const { key, direction } = sortConfig;
-    const rows = [...visibleFilteredProducts];
+    const rows = [...filteredProducts];
 
     rows.sort((a, b) => {
       const valueA = getSortableValue(a, key);
@@ -753,7 +710,7 @@ export function MaterialsPendingProductsPage({
     });
 
     return rows;
-  }, [sortConfig, visibleFilteredProducts]);
+  }, [filteredProducts, sortConfig]);
 
   const handleSort = (key: SortableColumn) => {
     setSortConfig((current) => {
@@ -808,15 +765,7 @@ export function MaterialsPendingProductsPage({
       sourceBudgetIds,
     };
 
-    createOrderMutation.mutate(payload, {
-      onSuccess: () => {
-        setOrderedProductKeys((current) => {
-          const next = new Set(current);
-          selectedList.forEach(({ row }) => next.add(row.key));
-          return next;
-        });
-      },
-    });
+    createOrderMutation.mutate(payload);
   };
 
   return (
