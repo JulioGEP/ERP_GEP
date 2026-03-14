@@ -1,5 +1,5 @@
 // frontend/src/features/materials/orders.api.ts
-import { getJson, postJson } from '../../api/client';
+import { delJson, getJson, postJson } from '../../api/client';
 import type { MaterialOrder, MaterialOrdersResponse, MaterialOrderProduct } from '../../types/materialOrder';
 
 export type CreateMaterialOrderPayload = {
@@ -24,4 +24,8 @@ export async function fetchMaterialOrders() {
 
 export async function createMaterialOrder(payload: CreateMaterialOrderPayload) {
   return postJson<{ order: MaterialOrder; nextOrderNumber: number }>('/api/material-orders', payload);
+}
+
+export async function deleteMaterialOrder(orderId: number) {
+  return delJson<{ deletedId: number; nextOrderNumber: number }>(`/api/material-orders?id=${encodeURIComponent(String(orderId))}`);
 }

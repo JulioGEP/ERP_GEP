@@ -12,6 +12,8 @@ export type MaterialsOrdersPageProps = {
   onRetry: () => void;
   onSelect?: (order: MaterialOrder) => void;
   onSelectBudget?: (budget: DealSummary) => void;
+  onDelete?: (order: MaterialOrder) => Promise<void>;
+  isDeleting?: boolean;
 };
 
 function formatOrderDate(dateIso: string | null | undefined): string {
@@ -80,6 +82,8 @@ export function MaterialsOrdersPage({
   onRetry,
   onSelect,
   onSelectBudget,
+  onDelete,
+  isDeleting = false,
 }: MaterialsOrdersPageProps) {
   const [selectedOrder, setSelectedOrder] = useState<MaterialOrder | null>(null);
   const hasError = !!error;
@@ -100,6 +104,22 @@ export function MaterialsOrdersPage({
   const selectedOrderEstimatedDelivery = selectedOrder
     ? getOrderEstimatedDelivery(selectedOrder, budgetsById)
     : '—';
+
+  const handleDeleteOrder = async () => {
+    if (!selectedOrder || !onDelete) return;
+
+    const confirmed = window.confirm(
+      `¿Seguro que quieres eliminar el pedido ${selectedOrder.orderNumber ? `#${selectedOrder.orderNumber}` : ''}? Esta acción no se puede deshacer.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      await onDelete(selectedOrder);
+      setSelectedOrder(null);
+    } catch {
+      // El error se muestra en un toast desde el contenedor principal.
+    }
+  };
 
   return (
     <div className="d-grid gap-4">
@@ -198,6 +218,17 @@ export function MaterialsOrdersPage({
             </div>
           </Modal.Title>
           <div className="erp-modal-header-actions">
+            {onDelete ? (
+              <Button
+                variant="outline-danger"
+                size="sm"
+                className="erp-modal-action"
+                onClick={() => void handleDeleteOrder()}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Eliminando…' : 'Eliminar pedido'}
+              </Button>
+            ) : null}
             <Button variant="outline-light" size="sm" className="erp-modal-action" onClick={() => setSelectedOrder(null)}>
               Cerrar
             </Button>
