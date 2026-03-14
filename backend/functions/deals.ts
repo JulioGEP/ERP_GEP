@@ -43,6 +43,7 @@ const EDITABLE_FIELDS = new Set([
   "forma_pago_material",
   "w_id_variation",
   "a_fecha",
+  "presu_holded",
 ]);
 
 const BOOLEAN_EDITABLE_FIELDS = new Set([
@@ -1403,6 +1404,16 @@ export const handler = async (event: any) => {
             return errorResponse("VALIDATION_ERROR", "Fecha de formación inválida", 400);
           }
           patch.a_fecha = parsed;
+        }
+      }
+
+      if (Object.prototype.hasOwnProperty.call(patch, "presu_holded")) {
+        const rawHolded = patch.presu_holded;
+        if (rawHolded === null || rawHolded === undefined) {
+          patch.presu_holded = null;
+        } else {
+          const normalized = String(rawHolded).trim();
+          patch.presu_holded = normalized.length ? normalized : null;
         }
       }
 
