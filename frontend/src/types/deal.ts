@@ -6,6 +6,7 @@ export type MaterialDealStatus =
   | 'Pedidos confirmados'
   | 'Pendiente de compra a proveedores'
   | 'En espera proveedor'
+  | 'Presupuesto pedido a medias'
   | 'Mercancía en tránsito'
   | 'Recepción parcial'
   | 'Listos para preparar'
@@ -15,6 +16,7 @@ export const MATERIAL_DEAL_STATUSES: readonly MaterialDealStatus[] = [
   'Pedidos confirmados',
   'Pendiente de compra a proveedores',
   'En espera proveedor',
+  'Presupuesto pedido a medias',
   'Mercancía en tránsito',
   'Recepción parcial',
   'Listos para preparar',
