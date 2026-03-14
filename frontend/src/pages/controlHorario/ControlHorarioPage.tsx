@@ -370,6 +370,11 @@ export default function ControlHorarioPage() {
                                         const contractHoursValue = getContractHoursValue(contractHoursByMonth[monthKey] ?? null);
                                         const absenceLabel = getAbsenceLabel(absencesByDate.get(date) ?? null, date);
                                         const laborableAbsence = isLaborableAbsence(absenceLabel);
+                                        const contractHoursDisplay = laborableAbsence
+                                          ? contractHoursValue === null
+                                            ? '—'
+                                            : formatContractHoursValue(contractHoursValue)
+                                          : '';
                                         const rowStyle = {
                                           '--bs-table-bg': laborableAbsence ? '#ffffff' : '#f2f2f2',
                                           '--bs-table-hover-bg': laborableAbsence ? '#f8f9fa' : '#e9ecef',
@@ -407,7 +412,7 @@ export default function ControlHorarioPage() {
                                                 <span className="text-muted">Sin fichajes</span>
                                               )}
                                             </td>
-                                            <td>{contractHoursValue === null ? '—' : formatContractHoursValue(contractHoursValue)}</td>
+                                            <td>{contractHoursDisplay}</td>
                                             <td>{absenceLabel}</td>
                                             <td>{totalMinutes ? formatDuration(totalMinutes) : '—'}</td>
                                             <td>
