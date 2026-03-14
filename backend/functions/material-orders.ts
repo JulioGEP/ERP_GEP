@@ -243,6 +243,19 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
 
   const senderFrom = `${MATERIAL_ORDERS_SENDER_NAME} <${MATERIAL_ORDERS_SENDER_EMAIL}>`;
 
+  const created = await prisma.pedidos.create({
+    data: {
+      order_number: orderNumber,
+      supplier_name: normalizeString(request.body.supplierName),
+      supplier_email: supplierEmail,
+      recipient_email: recipientEmail,
+      cc_emails: ccEmails,
+      products: buildProductsPayload(products, supplierEmailPayload, logisticsEmailPayload),
+      source_budget_ids: sourceBudgetIds,
+      notes,
+    },
+  });
+
   await sendEmail({
     to: supplierEmailPayload.to,
     cc: supplierEmailPayload.cc,
@@ -260,19 +273,6 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
       from: senderFrom,
     });
   }
-
-  const created = await prisma.pedidos.create({
-    data: {
-      order_number: orderNumber,
-      supplier_name: normalizeString(request.body.supplierName),
-      supplier_email: supplierEmail,
-      recipient_email: recipientEmail,
-      cc_emails: ccEmails,
-      products: buildProductsPayload(products, supplierEmailPayload, logisticsEmailPayload),
-      source_budget_ids: sourceBudgetIds,
-      notes,
-    },
-  });
 
   return successResponse({
     order: serializeOrder(created),
