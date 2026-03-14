@@ -1702,6 +1702,7 @@ export default function AuthenticatedApp() {
     isFetching: isRefreshingMaterialOrders,
     error: materialsOrdersQuery.error ?? null,
     onRetry: () => materialsOrdersQuery.refetch(),
+    onSelectBudget: handleSelectBudget,
   };
 
   const calendarSessionsPageProps: PorSesionesPageProps = {

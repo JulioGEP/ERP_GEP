@@ -1,4 +1,5 @@
-import { Alert, Spinner, Table } from 'react-bootstrap';
+import { useMemo, useState } from 'react';
+import { Alert, Badge, Button, Col, Modal, Row, Spinner, Table } from 'react-bootstrap';
 import type { MaterialOrder } from '../../types/materialOrder';
 import type { DealSummary } from '../../types/deal';
 
@@ -10,6 +11,7 @@ export type MaterialsOrdersPageProps = {
   error: unknown;
   onRetry: () => void;
   onSelect?: (order: MaterialOrder) => void;
+  onSelectBudget?: (budget: DealSummary) => void;
 };
 
 function formatOrderDate(dateIso: string | null | undefined): string {
@@ -77,10 +79,27 @@ export function MaterialsOrdersPage({
   error,
   onRetry,
   onSelect,
+  onSelectBudget,
 }: MaterialsOrdersPageProps) {
+  const [selectedOrder, setSelectedOrder] = useState<MaterialOrder | null>(null);
   const hasError = !!error;
   const hasOrders = orders.length > 0;
-  const budgetsById = buildBudgetLookup(budgets);
+  const budgetsById = useMemo(() => buildBudgetLookup(budgets), [budgets]);
+
+  const handleOpenOrder = (order: MaterialOrder) => {
+    setSelectedOrder(order);
+    onSelect?.(order);
+  };
+
+  const handleOpenBudget = (budgetId: string) => {
+    const budget = budgetsById.get(budgetId);
+    if (!budget) return;
+    onSelectBudget?.(budget);
+  };
+
+  const selectedOrderEstimatedDelivery = selectedOrder
+    ? getOrderEstimatedDelivery(selectedOrder, budgetsById)
+    : '—';
 
   return (
     <div className="d-grid gap-4">
@@ -140,8 +159,8 @@ export function MaterialsOrdersPage({
                       key={rowKey}
                       role={onSelect ? 'button' : undefined}
                       className="align-middle"
-                      onClick={onSelect ? () => onSelect(order) : undefined}
-                      style={onSelect ? { cursor: 'pointer' } : undefined}
+                      onClick={() => handleOpenOrder(order)}
+                      style={{ cursor: 'pointer' }}
                     >
                       <td className="fw-semibold">{order.orderNumber ? `#${order.orderNumber}` : '—'}</td>
                       <td>{order.supplierName ?? order.supplierEmail ?? '—'}</td>
@@ -163,6 +182,108 @@ export function MaterialsOrdersPage({
           </div>
         ) : null}
       </div>
+
+      <Modal
+        show={Boolean(selectedOrder)}
+        onHide={() => setSelectedOrder(null)}
+        size="lg"
+        centered
+        contentClassName="erp-modal-content"
+      >
+        <Modal.Header className="erp-modal-header border-0 pb-0">
+          <Modal.Title as="div" className="erp-modal-header-main">
+            <div className="erp-modal-title text-truncate">Detalle pedido de materiales</div>
+            <div className="erp-modal-subtitle text-truncate">
+              {selectedOrder?.orderNumber ? `Pedido #${selectedOrder.orderNumber}` : 'Pedido sin número'}
+            </div>
+          </Modal.Title>
+          <div className="erp-modal-header-actions">
+            <Button variant="outline-light" size="sm" className="erp-modal-action" onClick={() => setSelectedOrder(null)}>
+              Cerrar
+            </Button>
+          </div>
+        </Modal.Header>
+        <Modal.Body className="erp-modal-body">
+          {selectedOrder ? (
+            <div className="d-grid gap-4">
+              <Row className="erp-summary-row g-3">
+                <Col md={4}>
+                  <label className="form-label">Número de pedido</label>
+                  <input className="form-control" readOnly value={selectedOrder.orderNumber ? `#${selectedOrder.orderNumber}` : '—'} />
+                </Col>
+                <Col md={4}>
+                  <label className="form-label">Usuario que realizó el pedido</label>
+                  <input className="form-control" readOnly value={selectedOrder.sentFrom?.trim() || '—'} />
+                </Col>
+                <Col md={4}>
+                  <label className="form-label">Proveedor</label>
+                  <input className="form-control" readOnly value={selectedOrder.supplierName ?? selectedOrder.supplierEmail ?? '—'} />
+                </Col>
+                <Col md={6}>
+                  <label className="form-label">Fecha de realización del pedido</label>
+                  <input className="form-control" readOnly value={formatOrderDate(selectedOrder.createdAt)} />
+                </Col>
+                <Col md={6}>
+                  <label className="form-label">Fecha estimada de entrega</label>
+                  <input className="form-control" readOnly value={selectedOrderEstimatedDelivery} />
+                </Col>
+              </Row>
+
+              <section className="d-grid gap-2">
+                <h2 className="h6 fw-semibold mb-0">Productos y cantidades</h2>
+                {!selectedOrder.products.items.length ? (
+                  <p className="text-muted mb-0">No hay productos asociados al pedido.</p>
+                ) : (
+                  <Table size="sm" bordered responsive className="mb-0 align-middle">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        <th className="text-end">Cantidad proveedor</th>
+                        <th className="text-end">Cantidad stock</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedOrder.products.items.map((item, index) => (
+                        <tr key={`${item.productName}-${index}`}>
+                          <td>{item.productName || '—'}</td>
+                          <td className="text-end">{item.supplierQuantity}</td>
+                          <td className="text-end">{item.stockQuantity}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                )}
+              </section>
+
+              <section className="d-grid gap-2">
+                <h2 className="h6 fw-semibold mb-0">Presupuestos relacionados</h2>
+                {!selectedOrder.sourceBudgetIds?.length ? (
+                  <p className="text-muted mb-0">No hay presupuestos asociados.</p>
+                ) : (
+                  <div className="d-flex gap-2 flex-wrap">
+                    {selectedOrder.sourceBudgetIds.map((budgetId) => {
+                      const budget = budgetsById.get(budgetId);
+                      return (
+                        <Badge
+                          key={budgetId}
+                          as="button"
+                          bg="light"
+                          text="dark"
+                          className="border px-3 py-2"
+                          onClick={() => handleOpenBudget(budgetId)}
+                          style={{ cursor: budget ? 'pointer' : 'not-allowed' }}
+                        >
+                          #{budgetId}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            </div>
+          ) : null}
+        </Modal.Body>
+      </Modal>
     </div>
   );
 }
