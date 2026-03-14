@@ -229,6 +229,11 @@ async function applyDiscontinuousServiceCosts(
       trainers: {
         is: {
           contrato_fijo: false,
+          user: {
+            is: {
+              can_deliver_training: false,
+            },
+          },
         },
       },
       sesiones: {
@@ -287,6 +292,11 @@ async function applyDiscontinuousServiceCosts(
       trainers: {
         is: {
           contrato_fijo: false,
+          user: {
+            is: {
+              can_deliver_training: false,
+            },
+          },
         },
       },
     },
@@ -497,7 +507,14 @@ export const handler = createHttpHandler(async (request) => {
     const [officePayrolls, trainerExtraCosts] = await Promise.all([
       prisma.office_payrolls.findMany({
         where: { year, month },
-        include: { user: { select: { trainer: { select: { contrato_fijo: true } } } } },
+        include: {
+          user: {
+            select: {
+              can_deliver_training: true,
+              trainer: { select: { contrato_fijo: true } },
+            },
+          },
+        },
       }),
       prisma.trainer_extra_costs.findMany({
         where: {
@@ -524,6 +541,11 @@ export const handler = createHttpHandler(async (request) => {
           trainer: {
             select: {
               contrato_fijo: true,
+              user: {
+                select: {
+                  can_deliver_training: true,
+                },
+              },
             },
           },
           sesion: {
@@ -560,7 +582,7 @@ export const handler = createHttpHandler(async (request) => {
     const discontinuousTrainers = emptyCategoryTotals();
 
     officePayrolls.forEach((payroll) => {
-      const isFixedTrainer = Boolean(payroll.user?.trainer?.contrato_fijo);
+      const isFixedTrainer = Boolean(payroll.user?.trainer?.contrato_fijo) && !Boolean(payroll.user?.can_deliver_training);
       if (isFixedTrainer) {
         applyOfficePayrollMetrics(fixedTrainers.metrics, payroll);
       } else {
@@ -569,6 +591,9 @@ export const handler = createHttpHandler(async (request) => {
     });
 
     trainerExtraCosts.forEach((cost) => {
+      if (cost.trainer?.user?.can_deliver_training) {
+        return;
+      }
       const isFixedTrainer = Boolean(cost.trainer?.contrato_fijo);
       if (isFixedTrainer) {
         applyTrainerExtraCostMetrics(fixedTrainers.metrics, cost);

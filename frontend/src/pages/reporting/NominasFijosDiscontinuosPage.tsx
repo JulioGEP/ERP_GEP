@@ -4,7 +4,7 @@ import type { OfficePayrollRecord } from '../../features/reporting/api';
 
 export default function NominasFijosDiscontinuosPage() {
   const filterEntries = useCallback(
-    (entry: OfficePayrollRecord) => entry.trainerFixedContract === true,
+    (entry: OfficePayrollRecord) => entry.trainerFixedContract === true && entry.canDeliverTraining !== true,
     [],
   );
 

@@ -235,6 +235,7 @@ export type UserFormValues = {
   email: string;
   role: string;
   active: boolean;
+  canDeliverTraining: boolean;
   bankAccount: string;
   address: string;
   payroll: PayrollFormValues;
@@ -656,6 +657,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
       email: user?.email ?? '',
       role: user?.role ?? ROLE_OPTIONS[0],
       active: user?.active ?? true,
+      canDeliverTraining: user?.canDeliverTraining ?? false,
       bankAccount: user?.bankAccount ?? '',
       address: user?.address ?? '',
       payroll: mapPayrollToForm(user?.payroll ?? null),
@@ -968,6 +970,16 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                   label="Activo"
                   checked={values.active}
                   onChange={(event) => handleChange('active', event.target.checked)}
+                  disabled={disableForm}
+                />
+              </Col>
+              <Col md={4} className="d-flex align-items-center">
+                <Form.Check
+                  type="switch"
+                  id="user-can-deliver-training"
+                  label="¿Formador puntual?"
+                  checked={values.canDeliverTraining}
+                  onChange={(event) => handleChange('canDeliverTraining', event.target.checked)}
                   disabled={disableForm}
                 />
               </Col>

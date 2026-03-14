@@ -28,7 +28,6 @@ export async function syncUserForTrainer(
     first_name: trainer.name,
     last_name: trainer.apellido ?? '',
     email: trainer.email,
-    role: erp_role.Formador,
     active: Boolean(trainer.activo),
     updated_at: new Date(),
   };

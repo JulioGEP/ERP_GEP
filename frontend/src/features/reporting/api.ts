@@ -970,6 +970,7 @@ export type OfficePayrollRecord = {
   email: string | null;
   role: string | null;
   trainerFixedContract?: boolean | null;
+  canDeliverTraining?: boolean;
   year: number;
   month: number;
   dietas: number | null;

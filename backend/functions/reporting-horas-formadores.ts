@@ -250,6 +250,11 @@ async function fetchVariantAssignments(
       trainers: {
         is: {
           contrato_fijo: false,
+          user: {
+            is: {
+              can_deliver_training: false,
+            },
+          },
         },
       },
     },
@@ -399,6 +404,11 @@ export const handler = createHttpHandler(async (request) => {
     trainers: {
       is: {
         contrato_fijo: false,
+        user: {
+          is: {
+            can_deliver_training: false,
+          },
+        },
       },
     },
   };

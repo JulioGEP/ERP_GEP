@@ -705,6 +705,7 @@ function buildUserSummaryFromPayroll(entry: OfficePayrollRecord): UserSummary {
     email: entry.email ?? '',
     role: entry.role ?? 'Empleado',
     active: true,
+    canDeliverTraining: entry.canDeliverTraining ?? false,
     bankAccount: null,
     address: null,
     createdAt: '',
