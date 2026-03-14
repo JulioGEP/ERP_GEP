@@ -11,9 +11,9 @@
   # El engine de esquema también coge advisory locks al generar Prisma Client; evitamos
   # que Netlify falle si tarda más de 10s en obtenerlo.
   PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT = "60000"
-  # Si Neon no es alcanzable durante el build (P1001), permitimos continuar
-  # para no bloquear el deploy del frontend/funciones por una incidencia temporal de red/DB.
-  PRISMA_MIGRATE_ALLOW_P1001 = "true"
+  # Timeout de sesión para consultas SQL (incluye advisory locks en Neon pooler).
+  PRISMA_STATEMENT_TIMEOUT = "60000"
+  PRISMA_LOCK_TIMEOUT = "60000"
 
 [functions]
   directory = "backend/functions"
