@@ -10,6 +10,22 @@ import { MATERIAL_ORDERS_QUERY_KEY } from '../../features/materials/queryKeys';
 import type { DealProduct, DealSummary } from '../../types/deal';
 import { isMaterialPipeline } from './MaterialsBudgetsPage';
 
+const ARCHIVED_MATERIAL_STATUS = 'enviados al cliente';
+
+function normalizeMaterialStatus(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function isSentToCustomerBudget(budget: DealSummary): boolean {
+  return normalizeMaterialStatus(budget.estado_material) === ARCHIVED_MATERIAL_STATUS;
+}
+
 export type MaterialsPendingProductsPageProps = {
   budgets: DealSummary[];
   isLoading: boolean;
@@ -223,7 +239,9 @@ function isShippingExpense(product: DealProduct | null | undefined): boolean {
 }
 
 function buildPendingProducts(budgets: DealSummary[]): PendingProductRow[] {
-  const filteredBudgets = budgets.filter((budget) => isMaterialPipeline(budget));
+  const filteredBudgets = budgets.filter(
+    (budget) => isMaterialPipeline(budget) && !isSentToCustomerBudget(budget),
+  );
 
   return filteredBudgets.flatMap((budget, budgetIndex) => {
     const budgetId = getBudgetId(budget);
