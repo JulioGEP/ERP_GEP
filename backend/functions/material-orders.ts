@@ -180,6 +180,26 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
     });
   }
 
+  if (request.method === 'DELETE') {
+    const id = Number(request.query.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return errorResponse('VALIDATION_ERROR', 'Identificador de pedido inválido', 400);
+    }
+
+    const existingOrder = await prisma.pedidos.findUnique({ where: { id } });
+    if (!existingOrder) {
+      return errorResponse('NOT_FOUND', 'Pedido no encontrado', 404);
+    }
+
+    await prisma.pedidos.delete({ where: { id } });
+    const nextOrderNumber = await getNextOrderNumber(prisma);
+
+    return successResponse({
+      deletedId: id,
+      nextOrderNumber,
+    });
+  }
+
   if (request.method !== 'POST') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
   }
