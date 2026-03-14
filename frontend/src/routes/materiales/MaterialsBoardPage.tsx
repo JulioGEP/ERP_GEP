@@ -80,6 +80,11 @@ function resolveStatus(budget: DealSummary): MaterialDealStatus {
   return normalizeStatus(budget.estado_material) ?? 'Pedidos confirmados';
 }
 
+const ARCHIVED_MATERIAL_STATUS: MaterialDealStatus = 'Enviados al cliente';
+const VISIBLE_MATERIAL_STATUSES = MATERIAL_DEAL_STATUSES.filter(
+  (status) => status !== ARCHIVED_MATERIAL_STATUS,
+);
+
 export function MaterialsBoardPage({
   budgets,
   isLoading,
@@ -93,13 +98,16 @@ export function MaterialsBoardPage({
   const [updatingDealId, setUpdatingDealId] = useState<string | null>(null);
 
   const materialsBudgets = useMemo(
-    () => budgets.filter((budget) => isMaterialPipeline(budget)),
+    () =>
+      budgets.filter(
+        (budget) => isMaterialPipeline(budget) && resolveStatus(budget) !== ARCHIVED_MATERIAL_STATUS,
+      ),
     [budgets],
   );
 
   const dealsByStatus = useMemo(() => {
     const grouped = new Map<MaterialDealStatus, DealSummary[]>();
-    MATERIAL_DEAL_STATUSES.forEach((status) => grouped.set(status, []));
+    VISIBLE_MATERIAL_STATUSES.forEach((status) => grouped.set(status, []));
 
     materialsBudgets.forEach((budget) => {
       const status = resolveStatus(budget);
@@ -244,7 +252,7 @@ export function MaterialsBoardPage({
       ) : null}
 
       <div className="d-grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
-        {MATERIAL_DEAL_STATUSES.map((status) => {
+        {VISIBLE_MATERIAL_STATUSES.map((status) => {
           const items = dealsByStatus.get(status) ?? [];
           return (
             <section
