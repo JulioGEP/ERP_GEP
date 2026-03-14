@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { Alert, Badge, Button, Spinner } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { DealSummary, MaterialDealStatus } from '../../types/deal';
 import { MATERIAL_DEAL_STATUSES } from '../../types/deal';
@@ -80,6 +81,18 @@ function resolveStatus(budget: DealSummary): MaterialDealStatus {
   return normalizeStatus(budget.estado_material) ?? 'Pedidos confirmados';
 }
 
+const ARCHIVED_MATERIAL_STATUS: MaterialDealStatus = 'Enviados al cliente';
+
+function isArchivedMaterialBudget(budget: DealSummary): boolean {
+  if (resolveStatus(budget) !== ARCHIVED_MATERIAL_STATUS) return false;
+  const normalized = String(budget.presu_holded ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'si' || normalized === 'yes';
+}
+
 const MAX_VISIBLE_CARDS_PER_COLUMN = 5;
 const KANBAN_CARD_ESTIMATED_HEIGHT_REM = 10;
 export function MaterialsBoardPage({
@@ -99,11 +112,17 @@ export function MaterialsBoardPage({
     [budgets],
   );
 
+  const archivedCount = useMemo(
+    () => materialsBudgets.filter((budget) => isArchivedMaterialBudget(budget)).length,
+    [materialsBudgets],
+  );
+
   const dealsByStatus = useMemo(() => {
     const grouped = new Map<MaterialDealStatus, DealSummary[]>();
     MATERIAL_DEAL_STATUSES.forEach((status) => grouped.set(status, []));
 
     materialsBudgets.forEach((budget) => {
+      if (isArchivedMaterialBudget(budget)) return;
       const status = resolveStatus(budget);
       const bucket = grouped.get(status);
       if (bucket) bucket.push(budget);
@@ -129,7 +148,10 @@ export function MaterialsBoardPage({
       dealId: string;
       status: MaterialDealStatus;
     }) => {
-      await patchDealEditable(dealId, { estado_material: status });
+      await patchDealEditable(dealId, {
+        estado_material: status,
+        ...(status === ARCHIVED_MATERIAL_STATUS ? { presu_holded: 'true' } : {}),
+      });
       return status;
     },
     onMutate: async ({ dealId, status }) => {
@@ -139,7 +161,13 @@ export function MaterialsBoardPage({
 
       queryClient.setQueryData<DealSummary[]>(DEALS_ALL_QUERY_KEY, (oldDeals = []) =>
         oldDeals.map((deal) =>
-          (deal.deal_id ?? deal.dealId) === dealId ? { ...deal, estado_material: status } : deal,
+          (deal.deal_id ?? deal.dealId) === dealId
+            ? {
+                ...deal,
+                estado_material: status,
+                ...(status === ARCHIVED_MATERIAL_STATUS ? { presu_holded: 'true' } : {}),
+              }
+            : deal,
         ),
       );
 
@@ -157,7 +185,11 @@ export function MaterialsBoardPage({
       queryClient.setQueryData<DealSummary[]>(DEALS_ALL_QUERY_KEY, (oldDeals = []) =>
         oldDeals.map((deal) =>
           (deal.deal_id ?? deal.dealId) === variables.dealId
-            ? { ...deal, estado_material: variables.status }
+            ? {
+                ...deal,
+                estado_material: variables.status,
+                ...(variables.status === ARCHIVED_MATERIAL_STATUS ? { presu_holded: 'true' } : {}),
+              }
             : deal,
         ),
       );
@@ -212,7 +244,18 @@ export function MaterialsBoardPage({
           <h1 className="h3 fw-bold mb-0">Materiales · Tablero</h1>
           <p className="text-muted mb-0">Visualiza y actualiza el estado de los pedidos de materiales.</p>
         </div>
-        {(isLoading || isFetching) && <Spinner animation="border" role="status" size="sm" />}
+        <div className="d-flex align-items-center gap-3">
+          <div className="small text-muted">
+            Presupuestos archivados:{' '}
+            <Link
+              to="/materiales/todos?budgets-table__filter__presu_holded=true"
+              className="fw-semibold text-decoration-none"
+            >
+              {archivedCount}
+            </Link>
+          </div>
+          {(isLoading || isFetching) && <Spinner animation="border" role="status" size="sm" />}
+        </div>
       </section>
 
       {hasError ? (

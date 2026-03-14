@@ -42,6 +42,7 @@ export type DealEditablePatch = {
   comercial?: string | null;
   w_id_variation?: string | null;
   a_fecha?: string | null;
+  presu_holded?: string | null;
 };
 
 export type DealProductEditablePatch = {
