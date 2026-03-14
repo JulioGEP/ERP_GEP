@@ -639,6 +639,7 @@ export const MATERIALS_BUDGET_FILTERS_CONFIG: BudgetFiltersConfig = {
       const label = formatDateLabel(timestamp);
       return [iso, label].filter(Boolean).join(' ');
     },
+    presu_holded: (budget) => safeTrim(budget.presu_holded ?? '') ?? '',
   },
   definitions: [
     { key: 'deal_id', label: 'Presupuesto' },
@@ -651,8 +652,9 @@ export const MATERIALS_BUDGET_FILTERS_CONFIG: BudgetFiltersConfig = {
     { key: 'po', label: 'PO' },
     { key: 'observaciones', label: 'Observaciones' },
     { key: 'fecha_estimada_entrega_material', label: 'Estimada de Entrega', type: 'date' },
+    { key: 'presu_holded', label: 'Archivado' },
   ],
-  selectFilterKeys: new Set<string>(),
+  selectFilterKeys: new Set<string>(['presu_holded']),
 };
 
 type BudgetFilterRow = {
