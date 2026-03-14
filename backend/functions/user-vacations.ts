@@ -97,14 +97,56 @@ async function handleUpsertDay(
   const year = dateInput.getUTCFullYear();
   const dateOnly = formatDateOnly(dateInput);
 
+  const fixedContractTrainer = await prisma.trainers.findFirst({
+    where: {
+      user_id: userId,
+      contrato_fijo: true,
+    },
+    select: {
+      trainer_id: true,
+    },
+  });
+
   if (!type) {
-    await prisma.user_vacation_days.deleteMany({ where: { user_id: userId, date: dateInput } });
+    await prisma.$transaction([
+      prisma.user_vacation_days.deleteMany({ where: { user_id: userId, date: dateInput } }),
+      ...(fixedContractTrainer
+        ? [
+            prisma.trainer_availability.deleteMany({
+              where: {
+                trainer_id: fixedContractTrainer.trainer_id,
+                date: dateInput,
+              },
+            }),
+          ]
+        : []),
+    ]);
   } else {
-    await prisma.user_vacation_days.upsert({
-      where: { user_id_date: { user_id: userId, date: dateInput } },
-      update: { type },
-      create: { user_id: userId, date: dateInput, type },
-    });
+    await prisma.$transaction([
+      prisma.user_vacation_days.upsert({
+        where: { user_id_date: { user_id: userId, date: dateInput } },
+        update: { type },
+        create: { user_id: userId, date: dateInput, type },
+      }),
+      ...(fixedContractTrainer
+        ? [
+            prisma.trainer_availability.upsert({
+              where: {
+                trainer_id_date: {
+                  trainer_id: fixedContractTrainer.trainer_id,
+                  date: dateInput,
+                },
+              },
+              update: { available: false },
+              create: {
+                trainer_id: fixedContractTrainer.trainer_id,
+                date: dateInput,
+                available: false,
+              },
+            }),
+          ]
+        : []),
+    ]);
   }
 
   const payload = await buildVacationPayload(prisma, userId, year);
