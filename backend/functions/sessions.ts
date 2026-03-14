@@ -747,12 +747,22 @@ async function fetchScheduleAvailableTrainerIds(
 ): Promise<Set<string>> {
   const trainerRows = await prisma.trainers.findMany({
     where: { activo: true },
-    select: { trainer_id: true },
+    select: { trainer_id: true, user_id: true },
   });
 
   const trainerIds = trainerRows
     .map((row: { trainer_id: string | null }) => row.trainer_id)
     .filter((id: string | null): id is string => typeof id === 'string' && id.length > 0);
+
+  const trainerIdsByUserId = new Map<string, string[]>();
+  trainerRows.forEach((row: { trainer_id: string | null; user_id: string | null }) => {
+    const trainerId = typeof row.trainer_id === 'string' ? row.trainer_id : null;
+    const userId = typeof row.user_id === 'string' ? row.user_id : null;
+    if (!trainerId || !userId) return;
+    const trainerIdsForUser = trainerIdsByUserId.get(userId) ?? [];
+    trainerIdsForUser.push(trainerId);
+    trainerIdsByUserId.set(userId, trainerIdsForUser);
+  });
 
   if (!trainerIds.length) {
     return new Set<string>();
@@ -777,6 +787,20 @@ async function fetchScheduleAvailableTrainerIds(
     select: { trainer_id: true, date: true, available: true },
   });
 
+  const trainerUserIds = Array.from(trainerIdsByUserId.keys());
+  const vacationDays = trainerUserIds.length
+    ? await prisma.user_vacation_days.findMany({
+        where: {
+          user_id: { in: trainerUserIds },
+          date: {
+            gte: new Date(Date.UTC(firstDay.year, firstDay.month - 1, firstDay.day, 0, 0, 0, 0)),
+            lte: new Date(Date.UTC(lastDay.year, lastDay.month - 1, lastDay.day, 0, 0, 0, 0)),
+          },
+        },
+        select: { user_id: true, date: true },
+      })
+    : [];
+
   const overrideMap = new Map<string, Map<string, boolean>>();
   for (const entry of overrides) {
     const iso = formatMadridDate(entry.date);
@@ -788,14 +812,29 @@ async function fetchScheduleAvailableTrainerIds(
     map.set(entry.trainer_id, Boolean(entry.available));
   }
 
+  const vacationsMap = new Map<string, Set<string>>();
+  for (const entry of vacationDays) {
+    const trainerIdsForUser = trainerIdsByUserId.get(entry.user_id) ?? [];
+    if (!trainerIdsForUser.length) continue;
+    const iso = formatMadridDate(entry.date);
+    const trainerSet = vacationsMap.get(iso) ?? new Set<string>();
+    trainerIdsForUser.forEach((trainerId) => trainerSet.add(trainerId));
+    vacationsMap.set(iso, trainerSet);
+  }
+
   const available = new Set<string>(trainerIds);
 
   for (const day of days) {
     const defaultAvailable = true;
     const overridesForDay = overrideMap.get(day.iso);
+    const vacationsForDay = vacationsMap.get(day.iso);
 
     for (const trainerId of trainerIds) {
       if (!available.has(trainerId)) continue;
+      if (vacationsForDay?.has(trainerId)) {
+        available.delete(trainerId);
+        continue;
+      }
       const override = overridesForDay?.get(trainerId);
       const isAvailable = override !== undefined ? override : defaultAvailable;
       if (!isAvailable) {
