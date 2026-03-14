@@ -8,6 +8,8 @@ import { requireAuth } from './_shared/auth';
 import { sendEmail } from './_shared/mailer';
 
 const LOGISTICS_FALLBACK_SUBJECT = 'Uso de stock desde ERP';
+const MATERIAL_ORDERS_SENDER_EMAIL = 'erp@gepgroup.es';
+const MATERIAL_ORDERS_SENDER_NAME = 'Pedidos Material GEP Group';
 
 type ProductRequest = {
   productName: string;
@@ -239,11 +241,14 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
       }
     : null;
 
+  const senderFrom = `${MATERIAL_ORDERS_SENDER_NAME} <${MATERIAL_ORDERS_SENDER_EMAIL}>`;
+
   await sendEmail({
     to: supplierEmailPayload.to,
     cc: supplierEmailPayload.cc,
     subject: supplierEmailPayload.subject,
     text: supplierEmailPayload.body,
+    from: senderFrom,
   });
 
   if (logisticsEmailPayload) {
@@ -252,6 +257,7 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
       cc: logisticsEmailPayload.cc,
       subject: logisticsEmailPayload.subject,
       text: logisticsEmailPayload.body,
+      from: senderFrom,
     });
   }
 
