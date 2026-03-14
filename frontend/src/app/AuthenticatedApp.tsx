@@ -12,7 +12,7 @@ import type { ProductCommentPayload } from '../features/presupuestos/ProductComm
 import { VariantModal } from '../features/formacion_abierta/ProductVariantsList';
 import type { ActiveVariant, ProductInfo, VariantInfo } from '../features/formacion_abierta/types';
 import { ApiError } from '../api/client';
-import { fetchMaterialOrders } from '../features/materials/orders.api';
+import { deleteMaterialOrder, fetchMaterialOrders } from '../features/materials/orders.api';
 import { fetchTrainers } from '../features/recursos/api';
 import {
   deleteDeal,
@@ -904,6 +904,39 @@ export default function AuthenticatedApp() {
     [queryClient],
   );
 
+  const deleteMaterialOrderMutation = useMutation({
+    mutationFn: (orderId: number) => deleteMaterialOrder(orderId),
+    onSuccess: (_, orderId) => {
+      queryClient.setQueryData<MaterialOrdersResponse | undefined>(MATERIAL_ORDERS_QUERY_KEY, (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          orders: current.orders.filter((order) => order.id !== orderId),
+        };
+      });
+      pushToast({ variant: 'success', message: 'Pedido eliminado' });
+    },
+    onError: (error: unknown) => {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+          ? error.message
+          : 'No se pudo eliminar el pedido.';
+      pushToast({ variant: 'danger', message });
+    },
+  });
+
+  const handleDeleteMaterialOrder = useCallback(
+    (orderId: number) => {
+      if (deleteMaterialOrderMutation.isPending) return;
+      const shouldDelete = window.confirm('¿Seguro que quieres eliminar este pedido?');
+      if (!shouldDelete) return;
+      deleteMaterialOrderMutation.mutate(orderId);
+    },
+    [deleteMaterialOrderMutation],
+  );
+
   const handleOpenImportModal = useCallback(() => {
     setImportResultWarnings(null);
     setImportResultDealId(null);
@@ -1704,6 +1737,8 @@ export default function AuthenticatedApp() {
     error: materialsOrdersQuery.error ?? null,
     onRetry: () => materialsOrdersQuery.refetch(),
     onSelectBudget: handleSelectBudget,
+    onDelete: handleDeleteMaterialOrder,
+    deletingOrderId: deleteMaterialOrderMutation.isPending ? deleteMaterialOrderMutation.variables ?? null : null,
   };
 
   const calendarSessionsPageProps: PorSesionesPageProps = {

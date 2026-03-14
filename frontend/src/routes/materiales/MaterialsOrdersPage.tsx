@@ -12,6 +12,8 @@ export type MaterialsOrdersPageProps = {
   onRetry: () => void;
   onSelect?: (order: MaterialOrder) => void;
   onSelectBudget?: (budget: DealSummary) => void;
+  onDelete?: (orderId: number) => void;
+  deletingOrderId?: number | null;
 };
 
 function formatOrderDate(dateIso: string | null | undefined): string {
@@ -80,6 +82,8 @@ export function MaterialsOrdersPage({
   onRetry,
   onSelect,
   onSelectBudget,
+  onDelete,
+  deletingOrderId = null,
 }: MaterialsOrdersPageProps) {
   const [selectedOrder, setSelectedOrder] = useState<MaterialOrder | null>(null);
   const hasError = !!error;
@@ -136,18 +140,19 @@ export function MaterialsOrdersPage({
                 <th scope="col">Organización</th>
                 <th scope="col">Presupuesto</th>
                 <th scope="col">Fecha estimada entrega</th>
+                <th scope="col" className="text-end">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-4">
+                  <td colSpan={7} className="text-center py-4">
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
               ) : !hasOrders ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-4 text-muted">
+                  <td colSpan={7} className="text-center py-4 text-muted">
                     No hay pedidos de materiales para mostrar.
                   </td>
                 </tr>
@@ -168,6 +173,25 @@ export function MaterialsOrdersPage({
                       <td>{getOrderOrganizationLabel(order, budgetsById)}</td>
                       <td>{getOrderBudgetLabel(order)}</td>
                       <td>{getOrderEstimatedDelivery(order, budgetsById)}</td>
+                      <td className="text-end" onClick={(event) => event.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="btn btn-outline-danger btn-sm"
+                          aria-label="Eliminar pedido"
+                          title="Eliminar pedido"
+                          onClick={() => {
+                            if (!order.id || deletingOrderId) return;
+                            onDelete?.(order.id);
+                          }}
+                          disabled={!order.id || Boolean(deletingOrderId)}
+                        >
+                          {deletingOrderId === order.id ? (
+                            <Spinner animation="border" role="status" size="sm" />
+                          ) : (
+                            <span aria-hidden="true">🗑️</span>
+                          )}
+                        </button>
+                      </td>
                     </tr>
                   );
                 })

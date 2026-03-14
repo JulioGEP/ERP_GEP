@@ -19,6 +19,7 @@ type ProductRequest = {
 };
 
 type CreateMaterialOrderBody = {
+  id?: number;
   orderNumber?: number;
   supplierName?: string | null;
   supplierEmail?: string | null;
@@ -180,8 +181,27 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
     });
   }
 
-  if (request.method !== 'POST') {
+  if (request.method !== 'POST' && request.method !== 'DELETE') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
+  }
+
+  if (request.method === 'DELETE') {
+    const orderIdRaw = request.body && typeof request.body === 'object' ? request.body.id : null;
+    const orderId = Number(orderIdRaw);
+
+    if (!Number.isInteger(orderId) || orderId <= 0) {
+      return errorResponse('VALIDATION_ERROR', 'El identificador del pedido es obligatorio', 400);
+    }
+
+    const existing = await prisma.pedidos.findUnique({ where: { id: orderId } });
+
+    if (!existing) {
+      return errorResponse('NOT_FOUND', 'No se encontró el pedido indicado', 404);
+    }
+
+    await prisma.pedidos.delete({ where: { id: orderId } });
+
+    return successResponse({ deleted: true, id: orderId });
   }
 
   if (!request.body || typeof request.body !== 'object') {
