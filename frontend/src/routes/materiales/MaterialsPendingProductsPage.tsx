@@ -28,6 +28,7 @@ function isSentToCustomerBudget(budget: DealSummary): boolean {
 
 export type MaterialsPendingProductsPageProps = {
   budgets: DealSummary[];
+  orders?: MaterialOrder[];
   isLoading: boolean;
   isFetching: boolean;
   error: unknown;
@@ -238,7 +239,40 @@ function isShippingExpense(product: DealProduct | null | undefined): boolean {
   return normalizedLabel.includes('gastos de envio');
 }
 
-function buildPendingProducts(budgets: DealSummary[]): PendingProductRow[] {
+function normalizeOrderedProductName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[^\w\s]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function buildOrderedProductKeys(orders: MaterialOrder[]): Set<string> {
+  const orderedKeys = new Set<string>();
+
+  for (const order of orders) {
+    const sourceBudgetIds = Array.isArray(order.sourceBudgetIds) ? order.sourceBudgetIds : [];
+    const orderItems = Array.isArray(order.products?.items) ? order.products.items : [];
+
+    for (const budgetId of sourceBudgetIds) {
+      const normalizedBudgetId = String(budgetId ?? '').trim();
+      if (!normalizedBudgetId) continue;
+
+      for (const item of orderItems) {
+        const normalizedProductName = normalizeOrderedProductName(item?.productName ?? '');
+        if (!normalizedProductName) continue;
+        orderedKeys.add(`${normalizedBudgetId}::${normalizedProductName}`);
+      }
+    }
+  }
+
+  return orderedKeys;
+}
+
+function buildPendingProducts(budgets: DealSummary[], orders: MaterialOrder[]): PendingProductRow[] {
+  const orderedProductKeys = buildOrderedProductKeys(orders);
   const filteredBudgets = budgets.filter(
     (budget) => isMaterialPipeline(budget) && !isSentToCustomerBudget(budget),
   );
@@ -247,9 +281,15 @@ function buildPendingProducts(budgets: DealSummary[]): PendingProductRow[] {
     const budgetId = getBudgetId(budget);
     const organizationName = getOrganizationName(budget);
     const estimatedDelivery = formatEstimatedDelivery(getEstimatedDeliveryValue(budget));
-    const products = (Array.isArray(budget.products) ? budget.products : []).filter(
-      (product) => !isShippingExpense(product),
-    );
+    const products = (Array.isArray(budget.products) ? budget.products : []).filter((product) => {
+      if (isShippingExpense(product)) return false;
+
+      const normalizedBudgetId = budgetId ? String(budgetId).trim() : '';
+      const normalizedProductName = normalizeOrderedProductName(getProductName(product));
+      if (!normalizedBudgetId || !normalizedProductName) return true;
+
+      return !orderedProductKeys.has(`${normalizedBudgetId}::${normalizedProductName}`);
+    });
 
     return products.map((product, productIndex) => ({
       key: product?.id?.trim?.() || `${budgetId ?? 'budget'}-product-${budgetIndex}-${productIndex}`,
@@ -326,6 +366,7 @@ function getSortIndicator(sortConfig: SortConfig, key: SortableColumn) {
 
 export function MaterialsPendingProductsPage({
   budgets,
+  orders = [],
   isLoading,
   isFetching,
   error,
@@ -340,7 +381,7 @@ export function MaterialsPendingProductsPage({
   isLoadingOrders,
 }: MaterialsPendingProductsPageProps) {
   const queryClient = useQueryClient();
-  const pendingProducts = useMemo(() => buildPendingProducts(budgets), [budgets]);
+  const pendingProducts = useMemo(() => buildPendingProducts(budgets, orders), [budgets, orders]);
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const [selectedProducts, setSelectedProducts] = useState<Record<string, SelectedProduct>>({});
   const [showOrderModal, setShowOrderModal] = useState(false);
