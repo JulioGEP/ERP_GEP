@@ -54,6 +54,22 @@ function getIsoWeekKey(date: Date): string {
   return `${year}-W${String(week).padStart(2, '0')}`;
 }
 
+function listDatesBetween(startDate: string, endDate: string): string[] {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return [];
+
+  const result: string[] = [];
+  const current = new Date(start);
+  while (current <= end) {
+    result.push(formatDateKey(current));
+    current.setDate(current.getDate() + 1);
+  }
+
+  return result;
+}
+
 
 function isWeekend(date: string): boolean {
   const day = new Date(`${date}T00:00:00`).getDay();
@@ -175,7 +191,11 @@ export default function ControlHorarioPage() {
       }
     >();
 
-    const dates = Array.from(entriesByDate.keys()).sort((a, b) => b.localeCompare(a));
+    const datesWithData = Array.from(new Set([...entriesByDate.keys(), ...absencesByDate.keys()])).sort((a, b) =>
+      a.localeCompare(b),
+    );
+    const firstDateWithData = datesWithData[0] ?? todayKey;
+    const dates = listDatesBetween(firstDateWithData, todayKey).sort((a, b) => b.localeCompare(a));
     dates.forEach((date) => {
       const [yearRaw, monthRaw] = date.split('-');
       const year = Number.parseInt(yearRaw, 10);
@@ -234,7 +254,7 @@ export default function ControlHorarioPage() {
     });
 
     return Array.from(yearMap.values()).sort((a, b) => b.year - a.year);
-  }, [entriesByDate, monthFormatter]);
+  }, [absencesByDate, entriesByDate, monthFormatter, todayKey]);
 
   const currentYear = now.getFullYear();
   const currentMonthKey = `${currentYear}-${String(now.getMonth() + 1).padStart(2, '0')}`;
