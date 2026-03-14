@@ -84,7 +84,13 @@ function resolveStatus(budget: DealSummary): MaterialDealStatus {
 const ARCHIVED_MATERIAL_STATUS: MaterialDealStatus = 'Enviados al cliente';
 
 function isArchivedMaterialBudget(budget: DealSummary): boolean {
-  return resolveStatus(budget) === ARCHIVED_MATERIAL_STATUS;
+  if (resolveStatus(budget) !== ARCHIVED_MATERIAL_STATUS) return false;
+  const normalized = String(budget.presu_holded ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'si' || normalized === 'yes';
 }
 
 const MAX_VISIBLE_CARDS_PER_COLUMN = 5;
