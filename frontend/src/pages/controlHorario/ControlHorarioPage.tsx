@@ -1,7 +1,8 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Accordion, Alert, Badge, Button, Card, Spinner, Table } from 'react-bootstrap';
 import { isApiError } from '../../api/client';
+import { getVacationTypeVisual } from '../../constants/vacations';
 import {
   clockInControlHorario,
   clockOutControlHorario,
@@ -53,6 +54,35 @@ function getIsoWeekKey(date: Date): string {
   return `${year}-W${String(week).padStart(2, '0')}`;
 }
 
+
+function isWeekend(date: string): boolean {
+  const day = new Date(`${date}T00:00:00`).getDay();
+  return day === 0 || day === 6;
+}
+
+function getContractHoursValue(weeklyHours: number | null): number | null {
+  if (weeklyHours === null || !Number.isFinite(weeklyHours)) return null;
+  const dailyHours = weeklyHours / 5;
+  return Math.round(dailyHours * 100) / 100;
+}
+
+function formatContractHoursValue(hours: number): string {
+  const rounded = Math.round(hours * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+}
+
+function getAbsenceLabel(absenceType: string | null, date: string): string {
+  if (isWeekend(date)) return 'Fin de semana';
+  if (!absenceType) return 'laborable';
+  const normalized = absenceType.trim().toUpperCase();
+  if (normalized === 'T') return 'laborable';
+  return getVacationTypeVisual(normalized).fullLabel;
+}
+
+function isLaborableAbsence(absenceLabel: string): boolean {
+  return absenceLabel.trim().toLowerCase() === 'laborable';
+}
+
 export default function ControlHorarioPage() {
   const [now, setNow] = useState(() => new Date());
   const [range] = useState(getHistoricRange);
@@ -81,6 +111,8 @@ export default function ControlHorarioPage() {
   });
 
   const entries = controlHorarioQuery.data?.entries ?? [];
+  const absences = controlHorarioQuery.data?.absences ?? [];
+  const contractHoursByMonth = controlHorarioQuery.data?.contractHoursByMonth ?? {};
   const entriesByDate = useMemo(() => {
     const map = new Map<string, ControlHorarioEntry[]>();
     entries.forEach((entry) => {
@@ -90,6 +122,14 @@ export default function ControlHorarioPage() {
     });
     return map;
   }, [entries]);
+
+  const absencesByDate = useMemo(() => {
+    const map = new Map<string, string>();
+    absences.forEach((absence) => {
+      map.set(absence.date, absence.type);
+    });
+    return map;
+  }, [absences]);
 
   const todayKey = formatDateKey(now);
   const openEntry = entries.find((entry) => entry.checkIn && !entry.checkOut) ?? null;
@@ -235,13 +275,15 @@ export default function ControlHorarioPage() {
                         </Accordion.Header>
                         <Accordion.Body>
                           <div className="table-responsive">
-                            <Table striped bordered hover className="align-middle mb-0">
+                            <Table bordered hover className="align-middle mb-0">
                               <thead>
                                 <tr>
                                   <th style={{ width: '18%' }}>Fecha</th>
                                   <th>Fichajes</th>
-                                  <th style={{ width: '14%' }}>Total</th>
-                                  <th style={{ width: '14%' }}>Acciones</th>
+                                  <th style={{ width: '10%' }}>Contrato</th>
+                                  <th style={{ width: '16%' }}>Ausencia</th>
+                                  <th style={{ width: '12%' }}>Total</th>
+                                  <th style={{ width: '12%' }}>Acciones</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -283,7 +325,7 @@ export default function ControlHorarioPage() {
                                   return weekGroups.map((weekGroup) => (
                                     <Fragment key={weekGroup.key}>
                                       <tr className="table-light">
-                                        <td colSpan={4} className="fw-semibold">
+                                        <td colSpan={6} className="fw-semibold">
                                           {weekGroup.label}
                                         </td>
                                       </tr>
@@ -293,8 +335,18 @@ export default function ControlHorarioPage() {
                                           if (!entry.checkIn || !entry.checkOut) return acc;
                                           return acc + diffMinutes(entry.checkIn, new Date(entry.checkOut));
                                         }, 0);
+                                        const [year, month] = date.split('-');
+                                        const monthKey = `${year}-${month}`;
+                                        const contractHoursValue = getContractHoursValue(contractHoursByMonth[monthKey] ?? null);
+                                        const absenceLabel = getAbsenceLabel(absencesByDate.get(date) ?? null, date);
+                                        const laborableAbsence = isLaborableAbsence(absenceLabel);
+                                        const rowStyle = {
+                                          '--bs-table-bg': laborableAbsence ? '#ffffff' : '#f2f2f2',
+                                          '--bs-table-hover-bg': laborableAbsence ? '#f8f9fa' : '#e9ecef',
+                                        } as CSSProperties;
+
                                         return (
-                                          <tr key={date}>
+                                          <tr key={date} style={rowStyle}>
                                             <td>{dateFormatter.format(new Date(`${date}T00:00:00`))}</td>
                                             <td>
                                               {entriesForDate.length ? (
@@ -325,6 +377,8 @@ export default function ControlHorarioPage() {
                                                 <span className="text-muted">Sin fichajes</span>
                                               )}
                                             </td>
+                                            <td>{contractHoursValue === null ? '—' : formatContractHoursValue(contractHoursValue)}</td>
+                                            <td>{absenceLabel}</td>
                                             <td>{totalMinutes ? formatDuration(totalMinutes) : '—'}</td>
                                             <td>
                                               <span className="text-muted">Bloqueado</span>
@@ -333,7 +387,7 @@ export default function ControlHorarioPage() {
                                         );
                                       })}
                                       <tr className="table-secondary">
-                                        <td colSpan={2} className="fw-semibold">
+                                        <td colSpan={4} className="fw-semibold">
                                           Total semana
                                         </td>
                                         <td className="fw-semibold">

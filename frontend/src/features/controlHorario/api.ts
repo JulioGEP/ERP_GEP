@@ -30,6 +30,11 @@ export type ControlHorarioEntry = {
   checkOut: string | null;
 };
 
+export type ControlHorarioAbsence = {
+  date: string;
+  type: string;
+};
+
 export type ControlHorarioResponse = {
   user: {
     id: string;
@@ -41,6 +46,8 @@ export type ControlHorarioResponse = {
     end: string;
   };
   entries: ControlHorarioEntry[];
+  absences: ControlHorarioAbsence[];
+  contractHoursByMonth: Record<string, number | null>;
   meta: {
     yesterday: string;
   };
@@ -62,6 +69,30 @@ function sanitizeEntry(entry: unknown): ControlHorarioEntry | null {
   };
 }
 
+
+function sanitizeOptionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed.length) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function sanitizeAbsence(entry: unknown): ControlHorarioAbsence | null {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+  const raw = entry as Record<string, unknown>;
+  const date = sanitizeText(raw.date);
+  const type = sanitizeText(raw.type);
+  if (!date || !type) return null;
+  return { date, type };
+}
+
 export type ControlHorarioFilters = {
   startDate?: string;
   endDate?: string;
@@ -79,15 +110,40 @@ export async function fetchControlHorario(
   }
   const query = params.toString();
   const url = query.length ? `/control-horario?${query}` : '/control-horario';
-  const data = await getJson<ControlHorarioResponse>(url);
+  const data = await getJson<{
+    user?: ControlHorarioResponse['user'];
+    range?: ControlHorarioResponse['range'];
+    entries?: unknown;
+    absences?: unknown;
+    contractHoursByMonth?: unknown;
+    meta?: ControlHorarioResponse['meta'];
+  }>(url);
   const entries = Array.isArray(data?.entries)
     ? data.entries.map(sanitizeEntry).filter((entry): entry is ControlHorarioEntry => entry !== null)
     : [];
+  const absences = Array.isArray(data?.absences)
+    ? data.absences.map(sanitizeAbsence).filter((absence): absence is ControlHorarioAbsence => absence !== null)
+    : [];
+
+  const contractHoursByMonthRaw = data?.contractHoursByMonth;
+  const contractHoursByMonth =
+    contractHoursByMonthRaw && typeof contractHoursByMonthRaw === 'object'
+      ? Object.entries(contractHoursByMonthRaw as Record<string, unknown>).reduce<Record<string, number | null>>(
+          (acc, [key, value]) => {
+            acc[key] = sanitizeOptionalNumber(value);
+            return acc;
+          },
+          {},
+        )
+      : {};
+
   return {
-    user: data.user,
-    range: data.range,
-    meta: data.meta,
+    user: data?.user ?? { id: '', name: '', role: '' },
+    range: data?.range ?? { start: '', end: '' },
+    meta: data?.meta ?? { yesterday: '' },
     entries,
+    absences,
+    contractHoursByMonth,
   };
 }
 

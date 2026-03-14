@@ -34,6 +34,21 @@ function buildDateRange(startDate: string | null, endDate: string | null): { sta
   return { start: firstDay, end: resolvedEnd };
 }
 
+function buildMonthKeys(startDate: string, endDate: string): Set<string> {
+  const keys = new Set<string>();
+  const cursor = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+
+  cursor.setUTCDate(1);
+  while (cursor <= end) {
+    const key = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}`;
+    keys.add(key);
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+
+  return keys;
+}
+
 function resolveUserName(user: { first_name: string; last_name: string; email: string }): string {
   const parts = [user.first_name, user.last_name].map((value) => value.trim()).filter(Boolean);
   if (parts.length) return parts.join(' ');
@@ -91,6 +106,42 @@ export const handler = createHttpHandler(async (request) => {
     orderBy: [{ log_date: 'asc' }, { check_in_utc: 'asc' }],
   });
 
+  const holidayDays = await prisma.user_vacation_days.findMany({
+    where: {
+      user_id: auth.user.id,
+      date: {
+        gte: new Date(`${range.start}T00:00:00Z`),
+        lte: new Date(`${range.end}T00:00:00Z`),
+      },
+    },
+    select: {
+      date: true,
+      type: true,
+    },
+  });
+
+  const monthKeys = buildMonthKeys(range.start, range.end);
+  const payrolls = await prisma.office_payrolls.findMany({
+    where: {
+      user_id: auth.user.id,
+    },
+    select: {
+      year: true,
+      month: true,
+      horas_semana: true,
+    },
+  });
+
+  const contractHoursByMonth = payrolls.reduce<Record<string, number | null>>((acc, payroll) => {
+    const monthKey = `${payroll.year}-${String(payroll.month).padStart(2, '0')}`;
+    if (!monthKeys.has(monthKey)) {
+      return acc;
+    }
+    const weeklyHours = payroll.horas_semana === null ? null : Number(payroll.horas_semana);
+    acc[monthKey] = Number.isFinite(weeklyHours) ? weeklyHours : null;
+    return acc;
+  }, {});
+
   const entries = logs.map((log) => ({
     id: log.id,
     date: log.log_date.toISOString().slice(0, 10),
@@ -106,6 +157,11 @@ export const handler = createHttpHandler(async (request) => {
     },
     range,
     entries,
+    absences: holidayDays.map((holiday) => ({
+      date: holiday.date.toISOString().slice(0, 10),
+      type: holiday.type,
+    })),
+    contractHoursByMonth,
     meta: {
       yesterday: addDays(getTodayDateString(), -1),
     },
