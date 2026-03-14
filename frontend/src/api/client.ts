@@ -41,6 +41,9 @@ function resolveRequestInput(input: RequestInfo | URL): RequestInfo | URL {
   if (typeof input === 'string') {
     if (/^https?:/i.test(input)) return input;
     const path = input.startsWith('/') ? input : `/${input}`;
+    if (path.startsWith('/api/')) {
+      return path;
+    }
     return `${API_BASE}${path}`;
   }
   return input;
