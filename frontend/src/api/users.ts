@@ -7,6 +7,7 @@ export type UserSummary = {
   email: string;
   role: string;
   active: boolean;
+  canDeliverTraining: boolean;
   bankAccount: string | null;
   address: string | null;
   createdAt: string;
@@ -48,6 +49,7 @@ export type CreateUserPayload = {
   email: string;
   role: string;
   active: boolean;
+  canDeliverTraining: boolean;
   bankAccount?: string | null;
   address?: string | null;
   payroll?: Partial<UserPayroll>;

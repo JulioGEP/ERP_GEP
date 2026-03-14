@@ -39,6 +39,7 @@ model users {
   name                String?
   bank_account        String?
   address             String?
+  can_deliver_training Boolean   @default(false)
   reset_token         String?
   reset_token_expires DateTime? @db.Timestamptz(6)
   reset_requested_at  DateTime? @db.Timestamptz(6)

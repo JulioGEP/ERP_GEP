@@ -360,6 +360,7 @@ export default function UsersVacationsPage() {
       email: '',
       role: user.role,
       active: user.active,
+      canDeliverTraining: false,
       bankAccount: null,
       address: null,
       createdAt: '',

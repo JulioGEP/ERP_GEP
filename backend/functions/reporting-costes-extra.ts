@@ -38,6 +38,9 @@ type TrainerSummary = {
   apellido: string | null;
   contrato_fijo?: boolean | null;
   user_id?: string | null;
+  user?: {
+    can_deliver_training: boolean;
+  } | null;
 };
 
 type SessionInfo = {
@@ -912,11 +915,23 @@ export const handler = createHttpHandler(async (request) => {
     const trainerRecords = trainerIds.size
       ? ((await prisma.trainers.findMany({
           where: { trainer_id: { in: Array.from(trainerIds) } },
-          select: { trainer_id: true, name: true, apellido: true, user_id: true },
+          select: {
+            trainer_id: true,
+            name: true,
+            apellido: true,
+            user_id: true,
+            user: { select: { can_deliver_training: true } },
+          },
         })) as TrainerSummary[])
       : [];
+    const excludedTrainerIds = new Set<string>(
+      trainerRecords
+        .filter((trainer) => trainer.user?.can_deliver_training === true)
+        .map((trainer) => trainer.trainer_id),
+    );
     const trainerMap = new Map<string, TrainerSummary>();
     for (const trainer of trainerRecords) {
+      if (excludedTrainerIds.has(trainer.trainer_id)) continue;
       trainerMap.set(trainer.trainer_id, trainer);
     }
 
@@ -972,7 +987,9 @@ export const handler = createHttpHandler(async (request) => {
     }
 
     const costFilters: Record<string, unknown> = {
-      trainer_id: trainerIds.size ? { in: Array.from(trainerIds) } : undefined,
+      trainer_id: trainerIds.size
+        ? { in: Array.from(trainerIds).filter((trainerId) => !excludedTrainerIds.has(trainerId)) }
+        : undefined,
     };
     const costConditions: Array<Record<string, unknown>> = [];
     if (sessionIds.length) {
@@ -1012,6 +1029,9 @@ export const handler = createHttpHandler(async (request) => {
       if (!sessionId || !trainerId) {
         continue;
       }
+      if (excludedTrainerIds.has(trainerId)) {
+        continue;
+      }
       const key = buildCostKey('session', sessionId, trainerId);
       const record = costMap.get(key) ?? null;
       const trainer = trainerMap.get(trainerId) ?? null;
@@ -1033,6 +1053,9 @@ export const handler = createHttpHandler(async (request) => {
     for (const [variantId, trainerSet] of variantAssignments.entries()) {
       const variantInfo = variantDetailMap.get(variantId) ?? null;
       for (const trainerId of trainerSet) {
+        if (excludedTrainerIds.has(trainerId)) {
+          continue;
+        }
         const key = buildCostKey('variant', variantId, trainerId);
         const record = costMap.get(key) ?? null;
         const trainer = trainerMap.get(trainerId) ?? null;
@@ -1092,11 +1115,24 @@ export const handler = createHttpHandler(async (request) => {
       apellido: true,
       contrato_fijo: true,
       user_id: true,
+      user: {
+        select: {
+          can_deliver_training: true,
+        },
+      },
     },
   });
 
   if (!trainer) {
     return errorResponse('NOT_FOUND', 'No se encontró el formador indicado.', 404);
+  }
+
+  if (trainer.user?.can_deliver_training) {
+    return errorResponse(
+      'FORBIDDEN',
+      'Este formador puntual usa el circuito de costes de usuarios fijos.',
+      403,
+    );
   }
 
   let sessionInfo: SessionInfo | null = null;

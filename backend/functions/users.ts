@@ -94,6 +94,7 @@ function serializeUser(user: any) {
     active: user.active,
     bankAccount: user.bank_account,
     address: user.address,
+    canDeliverTraining: Boolean(user.can_deliver_training),
     createdAt: user.created_at,
     updatedAt: user.updated_at,
     trainerId: user.trainer?.trainer_id ?? null,
@@ -315,13 +316,13 @@ function parseBooleanParam(value: unknown, fallback: boolean): boolean {
 }
 
 /**
- * Sincroniza el usuario (rol formador) con su espejo en trainers.
+ * Sincroniza el usuario habilitado para impartir formación con su espejo en trainers.
  * 1) Busca trainer por user_id.
  * 2) Si no existe, busca por email.
  * 3) Actualiza el encontrado o crea uno nuevo.
  * 4) Enlaza siempre trainers.user_id = users.id.
  */
-async function syncTrainerForFormador(
+async function syncTrainerForUserTraining(
   tx: Prisma.TransactionClient,
   user: {
     id: string;
@@ -330,9 +331,12 @@ async function syncTrainerForFormador(
     email: string;
     role: string;
     active: boolean;
+    can_deliver_training: boolean;
   },
 ) {
-  if (normalizeRoleKey(user.role) !== 'formador') return;
+  const isFormadorRole = normalizeRoleKey(user.role) === 'formador';
+  const shouldBeTrainer = isFormadorRole || user.can_deliver_training;
+  if (!shouldBeTrainer) return;
   if (!user.email) return;
 
   // 1) por user_id
@@ -353,6 +357,7 @@ async function syncTrainerForFormador(
     email: user.email,
     activo: user.active,
     user_id: user.id,
+    contrato_fijo: user.can_deliver_training ? true : undefined,
   };
 
   if (trainer) {
@@ -365,6 +370,7 @@ async function syncTrainerForFormador(
       data: {
         trainer_id: randomUUID(),
         ...trainerData,
+        contrato_fijo: user.can_deliver_training ? true : false,
         phone: null,
         dni: null,
         direccion: null,
@@ -530,6 +536,9 @@ async function handleCreate(
   const email = normalizeEmail(request.body?.email);
   const roleInput = typeof request.body?.role === 'string' ? request.body.role.trim() : '';
   const active = request.body?.active === undefined ? true : Boolean(request.body.active);
+  const canDeliverTraining = request.body?.canDeliverTraining === undefined
+    ? false
+    : Boolean(request.body.canDeliverTraining);
   const bankAccountResult = parseBankAccount(request.body?.bankAccount);
   const address = sanitizeText(request.body?.address);
 
@@ -564,6 +573,7 @@ async function handleCreate(
           email,
           role: roleStorage as $Enums.erp_role,
           active,
+          can_deliver_training: canDeliverTraining,
           bank_account: bankAccountResult.parsed,
           address,
           password_hash: passwordHash,
@@ -581,13 +591,14 @@ async function handleCreate(
         });
       }
 
-      await syncTrainerForFormador(tx, {
+      await syncTrainerForUserTraining(tx, {
         id: user.id,
         first_name: user.first_name,
         last_name: user.last_name,
         email: user.email,
         role: user.role,
         active: user.active,
+        can_deliver_training: user.can_deliver_training,
       });
 
       return user;
@@ -623,6 +634,7 @@ async function handleUpdate(
     email?: string;
     role?: $Enums.erp_role;
     active?: boolean;
+    can_deliver_training?: boolean;
     bank_account?: string | null;
     address?: string | null;
   };
@@ -679,6 +691,11 @@ async function handleUpdate(
     fieldsProvided += 1;
   }
 
+  if ('canDeliverTraining' in (request.body ?? {})) {
+    data.can_deliver_training = Boolean(request.body?.canDeliverTraining);
+    fieldsProvided += 1;
+  }
+
   if ('bankAccount' in (request.body ?? {})) {
     const bankAccountResult = parseBankAccount(request.body?.bankAccount);
     if (!bankAccountResult.valid) {
@@ -722,13 +739,14 @@ async function handleUpdate(
         });
       }
 
-      await syncTrainerForFormador(tx, {
+      await syncTrainerForUserTraining(tx, {
         id: user.id,
         first_name: user.first_name,
         last_name: user.last_name,
         email: user.email,
         role: user.role,
         active: user.active,
+        can_deliver_training: user.can_deliver_training,
       });
 
       if (payrollResult.fieldsProvided > 0) {

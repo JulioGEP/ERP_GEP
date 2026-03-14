@@ -43,6 +43,7 @@ type OfficePayrollResponseItem = {
   email: string | null;
   role: string | null;
   trainerFixedContract: boolean;
+  canDeliverTraining: boolean;
   year: number;
   month: number;
   dietas: number | null;
@@ -314,6 +315,7 @@ function serializeRecord(
     last_name: string;
     email: string | null;
     role: string;
+    can_deliver_training: boolean;
     trainer: { contrato_fijo: boolean } | null;
     payroll: any | null;
   },
@@ -344,6 +346,7 @@ function serializeRecord(
     email: user.email,
     role: user.role,
     trainerFixedContract: Boolean(user.trainer?.contrato_fijo),
+    canDeliverTraining: Boolean(user.can_deliver_training),
     year: record.year,
     month: record.month,
     dietas,
@@ -412,6 +415,7 @@ async function handleGet(prisma = getPrisma(), request: any): Promise<ReturnType
       last_name: true;
       email: true;
       role: true;
+      can_deliver_training: true;
       created_at: true;
       payroll: true;
       trainer: { select: { contrato_fijo: true } };
@@ -435,6 +439,7 @@ async function handleGet(prisma = getPrisma(), request: any): Promise<ReturnType
       last_name: true,
       email: true,
       role: true,
+      can_deliver_training: true,
       created_at: true,
       payroll: true,
       trainer: { select: { contrato_fijo: true } },
@@ -511,6 +516,7 @@ async function handleGet(prisma = getPrisma(), request: any): Promise<ReturnType
             email: user.email,
             role: user.role,
             trainerFixedContract: Boolean(user.trainer?.contrato_fijo),
+            canDeliverTraining: Boolean(user.can_deliver_training),
             year,
             month,
             dietas: null,
@@ -670,6 +676,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
       last_name: true,
       email: true,
       role: true,
+      can_deliver_training: true,
       created_at: true,
       payroll: true,
       trainer: { select: { contrato_fijo: true } },
