@@ -20,6 +20,8 @@ ERP GEP es un **monorepo** con dos piezas principales:
 - [9) Comandos útiles](#9-comandos-útiles)
 - [10) Flujo recomendado para cambios](#10-flujo-recomendado-para-cambios)
 - [11) Despliegue en Netlify](#11-despliegue-en-netlify)
+- [12) Mapa visual para memoria](#12-mapa-visual-para-memoria)
+- [13) Memoria funcional redactada](#13-memoria-funcional-redactada)
 
 ## 1) Qué resuelve este ERP
 
@@ -210,3 +212,15 @@ Desde la raíz:
 ---
 
 Si vas a ampliar el ERP (nuevos módulos o endpoints), mantén este README alineado para que siga siendo útil como mapa operativo del proyecto.
+
+
+## 12) Mapa visual para memoria
+
+- Documento recomendado: `docs/mapa-funcionalidades-erp.md`.
+- Incluye un **mindmap** y un **flujo operativo** en formato Mermaid, listos para copiar en una memoria funcional.
+
+
+## 13) Memoria funcional redactada
+
+- Documento completo: `docs/memoria-funcional-erp-gep.md`.
+- Incluye secciones de **introducción, objetivos, alcance, metodología, conclusiones y anexos**.
