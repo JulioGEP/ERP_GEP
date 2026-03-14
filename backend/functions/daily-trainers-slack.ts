@@ -101,7 +101,7 @@ export const handler: Handler = async (event) => {
     const force = String(event.queryStringParameters?.force ?? '').toLowerCase();
     const shouldForceSend = force === '1' || force === 'true';
 
-    if (!shouldForceSend && isScheduledEvent && !isWithinMadridAutomationWindow(todayIso, 0, 0)) {
+    if (!shouldForceSend && isScheduledEvent && !isWithinMadridAutomationWindow(todayIso)) {
       return successResponse({
         message: 'Fuera de la ventana de envío de las 07:00 en Madrid. Se omite.',
         nowMadrid: todayIso,
