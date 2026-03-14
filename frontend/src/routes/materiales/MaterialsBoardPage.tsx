@@ -5,12 +5,14 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { DealSummary, MaterialDealStatus } from '../../types/deal';
 import { MATERIAL_DEAL_STATUSES } from '../../types/deal';
+import type { MaterialOrder } from '../../types/materialOrder';
 import { patchDealEditable } from '../../features/presupuestos/api/deals.api';
 import { DEALS_ALL_QUERY_KEY } from '../../features/presupuestos/queryKeys';
 import { isMaterialPipeline } from './MaterialsBudgetsPage';
 
 export type MaterialsBoardPageProps = {
   budgets: DealSummary[];
+  orders?: MaterialOrder[];
   isLoading: boolean;
   isFetching: boolean;
   error: unknown;
@@ -81,6 +83,75 @@ function resolveStatus(budget: DealSummary): MaterialDealStatus {
   return normalizeStatus(budget.estado_material) ?? 'Pedidos confirmados';
 }
 
+function normalizeProductName(value: string | null | undefined): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function isShippingExpense(productName: string | null | undefined): boolean {
+  return normalizeProductName(productName).includes('gastos de envio');
+}
+
+function buildOrderedProductKeys(orders: MaterialOrder[]): Set<string> {
+  const orderedKeys = new Set<string>();
+
+  for (const order of orders) {
+    const sourceBudgetIds = Array.isArray(order.sourceBudgetIds) ? order.sourceBudgetIds : [];
+    const orderItems = Array.isArray(order.products?.items) ? order.products.items : [];
+
+    for (const budgetId of sourceBudgetIds) {
+      const normalizedBudgetId = String(budgetId ?? '').trim();
+      if (!normalizedBudgetId) continue;
+
+      for (const item of orderItems) {
+        const normalizedProductName = normalizeProductName(item?.productName);
+        if (!normalizedProductName) continue;
+        orderedKeys.add(`${normalizedBudgetId}::${normalizedProductName}`);
+      }
+    }
+  }
+
+  return orderedKeys;
+}
+
+function hasPendingProductsInOrder(budget: DealSummary, orderedProductKeys: Set<string>): boolean {
+  const budgetId = getBudgetId(budget);
+  if (!budgetId) return false;
+
+  const products = (Array.isArray(budget.products) ? budget.products : []).filter((product) => {
+    const name = product?.name?.trim() || product?.code?.trim() || '';
+    return !isShippingExpense(name);
+  });
+
+  if (products.length <= 1) return false;
+
+  let hasOrderedProduct = false;
+  let hasNotOrderedProduct = false;
+
+  for (const product of products) {
+    const normalizedProductName = normalizeProductName(product?.name ?? product?.code);
+    if (!normalizedProductName) {
+      hasNotOrderedProduct = true;
+      continue;
+    }
+
+    if (orderedProductKeys.has(`${budgetId}::${normalizedProductName}`)) {
+      hasOrderedProduct = true;
+    } else {
+      hasNotOrderedProduct = true;
+    }
+
+    if (hasOrderedProduct && hasNotOrderedProduct) return true;
+  }
+
+  return false;
+}
+
 const ARCHIVED_MATERIAL_STATUS: MaterialDealStatus = 'Enviados al cliente';
 
 function isArchivedMaterialBudget(budget: DealSummary): boolean {
@@ -97,6 +168,7 @@ const MAX_VISIBLE_CARDS_PER_COLUMN = 5;
 const KANBAN_CARD_ESTIMATED_HEIGHT_REM = 10;
 export function MaterialsBoardPage({
   budgets,
+  orders = [],
   isLoading,
   isFetching,
   error,
@@ -120,16 +192,22 @@ export function MaterialsBoardPage({
   const dealsByStatus = useMemo(() => {
     const grouped = new Map<MaterialDealStatus, DealSummary[]>();
     MATERIAL_DEAL_STATUSES.forEach((status) => grouped.set(status, []));
+    const orderedProductKeys = buildOrderedProductKeys(orders);
+    const mixedOrderStatus: MaterialDealStatus = 'Presupuesto pedido a medias';
 
     materialsBudgets.forEach((budget) => {
       if (isArchivedMaterialBudget(budget)) return;
+      if (hasPendingProductsInOrder(budget, orderedProductKeys)) {
+        grouped.get(mixedOrderStatus)?.push(budget);
+        return;
+      }
       const status = resolveStatus(budget);
       const bucket = grouped.get(status);
       if (bucket) bucket.push(budget);
     });
 
     return grouped;
-  }, [materialsBudgets]);
+  }, [materialsBudgets, orders]);
 
   const budgetsById = useMemo(() => {
     const map = new Map<string, DealSummary>();
