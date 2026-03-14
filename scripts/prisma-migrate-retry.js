@@ -20,6 +20,13 @@ if (databaseUrl) {
   try {
     const parsed = new URL(databaseUrl);
     parsed.searchParams.set('statement_timeout', `${STATEMENT_TIMEOUT}`);
+    parsed.searchParams.set('lock_timeout', `${LOCK_TIMEOUT}`);
+
+    // Neon pooler can enforce a low default statement_timeout; injecting startup options
+    // ensures Prisma's advisory lock query is allowed to wait longer than 10s.
+    const startupOptions = `-c statement_timeout=${STATEMENT_TIMEOUT} -c lock_timeout=${LOCK_TIMEOUT}`;
+    parsed.searchParams.set('options', startupOptions);
+
     databaseUrl = parsed.toString();
   } catch (error) {
     console.warn('Could not parse DATABASE_URL to inject statement_timeout; using raw value', error);
@@ -36,6 +43,8 @@ const env = {
 console.log('Prisma advisory lock timeouts (ms):', {
   migrate: resolvedMigrateLockTimeout,
   schema: resolvedSchemaLockTimeout,
+  statement: `${STATEMENT_TIMEOUT}`,
+  lock: `${LOCK_TIMEOUT}`,
 });
 
 function isP1001Error(output) {
