@@ -1697,6 +1697,7 @@ export default function AuthenticatedApp() {
 
   const materialsOrdersPageProps: MaterialsOrdersPageProps = {
     orders: materialOrders,
+    budgets: materialsBudgets,
     isLoading: materialsOrdersQuery.isLoading,
     isFetching: isRefreshingMaterialOrders,
     error: materialsOrdersQuery.error ?? null,
