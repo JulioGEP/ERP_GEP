@@ -10,6 +10,9 @@ const resolvedMigrateLockTimeout =
   process.env.PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT || '120000';
 const resolvedSchemaLockTimeout =
   process.env.PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT || '120000';
+const SHOULD_SKIP_ON_P1001 =
+  process.env.PRISMA_MIGRATE_SKIP_ON_P1001 === 'true' ||
+  (process.env.PRISMA_MIGRATE_SKIP_ON_P1001 == null && process.env.NETLIFY === 'true');
 
 // Avoid Neon cancelling the advisory lock attempt after 10s (default statement_timeout).
 // We cannot change the remote DB default, so we append a query param to the connection
@@ -38,6 +41,31 @@ const env = {
   ...(databaseUrl ? { DATABASE_URL: databaseUrl } : null),
   PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT: resolvedMigrateLockTimeout,
   PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT: resolvedSchemaLockTimeout,
+};
+
+const isDatabaseUnavailableError = (output = '') =>
+  output.includes('P1001') || output.includes("Can't reach database server");
+
+const runPrisma = (args) => {
+  const result = spawnSync('npx', args, {
+    cwd: backendDir,
+    env,
+    encoding: 'utf8',
+    stdio: 'pipe',
+  });
+
+  if (result.stdout) {
+    process.stdout.write(result.stdout);
+  }
+
+  if (result.stderr) {
+    process.stderr.write(result.stderr);
+  }
+
+  return {
+    ...result,
+    combinedOutput: `${result.stdout || ''}\n${result.stderr || ''}`,
+  };
 };
 
 console.log('Prisma advisory lock timeouts (ms):', {
@@ -90,14 +118,17 @@ for (const migration of migrationsToResolve) {
 
 for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
   console.log(`Prisma migrate deploy (attempt ${attempt}/${MAX_ATTEMPTS})...`);
-  const result = spawnSync(
-    'npx',
-    ['prisma', 'migrate', 'deploy', '--schema', 'prisma/schema.prisma'],
-    { cwd: backendDir, env, stdio: 'inherit' }
-  );
+  const result = runPrisma(['prisma', 'migrate', 'deploy', '--schema', 'prisma/schema.prisma']);
 
   if (result.status === 0) {
     console.log('Prisma migrate deploy succeeded');
+    process.exit(0);
+  }
+
+  if (SHOULD_SKIP_ON_P1001 && isDatabaseUnavailableError(result.combinedOutput)) {
+    console.warn(
+      'Prisma migrate deploy skipped: database is unreachable (P1001). Continuing build because PRISMA_MIGRATE_SKIP_ON_P1001 is enabled.'
+    );
     process.exit(0);
   }
 
