@@ -84,6 +84,8 @@ const ARCHIVED_MATERIAL_STATUS: MaterialDealStatus = 'Enviados al cliente';
 const VISIBLE_MATERIAL_STATUSES = MATERIAL_DEAL_STATUSES.filter(
   (status) => status !== ARCHIVED_MATERIAL_STATUS,
 );
+const MAX_VISIBLE_CARDS_PER_COLUMN = 5;
+const KANBAN_CARD_ESTIMATED_HEIGHT_REM = 10;
 
 export function MaterialsBoardPage({
   budgets,
@@ -263,7 +265,6 @@ export function MaterialsBoardPage({
             >
               <header className="d-flex align-items-start justify-content-between gap-2">
                 <div className="d-flex flex-column">
-                  <span className="text-muted text-uppercase small">Estado</span>
                   <h2 className="h6 mb-0">{status}</h2>
                 </div>
                 <Badge bg="secondary" pill>
@@ -271,7 +272,14 @@ export function MaterialsBoardPage({
                 </Badge>
               </header>
 
-              <div className="d-flex flex-column gap-3">
+              <div
+                className="d-flex flex-column gap-3"
+                style={{
+                  maxHeight: `calc(${MAX_VISIBLE_CARDS_PER_COLUMN} * ${KANBAN_CARD_ESTIMATED_HEIGHT_REM}rem)`,
+                  overflowY: 'auto',
+                  paddingRight: '0.25rem',
+                }}
+              >
                 {isLoading ? (
                   <div className="text-center text-muted py-3">
                     <Spinner animation="border" role="status" size="sm" />
