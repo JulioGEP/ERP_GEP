@@ -47,6 +47,9 @@ import {
 } from '../hooks/useDealFollowUpToggle';
 import { DEALS_QUERY_KEY } from '../queryKeys';
 import { useCurrentUserIdentity } from '../useCurrentUserIdentity';
+import { fetchMaterialOrders } from '../../materials/orders.api';
+import { MATERIAL_ORDERS_QUERY_KEY } from '../../materials/queryKeys';
+import type { MaterialOrder } from '../../../types/materialOrder';
 
 function normalizeId(value: unknown): string {
   if (typeof value === 'string') {
@@ -183,6 +186,48 @@ function resolveDocumentPreviewUrl(url: string): string {
   return url;
 }
 
+function normalizeOrderedProductName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function buildOrderedProductKeys(orders: MaterialOrder[]): Set<string> {
+  const orderedKeys = new Set<string>();
+
+  for (const order of orders) {
+    const sourceBudgetIds = Array.isArray(order.sourceBudgetIds) ? order.sourceBudgetIds : [];
+    const orderItems = Array.isArray(order.products?.items) ? order.products.items : [];
+
+    for (const budgetId of sourceBudgetIds) {
+      const normalizedBudgetId = String(budgetId ?? '').trim();
+      if (!normalizedBudgetId) continue;
+
+      for (const item of orderItems) {
+        const normalizedProductName = normalizeOrderedProductName(item?.productName ?? '');
+        if (!normalizedProductName) continue;
+        orderedKeys.add(`${normalizedBudgetId}::${normalizedProductName}`);
+      }
+    }
+  }
+
+  return orderedKeys;
+}
+
+function getProductDisplayLabel(name: string | null | undefined, code: string | null | undefined): string {
+  const normalizedName = typeof name === 'string' ? name.trim() : '';
+  if (normalizedName.length) return normalizedName;
+
+  const normalizedCode = typeof code === 'string' ? code.trim() : '';
+  if (normalizedCode.length) return normalizedCode;
+
+  return '—';
+}
+
 export function BudgetDetailModalMaterial({
   dealId,
   summary,
@@ -210,6 +255,13 @@ export function BudgetDetailModalMaterial({
     refetchOnReconnect: false,
     retry: 0,
     staleTime: Infinity
+  });
+
+  const materialOrdersQuery = useQuery({
+    queryKey: MATERIAL_ORDERS_QUERY_KEY,
+    queryFn: fetchMaterialOrders,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const deal = detailQuery.data ?? null;
@@ -655,6 +707,36 @@ export function BudgetDetailModalMaterial({
       }),
     [detailProducts]
   );
+
+  const orderedProductKeys = useMemo(
+    () => buildOrderedProductKeys(materialOrdersQuery.data?.orders ?? []),
+    [materialOrdersQuery.data?.orders],
+  );
+
+  const orderedTrainingProductKeySet = useMemo(() => {
+    const dealId = String(detailView.dealId ?? '').trim();
+    if (!dealId.length) return new Set<string>();
+
+    const orderedSet = new Set<string>();
+    for (const product of trainingProducts) {
+      const productLabel = getProductDisplayLabel(product?.name ?? null, product?.code ?? null);
+      const normalizedProductLabel = normalizeOrderedProductName(productLabel);
+      if (!normalizedProductLabel.length) continue;
+
+      const key = `${dealId}::${normalizedProductLabel}`;
+      if (orderedProductKeys.has(key)) {
+        orderedSet.add(key);
+      }
+    }
+
+    return orderedSet;
+  }, [detailView.dealId, orderedProductKeys, trainingProducts]);
+
+  const shouldHighlightMissingOrderedProducts = useMemo(() => {
+    if (trainingProducts.length <= 1) return false;
+
+    return orderedTrainingProductKeySet.size === 1;
+  }, [orderedTrainingProductKeySet.size, trainingProducts.length]);
 
   const initialProductHours = useMemo(() => {
     const map: Record<string, string> = {};
@@ -1212,12 +1294,19 @@ export function BudgetDetailModalMaterial({
                 <tbody>
                   {trainingProducts.map((product, index) => {
                     const productLabel = displayOrDash(product?.name ?? product?.code ?? '');
+                    const dealId = String(detailView.dealId ?? '').trim();
+                    const normalizedProductLabel = normalizeOrderedProductName(productLabel);
+                    const isProductInOrder =
+                      dealId.length > 0 &&
+                      normalizedProductLabel.length > 0 &&
+                      orderedProductKeys.has(`${dealId}::${normalizedProductLabel}`);
+                    const shouldPaintRed = shouldHighlightMissingOrderedProducts && !isProductInOrder;
                     const quantityDisplay = displayOrDash(product?.quantity ?? null);
                     const commentText = (product?.comments ?? '').trim();
                     const commentPreview = buildCommentPreview(commentText);
                     return (
                       <tr key={product?.id ?? `${product?.name ?? 'producto'}-${index}`}>
-                        <td>{productLabel}</td>
+                        <td className={shouldPaintRed ? 'text-danger' : undefined}>{productLabel}</td>
                         <td style={{ width: 120 }}>{quantityDisplay}</td>
                         <td style={{ width: 189 }}>
                           {commentPreview ? (
