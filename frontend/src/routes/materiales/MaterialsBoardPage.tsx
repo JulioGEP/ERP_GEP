@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Spinner } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -152,6 +152,36 @@ function hasPendingProductsInOrder(budget: DealSummary, orderedProductKeys: Set<
   return false;
 }
 
+function hasAllProductsInOrder(budget: DealSummary, orderedProductKeys: Set<string>): boolean {
+  const budgetId = getBudgetId(budget);
+  if (!budgetId) return false;
+
+  const products = (Array.isArray(budget.products) ? budget.products : []).filter((product) => {
+    const name = product?.name?.trim() || product?.code?.trim() || '';
+    return !isShippingExpense(name);
+  });
+
+  if (!products.length) return false;
+
+  return products.every((product) => {
+    const normalizedProductName = normalizeProductName(product?.name ?? product?.code);
+    return normalizedProductName.length
+      ? orderedProductKeys.has(`${budgetId}::${normalizedProductName}`)
+      : false;
+  });
+}
+
+function canMoveToStatus(
+  budget: DealSummary,
+  targetStatus: MaterialDealStatus,
+  orderedProductKeys: Set<string>,
+): boolean {
+  const hasFullOrder = hasAllProductsInOrder(budget, orderedProductKeys);
+  if (!hasFullOrder) return true;
+
+  return targetStatus !== 'Pedidos confirmados' && targetStatus !== 'Pendiente compra';
+}
+
 const ARCHIVED_MATERIAL_STATUS: MaterialDealStatus = 'Enviados al cliente';
 
 function isArchivedMaterialBudget(budget: DealSummary): boolean {
@@ -208,6 +238,8 @@ export function MaterialsBoardPage({
 
     return grouped;
   }, [materialsBudgets, orders]);
+
+  const orderedProductKeys = useMemo(() => buildOrderedProductKeys(orders), [orders]);
 
   const budgetsById = useMemo(() => {
     const map = new Map<string, DealSummary>();
@@ -274,6 +306,25 @@ export function MaterialsBoardPage({
     },
   });
 
+
+  useEffect(() => {
+    const statusesToPromote = new Set<MaterialDealStatus>([
+      'Pedidos confirmados',
+      'Pendiente compra',
+      'Pedido a medias',
+    ]);
+
+    materialsBudgets.forEach((budget) => {
+      if (isArchivedMaterialBudget(budget)) return;
+      if (!hasAllProductsInOrder(budget, orderedProductKeys)) return;
+      const status = resolveStatus(budget);
+      if (!statusesToPromote.has(status)) return;
+      const budgetId = getBudgetId(budget);
+      if (!budgetId || updatingDealId === budgetId) return;
+      updateStatusMutation.mutate({ dealId: budgetId, status: 'Pedido a proveedor' });
+    });
+  }, [materialsBudgets, orderedProductKeys, updateStatusMutation, updatingDealId]);
+
   const handleStatusChange = (budget: DealSummary, nextStatus: MaterialDealStatus) => {
     const budgetId = budget.deal_id ?? budget.dealId;
     if (!budgetId) return;
@@ -306,6 +357,7 @@ export function MaterialsBoardPage({
       if (!budget) return;
       const currentStatus = resolveStatus(budget);
       if (currentStatus === targetStatus) return;
+      if (!canMoveToStatus(budget, targetStatus, orderedProductKeys)) return;
       handleStatusChange(budget, targetStatus);
     } catch (error) {
       console.error('Error handling drop', error);
