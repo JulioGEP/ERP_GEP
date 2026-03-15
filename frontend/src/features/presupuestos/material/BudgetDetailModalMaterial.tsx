@@ -52,6 +52,17 @@ import { MATERIAL_ORDERS_QUERY_KEY } from '../../materials/queryKeys';
 import type { MaterialOrder } from '../../../types/materialOrder';
 import { MATERIAL_DEAL_STATUSES } from '../../../types/deal';
 
+const REQUIRES_ASSOCIATED_ORDER_STATUSES = new Set([
+  'Pedido a proveedor',
+  'Mercancía en tránsito',
+  'Recepción almacén',
+  'Listos para preparar',
+  'Enviados al cliente',
+  'Cerrado',
+]);
+
+const AUTOMATIC_MATERIAL_STATUS = 'Pedido a medias';
+
 function normalizeId(value: unknown): string {
   if (typeof value === 'string') {
     return value.trim();
@@ -399,6 +410,7 @@ export function BudgetDetailModalMaterial({
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<MaterialOrder | null>(null);
+  const [showPendingOrderPrompt, setShowPendingOrderPrompt] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const isFollowUpFieldLoading = (field: FollowUpFieldKey) =>
@@ -781,7 +793,7 @@ export function BudgetDetailModalMaterial({
       });
   }, [detailView.dealId, materialOrdersQuery.data?.orders]);
 
-  const isAssociatedOrdersExpanded = openSections.includes('associated-orders');
+  const hasAssociatedOrders = associatedOrders.length > 0;
 
   const initialProductHours = useMemo(() => {
     const map: Record<string, string> = {};
@@ -1008,6 +1020,31 @@ export function BudgetDetailModalMaterial({
       const trimmed = normalizeString(value);
       return trimmed.length ? trimmed : null;
     };
+
+    const initialStatus = normalizeString(initialEditable?.estado_material);
+    const nextStatus = normalizeString(form?.estado_material);
+
+    if (nextStatus === AUTOMATIC_MATERIAL_STATUS) {
+      alert('No puedes mover manualmente un presupuesto a "Pedido a medias".');
+      setForm((current) =>
+        current
+          ? {
+              ...current,
+              estado_material: initialEditable?.estado_material ?? '',
+            }
+          : current,
+      );
+      return;
+    }
+
+    if (
+      nextStatus !== initialStatus &&
+      REQUIRES_ASSOCIATED_ORDER_STATUSES.has(nextStatus) &&
+      !hasAssociatedOrders
+    ) {
+      setShowPendingOrderPrompt(true);
+      return;
+    }
 
     if (normalizeString(form?.proveedores) !== normalizeString(initialEditable?.proveedores)) {
       patch.proveedores = toNullableString(form?.proveedores);
@@ -1328,7 +1365,7 @@ export function BudgetDetailModalMaterial({
                   title={buildFieldTooltip(form.estado_material)}
                 >
                   <option value="">—</option>
-                  {MATERIAL_DEAL_STATUSES.map((status) => (
+                  {MATERIAL_DEAL_STATUSES.filter((status) => status !== AUTOMATIC_MATERIAL_STATUS).map((status) => (
                     <option key={status} value={status}>
                       {status}
                     </option>
@@ -1567,7 +1604,7 @@ export function BudgetDetailModalMaterial({
                   <div className="d-flex justify-content-between align-items-center w-100">
                     <span className="erp-accordion-title">
                       Pedidos Asociados
-                      {isAssociatedOrdersExpanded ? (
+                      {!materialOrdersQuery.isLoading && !materialOrdersQuery.isError ? (
                         <span className="erp-accordion-count">{associatedOrders.length}</span>
                       ) : null}
                     </span>
@@ -2021,6 +2058,61 @@ export function BudgetDetailModalMaterial({
         </Button>
         <Button variant="danger" onClick={handleDiscardChanges}>
           Salir sin guardar
+        </Button>
+      </Modal.Footer>
+    </Modal>
+
+    <Modal
+      show={showPendingOrderPrompt}
+      onHide={() => {
+        setShowPendingOrderPrompt(false);
+        setForm((current) =>
+          current
+            ? {
+                ...current,
+                estado_material: initialEditable?.estado_material ?? '',
+              }
+            : current,
+        );
+      }}
+      centered
+    >
+      <Modal.Header closeButton>
+        <Modal.Title>Crear pedido</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        No puedes mover un presupuesto a este estado sin hacer el pedido al proveedor, ¿quieres
+        crear un pedido?
+      </Modal.Body>
+      <Modal.Footer>
+        <Button
+          variant="outline-secondary"
+          onClick={() => {
+            setShowPendingOrderPrompt(false);
+            setForm((current) =>
+              current
+                ? {
+                    ...current,
+                    estado_material: initialEditable?.estado_material ?? '',
+                  }
+                : current,
+            );
+          }}
+        >
+          No
+        </Button>
+        <Button
+          variant="primary"
+          onClick={() => {
+            setShowPendingOrderPrompt(false);
+            const budgetId = String(detailView.dealId ?? '').trim();
+            if (!budgetId.length) return;
+            window.location.assign(
+              `https://erpgep.netlify.app/materiales/pendientes?budgetId=${encodeURIComponent(budgetId)}`,
+            );
+          }}
+        >
+          Sí
         </Button>
       </Modal.Footer>
     </Modal>
