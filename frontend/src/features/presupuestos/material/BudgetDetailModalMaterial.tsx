@@ -1632,6 +1632,8 @@ export function BudgetDetailModalMaterial({
                           return (
                             <ListGroup.Item
                               key={order.id}
+                              as="button"
+                              type="button"
                               action
                               onClick={() => setSelectedOrder(order)}
                               className="d-flex justify-content-between align-items-center gap-2"
