@@ -10,7 +10,13 @@ import { MATERIAL_ORDERS_QUERY_KEY } from '../../features/materials/queryKeys';
 import type { DealProduct, DealSummary } from '../../types/deal';
 import { isMaterialPipeline } from './MaterialsBudgetsPage';
 
-const ARCHIVED_MATERIAL_STATUS = 'enviados al cliente';
+const ORDERED_MATERIAL_STATUSES = new Set([
+  'mercancia en transito',
+  'recepcion almacen',
+  'listos para preparar',
+  'enviados al cliente',
+  'cerrado',
+]);
 
 function normalizeMaterialStatus(value: unknown): string {
   if (typeof value !== 'string') return '';
@@ -22,8 +28,8 @@ function normalizeMaterialStatus(value: unknown): string {
     .toLowerCase();
 }
 
-function isSentToCustomerBudget(budget: DealSummary): boolean {
-  return normalizeMaterialStatus(budget.estado_material) === ARCHIVED_MATERIAL_STATUS;
+function hasOrderedMaterialStatus(budget: DealSummary): boolean {
+  return ORDERED_MATERIAL_STATUSES.has(normalizeMaterialStatus(budget.estado_material));
 }
 
 export type MaterialsPendingProductsPageProps = {
@@ -274,7 +280,7 @@ function buildOrderedProductKeys(orders: MaterialOrder[]): Set<string> {
 function buildPendingProducts(budgets: DealSummary[], orders: MaterialOrder[]): PendingProductRow[] {
   const orderedProductKeys = buildOrderedProductKeys(orders);
   const filteredBudgets = budgets.filter(
-    (budget) => isMaterialPipeline(budget) && !isSentToCustomerBudget(budget),
+    (budget) => isMaterialPipeline(budget) && !hasOrderedMaterialStatus(budget),
   );
 
   return filteredBudgets.flatMap((budget, budgetIndex) => {
