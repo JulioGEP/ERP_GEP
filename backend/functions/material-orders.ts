@@ -273,6 +273,7 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
       products: buildProductsPayload(products, supplierEmailPayload, logisticsEmailPayload),
       source_budget_ids: sourceBudgetIds,
       notes,
+      sent_from: normalizeEmail(auth.user.email) ?? MATERIAL_ORDERS_SENDER_EMAIL,
     },
   });
 
