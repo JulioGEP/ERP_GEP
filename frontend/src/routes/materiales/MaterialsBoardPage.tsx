@@ -411,7 +411,7 @@ export function MaterialsBoardPage({
           <div className="small text-muted">
             Presupuestos archivados:{' '}
             <Link
-              to="/materiales/todos?budgets-table__filter__presu_holded=true"
+              to="/materiales/presupuestos?budgets-table__filter__presu_holded=true"
               className="fw-semibold text-decoration-none"
             >
               {archivedCount}

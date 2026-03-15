@@ -56,7 +56,7 @@ export function MaterialsBudgetsPage({ budgets, tableLabels, serverQueryOptions,
   return (
     <BudgetSectionLayout
       {...rest}
-      title="Materiales · Todos"
+      title="Materiales · Presupuestos"
       subtitle="Presupuestos del embudo Materiales"
       enableFallback={false}
       tableVariant="materials"
