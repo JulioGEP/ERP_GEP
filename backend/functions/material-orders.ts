@@ -196,7 +196,7 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
     });
   }
 
-  if (request.method !== 'POST' && request.method !== 'DELETE') {
+  if (request.method !== 'POST' && request.method !== 'DELETE' && request.method !== 'PATCH') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
   }
 
@@ -217,6 +217,34 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
     await prisma.pedidos.delete({ where: { id: orderId } });
 
     return successResponse({ deleted: true, id: orderId });
+  }
+
+  if (request.method === 'PATCH') {
+    const orderIdRaw = request.body && typeof request.body === 'object' ? request.body.id : null;
+    const orderId = Number(orderIdRaw);
+
+    if (!Number.isInteger(orderId) || orderId <= 0) {
+      return errorResponse('VALIDATION_ERROR', 'El identificador del pedido es obligatorio', 400);
+    }
+
+    const existing = await prisma.pedidos.findUnique({ where: { id: orderId } });
+
+    if (!existing) {
+      return errorResponse('NOT_FOUND', 'No se encontró el pedido indicado', 404);
+    }
+
+    const pedidoRealizado = normalizeBoolean(request.body?.pedidoRealizado);
+    const pedidoRecibido = pedidoRealizado && normalizeBoolean(request.body?.pedidoRecibido);
+
+    const updated = await prisma.pedidos.update({
+      where: { id: orderId },
+      data: {
+        pedido_realizado: pedidoRealizado,
+        pedido_recibido: pedidoRecibido,
+      },
+    });
+
+    return successResponse({ order: serializeOrder(updated) });
   }
 
   if (!request.body || typeof request.body !== 'object') {

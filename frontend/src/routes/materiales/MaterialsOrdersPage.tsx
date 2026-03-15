@@ -13,7 +13,13 @@ export type MaterialsOrdersPageProps = {
   onSelect?: (order: MaterialOrder) => void;
   onSelectBudget?: (budget: DealSummary) => void;
   onDelete?: (orderId: number) => void;
+  onToggleOrderStatus?: (
+    order: MaterialOrder,
+    field: 'pedidoRealizado' | 'pedidoRecibido',
+    checked: boolean,
+  ) => void;
   deletingOrderId?: number | null;
+  updatingOrderId?: number | null;
 };
 
 function formatOrderDate(dateIso: string | null | undefined): string {
@@ -83,7 +89,9 @@ export function MaterialsOrdersPage({
   onSelect,
   onSelectBudget,
   onDelete,
+  onToggleOrderStatus,
   deletingOrderId = null,
+  updatingOrderId = null,
 }: MaterialsOrdersPageProps) {
   const [selectedOrder, setSelectedOrder] = useState<MaterialOrder | null>(null);
   const hasError = !!error;
@@ -174,23 +182,55 @@ export function MaterialsOrdersPage({
                       <td>{getOrderBudgetLabel(order)}</td>
                       <td>{getOrderEstimatedDelivery(order, budgetsById)}</td>
                       <td className="text-end" onClick={(event) => event.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="btn btn-outline-danger btn-sm"
-                          aria-label="Eliminar pedido"
-                          title="Eliminar pedido"
-                          onClick={() => {
-                            if (!order.id || deletingOrderId) return;
-                            onDelete?.(order.id);
-                          }}
-                          disabled={!order.id || Boolean(deletingOrderId)}
-                        >
-                          {deletingOrderId === order.id ? (
-                            <Spinner animation="border" role="status" size="sm" />
-                          ) : (
-                            <span aria-hidden="true">🗑️</span>
-                          )}
-                        </button>
+                        <div className="d-inline-flex align-items-center gap-3">
+                          <div className="form-check mb-0 text-start">
+                            <input
+                              id={`pedido-realizado-${rowKey}`}
+                              className="form-check-input"
+                              type="checkbox"
+                              checked={Boolean(order.pedidoRealizado)}
+                              onChange={(event) =>
+                                onToggleOrderStatus?.(order, 'pedidoRealizado', event.currentTarget.checked)
+                              }
+                              disabled={!order.id || Boolean(updatingOrderId)}
+                            />
+                            <label className="form-check-label small" htmlFor={`pedido-realizado-${rowKey}`}>
+                              Realizado
+                            </label>
+                          </div>
+                          <div className="form-check mb-0 text-start">
+                            <input
+                              id={`pedido-recibido-${rowKey}`}
+                              className="form-check-input"
+                              type="checkbox"
+                              checked={Boolean(order.pedidoRecibido)}
+                              onChange={(event) =>
+                                onToggleOrderStatus?.(order, 'pedidoRecibido', event.currentTarget.checked)
+                              }
+                              disabled={!order.id || Boolean(updatingOrderId) || !order.pedidoRealizado}
+                            />
+                            <label className="form-check-label small" htmlFor={`pedido-recibido-${rowKey}`}>
+                              Recibido
+                            </label>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-outline-danger btn-sm"
+                            aria-label="Eliminar pedido"
+                            title="Eliminar pedido"
+                            onClick={() => {
+                              if (!order.id || deletingOrderId || updatingOrderId) return;
+                              onDelete?.(order.id);
+                            }}
+                            disabled={!order.id || Boolean(deletingOrderId) || Boolean(updatingOrderId)}
+                          >
+                            {deletingOrderId === order.id ? (
+                              <Spinner animation="border" role="status" size="sm" />
+                            ) : (
+                              <span aria-hidden="true">🗑️</span>
+                            )}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

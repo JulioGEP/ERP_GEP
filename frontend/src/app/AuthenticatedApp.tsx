@@ -12,7 +12,11 @@ import type { ProductCommentPayload } from '../features/presupuestos/ProductComm
 import { VariantModal } from '../features/formacion_abierta/ProductVariantsList';
 import type { ActiveVariant, ProductInfo, VariantInfo } from '../features/formacion_abierta/types';
 import { ApiError } from '../api/client';
-import { deleteMaterialOrder, fetchMaterialOrders } from '../features/materials/orders.api';
+import {
+  deleteMaterialOrder,
+  fetchMaterialOrders,
+  updateMaterialOrderStatus,
+} from '../features/materials/orders.api';
 import { fetchTrainers } from '../features/recursos/api';
 import {
   deleteDeal,
@@ -927,6 +931,52 @@ export default function AuthenticatedApp() {
     },
   });
 
+  const updateMaterialOrderStatusMutation = useMutation({
+    mutationFn: (payload: { id: number; pedidoRealizado: boolean; pedidoRecibido: boolean }) =>
+      updateMaterialOrderStatus(payload),
+    onSuccess: (response) => {
+      queryClient.setQueryData<MaterialOrdersResponse | undefined>(MATERIAL_ORDERS_QUERY_KEY, (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          orders: current.orders.map((order) => (order.id === response.order.id ? response.order : order)),
+        };
+      });
+      pushToast({ variant: 'success', message: 'Estado del pedido actualizado' });
+    },
+    onError: (error: unknown) => {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : 'No se pudo actualizar el estado del pedido.';
+      pushToast({ variant: 'danger', message });
+    },
+  });
+
+  const handleToggleMaterialOrderStatus = useCallback(
+    (order: MaterialOrder, field: 'pedidoRealizado' | 'pedidoRecibido', checked: boolean) => {
+      if (updateMaterialOrderStatusMutation.isPending) return;
+      if (!order.id) return;
+
+      const nextPedidoRealizado = field === 'pedidoRealizado' ? checked : Boolean(order.pedidoRealizado);
+      const nextPedidoRecibido =
+        field === 'pedidoRecibido'
+          ? checked && nextPedidoRealizado
+          : nextPedidoRealizado
+            ? Boolean(order.pedidoRecibido)
+            : false;
+
+      updateMaterialOrderStatusMutation.mutate({
+        id: order.id,
+        pedidoRealizado: nextPedidoRealizado,
+        pedidoRecibido: nextPedidoRecibido,
+      });
+    },
+    [updateMaterialOrderStatusMutation],
+  );
+
   const handleDeleteMaterialOrder = useCallback(
     (orderId: number) => {
       if (deleteMaterialOrderMutation.isPending) return;
@@ -1740,6 +1790,9 @@ export default function AuthenticatedApp() {
     onSelectBudget: handleSelectBudget,
     onDelete: handleDeleteMaterialOrder,
     deletingOrderId: deleteMaterialOrderMutation.isPending ? deleteMaterialOrderMutation.variables ?? null : null,
+    onToggleOrderStatus: handleToggleMaterialOrderStatus,
+    updatingOrderId:
+      updateMaterialOrderStatusMutation.isPending ? updateMaterialOrderStatusMutation.variables?.id ?? null : null,
   };
 
   const calendarSessionsPageProps: PorSesionesPageProps = {
