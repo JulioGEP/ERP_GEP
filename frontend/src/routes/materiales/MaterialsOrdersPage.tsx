@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Col, Modal, Row, Spinner, Table } from 'react-bootstrap';
 import type { MaterialOrder } from '../../types/materialOrder';
 import type { DealSummary } from '../../types/deal';
@@ -13,7 +13,9 @@ export type MaterialsOrdersPageProps = {
   onSelect?: (order: MaterialOrder) => void;
   onSelectBudget?: (budget: DealSummary) => void;
   onDelete?: (orderId: number) => void;
+  onUpdate?: (payload: { id: number; textoPedido: string | null; pedidoRealizado: boolean; pedidoRecibido: boolean }) => Promise<void> | void;
   deletingOrderId?: number | null;
+  updatingOrderId?: number | null;
 };
 
 function formatOrderDate(dateIso: string | null | undefined): string {
@@ -83,9 +85,15 @@ export function MaterialsOrdersPage({
   onSelect,
   onSelectBudget,
   onDelete,
+  onUpdate,
   deletingOrderId = null,
+  updatingOrderId = null,
 }: MaterialsOrdersPageProps) {
   const [selectedOrder, setSelectedOrder] = useState<MaterialOrder | null>(null);
+  const [textoPedidoDraft, setTextoPedidoDraft] = useState('');
+  const [pedidoRealizadoDraft, setPedidoRealizadoDraft] = useState(false);
+  const [pedidoRecibidoDraft, setPedidoRecibidoDraft] = useState(false);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
   const hasError = !!error;
   const hasOrders = orders.length > 0;
   const budgetsById = useMemo(() => buildBudgetLookup(budgets), [budgets]);
@@ -99,6 +107,110 @@ export function MaterialsOrdersPage({
     const budget = budgetsById.get(budgetId);
     if (!budget) return;
     onSelectBudget?.(budget);
+  };
+
+
+  useEffect(() => {
+    if (!selectedOrder) {
+      setTextoPedidoDraft('');
+      setPedidoRealizadoDraft(false);
+      setPedidoRecibidoDraft(false);
+      return;
+    }
+
+    setTextoPedidoDraft(selectedOrder.textoPedido ?? '');
+    setPedidoRealizadoDraft(Boolean(selectedOrder.pedidoRealizado));
+    setPedidoRecibidoDraft(Boolean(selectedOrder.pedidoRecibido));
+  }, [selectedOrder]);
+
+  const handleTogglePedidoRealizado = async (checked: boolean) => {
+    if (!selectedOrder || !onUpdate || isSavingOrder) return;
+
+    const nextPedidoRecibido = checked ? pedidoRecibidoDraft : false;
+
+    setPedidoRealizadoDraft(checked);
+    setPedidoRecibidoDraft(nextPedidoRecibido);
+    setIsSavingOrder(true);
+
+    try {
+      await onUpdate({
+        id: selectedOrder.id,
+        textoPedido: textoPedidoDraft.trim() ? textoPedidoDraft.trim() : null,
+        pedidoRealizado: checked,
+        pedidoRecibido: nextPedidoRecibido,
+      });
+      setSelectedOrder((current) =>
+        current && current.id === selectedOrder.id
+          ? { ...current, pedidoRealizado: checked, pedidoRecibido: nextPedidoRecibido }
+          : current,
+      );
+    } finally {
+      setIsSavingOrder(false);
+    }
+  };
+
+  const handleTogglePedidoRecibido = async (checked: boolean) => {
+    if (!selectedOrder || !onUpdate || isSavingOrder) return;
+
+    const nextPedidoRealizado = checked ? true : pedidoRealizadoDraft;
+
+    setPedidoRealizadoDraft(nextPedidoRealizado);
+    setPedidoRecibidoDraft(checked);
+    setIsSavingOrder(true);
+
+    try {
+      await onUpdate({
+        id: selectedOrder.id,
+        textoPedido: textoPedidoDraft.trim() ? textoPedidoDraft.trim() : null,
+        pedidoRealizado: nextPedidoRealizado,
+        pedidoRecibido: checked,
+      });
+      setSelectedOrder((current) =>
+        current && current.id === selectedOrder.id
+          ? { ...current, pedidoRealizado: nextPedidoRealizado, pedidoRecibido: checked }
+          : current,
+      );
+    } finally {
+      setIsSavingOrder(false);
+    }
+  };
+
+  const handleTextoPedidoBlur = async () => {
+    if (!selectedOrder || !onUpdate || isSavingOrder) return;
+
+    const normalizedTextoPedido = textoPedidoDraft.trim() ? textoPedidoDraft.trim() : null;
+    const currentTextoPedido = selectedOrder.textoPedido?.trim() || null;
+
+    if (
+      normalizedTextoPedido === currentTextoPedido &&
+      pedidoRealizadoDraft === Boolean(selectedOrder.pedidoRealizado) &&
+      pedidoRecibidoDraft === Boolean(selectedOrder.pedidoRecibido)
+    ) {
+      return;
+    }
+
+    setIsSavingOrder(true);
+
+    try {
+      await onUpdate({
+        id: selectedOrder.id,
+        textoPedido: normalizedTextoPedido,
+        pedidoRealizado: pedidoRealizadoDraft,
+        pedidoRecibido: pedidoRecibidoDraft,
+      });
+      setSelectedOrder((current) =>
+        current && current.id === selectedOrder.id
+          ? {
+              ...current,
+              textoPedido: normalizedTextoPedido,
+              pedidoRealizado: pedidoRealizadoDraft,
+              pedidoRecibido: pedidoRecibidoDraft,
+            }
+          : current,
+      );
+    } finally {
+      setIsSavingOrder(false);
+    }
   };
 
   const selectedOrderEstimatedDelivery = selectedOrder
@@ -222,7 +334,13 @@ export function MaterialsOrdersPage({
             </div>
           </Modal.Title>
           <div className="erp-modal-header-actions">
-            <Button variant="outline-light" size="sm" className="erp-modal-action" onClick={() => setSelectedOrder(null)}>
+            <Button
+              variant="outline-light"
+              size="sm"
+              className="erp-modal-action"
+              onClick={() => setSelectedOrder(null)}
+              disabled={isSavingOrder || (selectedOrder ? updatingOrderId === selectedOrder.id : false)}
+            >
               Cerrar
             </Button>
           </div>
@@ -253,19 +371,43 @@ export function MaterialsOrdersPage({
                 </Col>
                 <Col md={12}>
                   <label className="form-label">Campo de texto</label>
-                  <textarea className="form-control" rows={2} readOnly value={selectedOrder.textoPedido ?? ''} placeholder="—" />
+                  <textarea
+                    className="form-control"
+                    rows={2}
+                    value={textoPedidoDraft}
+                    onChange={(event) => setTextoPedidoDraft(event.target.value)}
+                    onBlur={handleTextoPedidoBlur}
+                    placeholder="—"
+                    disabled={isSavingOrder || updatingOrderId === selectedOrder.id}
+                  />
                 </Col>
                 <Col md={6}>
                   <label className="form-label d-block">Pedido realizado</label>
                   <div className="form-check">
-                    <input className="form-check-input" type="checkbox" checked={Boolean(selectedOrder.pedidoRealizado)} readOnly disabled />
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      checked={pedidoRealizadoDraft}
+                      onChange={(event) => {
+                        void handleTogglePedidoRealizado(event.target.checked);
+                      }}
+                      disabled={isSavingOrder || updatingOrderId === selectedOrder.id}
+                    />
                     <label className="form-check-label">Sí</label>
                   </div>
                 </Col>
                 <Col md={6}>
                   <label className="form-label d-block">Pedido recibido</label>
                   <div className="form-check">
-                    <input className="form-check-input" type="checkbox" checked={Boolean(selectedOrder.pedidoRecibido)} readOnly disabled />
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      checked={pedidoRecibidoDraft}
+                      onChange={(event) => {
+                        void handleTogglePedidoRecibido(event.target.checked);
+                      }}
+                      disabled={isSavingOrder || updatingOrderId === selectedOrder.id}
+                    />
                     <label className="form-check-label">Sí</label>
                   </div>
                 </Col>

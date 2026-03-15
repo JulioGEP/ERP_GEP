@@ -12,7 +12,7 @@ import type { ProductCommentPayload } from '../features/presupuestos/ProductComm
 import { VariantModal } from '../features/formacion_abierta/ProductVariantsList';
 import type { ActiveVariant, ProductInfo, VariantInfo } from '../features/formacion_abierta/types';
 import { ApiError } from '../api/client';
-import { deleteMaterialOrder, fetchMaterialOrders } from '../features/materials/orders.api';
+import { deleteMaterialOrder, fetchMaterialOrders, updateMaterialOrder } from '../features/materials/orders.api';
 import { fetchTrainers } from '../features/recursos/api';
 import {
   deleteDeal,
@@ -937,6 +937,38 @@ export default function AuthenticatedApp() {
     [deleteMaterialOrderMutation],
   );
 
+
+  const updateMaterialOrderMutation = useMutation({
+    mutationFn: (payload: { id: number; textoPedido: string | null; pedidoRealizado: boolean; pedidoRecibido: boolean }) =>
+      updateMaterialOrder(payload),
+    onSuccess: ({ order }) => {
+      queryClient.setQueryData<MaterialOrdersResponse | undefined>(MATERIAL_ORDERS_QUERY_KEY, (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          orders: current.orders.map((currentOrder) => (currentOrder.id === order.id ? order : currentOrder)),
+        };
+      });
+      pushToast({ variant: 'success', message: 'Pedido actualizado' });
+    },
+    onError: (error: unknown) => {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+          ? error.message
+          : 'No se pudo actualizar el pedido.';
+      pushToast({ variant: 'danger', message });
+    },
+  });
+
+  const handleUpdateMaterialOrder = useCallback(
+    async (payload: { id: number; textoPedido: string | null; pedidoRealizado: boolean; pedidoRecibido: boolean }) => {
+      await updateMaterialOrderMutation.mutateAsync(payload);
+    },
+    [updateMaterialOrderMutation],
+  );
+
   const handleOpenImportModal = useCallback(() => {
     setImportResultWarnings(null);
     setImportResultDealId(null);
@@ -1739,7 +1771,9 @@ export default function AuthenticatedApp() {
     onRetry: () => materialsOrdersQuery.refetch(),
     onSelectBudget: handleSelectBudget,
     onDelete: handleDeleteMaterialOrder,
+    onUpdate: handleUpdateMaterialOrder,
     deletingOrderId: deleteMaterialOrderMutation.isPending ? deleteMaterialOrderMutation.variables ?? null : null,
+    updatingOrderId: updateMaterialOrderMutation.isPending ? updateMaterialOrderMutation.variables?.id ?? null : null,
   };
 
   const calendarSessionsPageProps: PorSesionesPageProps = {
