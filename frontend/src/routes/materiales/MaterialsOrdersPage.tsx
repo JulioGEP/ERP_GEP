@@ -251,6 +251,24 @@ export function MaterialsOrdersPage({
                   <label className="form-label">Fecha estimada de entrega</label>
                   <input className="form-control" readOnly value={selectedOrderEstimatedDelivery} />
                 </Col>
+                <Col md={12}>
+                  <label className="form-label">Campo de texto</label>
+                  <textarea className="form-control" rows={2} readOnly value={selectedOrder.textoPedido ?? ''} placeholder="—" />
+                </Col>
+                <Col md={6}>
+                  <label className="form-label d-block">Pedido realizado</label>
+                  <div className="form-check">
+                    <input className="form-check-input" type="checkbox" checked={Boolean(selectedOrder.pedidoRealizado)} readOnly disabled />
+                    <label className="form-check-label">Sí</label>
+                  </div>
+                </Col>
+                <Col md={6}>
+                  <label className="form-label d-block">Pedido recibido</label>
+                  <div className="form-check">
+                    <input className="form-check-input" type="checkbox" checked={Boolean(selectedOrder.pedidoRecibido)} readOnly disabled />
+                    <label className="form-check-label">Sí</label>
+                  </div>
+                </Col>
               </Row>
 
               <section className="d-grid gap-2">

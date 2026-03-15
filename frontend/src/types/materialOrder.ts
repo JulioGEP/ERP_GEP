@@ -27,6 +27,9 @@ export type MaterialOrder = {
   };
   sourceBudgetIds: string[];
   notes: string | null;
+  textoPedido: string | null;
+  pedidoRealizado: boolean;
+  pedidoRecibido: boolean;
   sentFrom: string | null;
 };
 
