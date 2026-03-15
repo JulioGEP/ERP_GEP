@@ -111,7 +111,7 @@ export type BudgetFiltersConfig = {
   selectFilterKeys?: ReadonlySet<string>;
 };
 
-export type BudgetTableVariant = 'default' | 'unworked';
+export type BudgetTableVariant = 'default' | 'unworked' | 'materials';
 
 interface BudgetTableProps {
   budgets: DealSummary[];
@@ -518,6 +518,14 @@ function hasOverduePlannedSession(budget: DealSummary): boolean {
 
 function getTrainingDateInfo(budget: DealSummary): { label: string; sortValue: number | null } {
   const timestamp = getTrainingDateTimestamp(budget);
+  return {
+    label: formatDateLabel(timestamp),
+    sortValue: timestamp,
+  };
+}
+
+function getEstimatedDeliveryDateInfo(budget: DealSummary): { label: string; sortValue: number | null } {
+  const timestamp = parseDateValue(budget.fecha_estimada_entrega_material ?? null);
   return {
     label: formatDateLabel(timestamp),
     sortValue: timestamp,
@@ -1372,6 +1380,8 @@ export function BudgetTable({
       return columnsList;
     }
 
+    const isMaterialsVariant = variant === 'materials';
+
     const baseColumns: ColumnDef<DealSummary, unknown>[] = [
       presupuestoColumn,
       empresaColumn,
@@ -1387,8 +1397,8 @@ export function BudgetTable({
         },
       },
       {
-        id: 'formacion',
-        header: createSortableHeader('Formación'),
+        id: 'productos',
+        header: createSortableHeader(isMaterialsVariant ? 'Productos' : 'Formación'),
         accessorFn: (budget) => getProductNames(budget).join(', '),
         cell: ({ row }) => {
           const budget = row.original;
@@ -1397,13 +1407,28 @@ export function BudgetTable({
           return <TruncatedCellText label={label} title={names.join(', ')} />;
         },
       },
-      {
-        id: 'fecha_formacion',
-        header: createSortableHeader('Fecha formación'),
-        accessorFn: (budget) => getTrainingDateInfo(budget).sortValue ?? Number.MAX_SAFE_INTEGER,
-        cell: ({ row }) => getTrainingDateInfo(row.original).label,
-        meta: { style: { width: 160 } },
-      },
+      ...(isMaterialsVariant
+        ? [
+            {
+              id: 'fecha_entrega',
+              header: createSortableHeader('Fecha Entrega'),
+              accessorFn: (budget: DealSummary) =>
+                getEstimatedDeliveryDateInfo(budget).sortValue ?? Number.MAX_SAFE_INTEGER,
+              cell: ({ row }: { row: { original: DealSummary } }) =>
+                getEstimatedDeliveryDateInfo(row.original).label,
+              meta: { style: { width: 160 } },
+            } satisfies ColumnDef<DealSummary, unknown>,
+          ]
+        : [
+            {
+              id: 'fecha_formacion',
+              header: createSortableHeader('Fecha formación'),
+              accessorFn: (budget: DealSummary) =>
+                getTrainingDateInfo(budget).sortValue ?? Number.MAX_SAFE_INTEGER,
+              cell: ({ row }: { row: { original: DealSummary } }) => getTrainingDateInfo(row.original).label,
+              meta: { style: { width: 160 } },
+            } satisfies ColumnDef<DealSummary, unknown>,
+          ]),
       {
         id: 'negocio',
         header: createSortableHeader('Negocio'),
