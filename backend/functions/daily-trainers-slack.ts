@@ -4,9 +4,9 @@ import { getPrisma } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
 import { nowInMadridISO } from './_shared/timezone';
 import { isScheduledInvocation, isWithinMadridAutomationWindow } from './_shared/slackSchedule';
+import { getSlackChannelId, getSlackToken } from './_shared/slackConfig';
 
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
-const SLACK_CHANNEL_ID = 'C063C7QRHK4';
 type SessionSummary = {
   company: string;
   sessionName: string;
@@ -59,7 +59,7 @@ async function postSlackMessage(token: string, text: string): Promise<void> {
       'Content-Type': 'application/json; charset=utf-8',
     },
     body: JSON.stringify({
-      channel: SLACK_CHANNEL_ID,
+      channel: getSlackChannelId(),
       text,
     }),
   });
@@ -89,7 +89,7 @@ export const handler: Handler = async (event) => {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
   }
 
-  const token = String(process.env.SLACK_TOKEN ?? '').trim();
+  const token = getSlackToken();
   if (!token.length) {
     return errorResponse('SLACK_TOKEN_MISSING', 'No existe la variable SLACK_TOKEN en Netlify.', 500);
   }
@@ -165,7 +165,7 @@ export const handler: Handler = async (event) => {
     return successResponse({
       message: 'Mensaje de formadores enviado a Slack correctamente.',
       date: day,
-      channel: SLACK_CHANNEL_ID,
+      channel: getSlackChannelId(),
       text,
       sessions,
     });
