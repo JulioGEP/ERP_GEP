@@ -166,6 +166,129 @@ function resolveRecipientEmail(supplierEmail: string | null, logisticsTo: string
   return supplierEmail;
 }
 
+function normalizeProductKey(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function isShippingExpense(value: unknown): boolean {
+  return normalizeProductKey(value).includes('gastos de envio');
+}
+
+function normalizeQuantity(value: unknown): number {
+  const quantity = Number(value ?? 0);
+  if (!Number.isFinite(quantity) || quantity < 0) return 0;
+  return quantity;
+}
+
+function addQuantity(map: Map<string, number>, key: string, quantity: number): void {
+  if (!key || quantity <= 0) return;
+  map.set(key, (map.get(key) ?? 0) + quantity);
+}
+
+async function syncMaterialDealReceptionStatus(
+  prisma: Prisma.TransactionClient,
+  sourceBudgetIds: string[],
+): Promise<void> {
+  const budgetIds = Array.from(
+    new Set(sourceBudgetIds.map((id) => String(id ?? '').trim()).filter((id) => id.length > 0)),
+  );
+
+  if (!budgetIds.length) return;
+
+  const [dealProducts, receivedOrders] = await Promise.all([
+    prisma.deal_products.findMany({
+      where: { deal_id: { in: budgetIds } },
+      select: { deal_id: true, name: true, code: true, quantity: true },
+    }),
+    prisma.pedidos.findMany({
+      where: {
+        pedido_recibido: true,
+        source_budget_ids: { hasSome: budgetIds },
+      },
+      select: { source_budget_ids: true, products: true },
+    }),
+  ]);
+
+  const requiredByBudget = new Map<string, Map<string, number>>();
+  for (const product of dealProducts) {
+    const budgetId = String(product.deal_id ?? '').trim();
+    if (!budgetId) continue;
+
+    const key = normalizeProductKey(product.name ?? product.code);
+    const quantity = normalizeQuantity(product.quantity);
+
+    if (!key || quantity <= 0 || isShippingExpense(key)) continue;
+
+    if (!requiredByBudget.has(budgetId)) {
+      requiredByBudget.set(budgetId, new Map<string, number>());
+    }
+
+    addQuantity(requiredByBudget.get(budgetId)!, key, quantity);
+  }
+
+  const receivedByBudget = new Map<string, Map<string, number>>();
+  for (const order of receivedOrders) {
+    const payload =
+      order.products && typeof order.products === 'object' && !Array.isArray(order.products)
+        ? (order.products as { items?: unknown[] })
+        : null;
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+
+    const orderBudgetIds = Array.isArray(order.source_budget_ids)
+      ? order.source_budget_ids
+          .map((id) => String(id ?? '').trim())
+          .filter((id) => id.length > 0)
+      : [];
+
+    for (const budgetId of orderBudgetIds) {
+      if (!budgetIds.includes(budgetId)) continue;
+
+      if (!receivedByBudget.has(budgetId)) {
+        receivedByBudget.set(budgetId, new Map<string, number>());
+      }
+
+      for (const item of items) {
+        const productName = normalizeProductKey((item as { productName?: unknown })?.productName);
+        const quantity = normalizeQuantity((item as { supplierQuantity?: unknown })?.supplierQuantity);
+        if (!productName || quantity <= 0 || isShippingExpense(productName)) continue;
+        addQuantity(receivedByBudget.get(budgetId)!, productName, quantity);
+      }
+    }
+  }
+
+  const updates: Prisma.PrismaPromise<unknown>[] = [];
+
+  for (const budgetId of budgetIds) {
+    const requiredProducts = requiredByBudget.get(budgetId);
+    if (!requiredProducts || requiredProducts.size === 0) continue;
+
+    const receivedProducts = receivedByBudget.get(budgetId) ?? new Map<string, number>();
+
+    const isComplete = Array.from(requiredProducts.entries()).every(
+      ([productKey, requiredQuantity]) => (receivedProducts.get(productKey) ?? 0) >= requiredQuantity,
+    );
+
+    updates.push(
+      prisma.deals.updateMany({
+        where: { deal_id: budgetId },
+        data: {
+          estado_material: isComplete ? 'Recepción almacén' : 'Recepción Parcial',
+        },
+      }),
+    );
+  }
+
+  if (updates.length) {
+    await prisma.$transaction(updates);
+  }
+}
+
 export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request) => {
   const prisma = getPrisma();
 
@@ -223,13 +346,18 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
     const pedidoRealizado = normalizeBoolean(body.pedidoRealizado);
     const pedidoRecibido = pedidoRealizado && normalizeBoolean(body.pedidoRecibido);
 
-    const updated = await prisma.pedidos.update({
-      where: { id: orderId },
-      data: {
-        texto_pedido: textoPedido,
-        pedido_realizado: pedidoRealizado,
-        pedido_recibido: pedidoRecibido,
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      const order = await tx.pedidos.update({
+        where: { id: orderId },
+        data: {
+          texto_pedido: textoPedido,
+          pedido_realizado: pedidoRealizado,
+          pedido_recibido: pedidoRecibido,
+        },
+      });
+
+      await syncMaterialDealReceptionStatus(tx, order.source_budget_ids ?? []);
+      return order;
     });
 
     return successResponse({ order: serializeOrder(updated) });
