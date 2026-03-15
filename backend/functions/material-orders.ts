@@ -196,8 +196,43 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
     });
   }
 
-  if (request.method !== 'POST' && request.method !== 'DELETE') {
+  if (request.method !== 'POST' && request.method !== 'PATCH' && request.method !== 'DELETE') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
+  }
+
+
+  if (request.method === 'PATCH') {
+    if (!request.body || typeof request.body !== 'object') {
+      return errorResponse('VALIDATION_ERROR', 'Body requerido', 400);
+    }
+
+    const body = request.body;
+    const orderId = Number(body.id);
+
+    if (!Number.isInteger(orderId) || orderId <= 0) {
+      return errorResponse('VALIDATION_ERROR', 'El identificador del pedido es obligatorio', 400);
+    }
+
+    const existing = await prisma.pedidos.findUnique({ where: { id: orderId } });
+
+    if (!existing) {
+      return errorResponse('NOT_FOUND', 'No se encontró el pedido indicado', 404);
+    }
+
+    const textoPedido = normalizeString(body.textoPedido);
+    const pedidoRealizado = normalizeBoolean(body.pedidoRealizado);
+    const pedidoRecibido = pedidoRealizado && normalizeBoolean(body.pedidoRecibido);
+
+    const updated = await prisma.pedidos.update({
+      where: { id: orderId },
+      data: {
+        texto_pedido: textoPedido,
+        pedido_realizado: pedidoRealizado,
+        pedido_recibido: pedidoRecibido,
+      },
+    });
+
+    return successResponse({ order: serializeOrder(updated) });
   }
 
   if (request.method === 'DELETE') {

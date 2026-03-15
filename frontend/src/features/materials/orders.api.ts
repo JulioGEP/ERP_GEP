@@ -1,5 +1,5 @@
 // frontend/src/features/materials/orders.api.ts
-import { delJson, getJson, postJson } from '../../api/client';
+import { delJson, getJson, patchJson, postJson } from '../../api/client';
 import type { MaterialOrder, MaterialOrdersResponse, MaterialOrderProduct } from '../../types/materialOrder';
 
 export type CreateMaterialOrderPayload = {
@@ -31,4 +31,15 @@ export async function createMaterialOrder(payload: CreateMaterialOrderPayload) {
 
 export async function deleteMaterialOrder(orderId: number) {
   return delJson<{ deleted: true; id: number }>('/api/material-orders', { id: orderId });
+}
+
+export type UpdateMaterialOrderPayload = {
+  id: number;
+  textoPedido: string | null;
+  pedidoRealizado: boolean;
+  pedidoRecibido: boolean;
+};
+
+export async function updateMaterialOrder(payload: UpdateMaterialOrderPayload) {
+  return patchJson<{ order: MaterialOrder }>('/api/material-orders', payload);
 }
