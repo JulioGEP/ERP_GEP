@@ -45,11 +45,12 @@ import {
   useDealFollowUpToggle,
   type FollowUpFieldKey,
 } from '../hooks/useDealFollowUpToggle';
-import { DEALS_QUERY_KEY } from '../queryKeys';
+import { DEALS_ALL_QUERY_KEY, DEALS_QUERY_KEY } from '../queryKeys';
 import { useCurrentUserIdentity } from '../useCurrentUserIdentity';
 import { fetchMaterialOrders } from '../../materials/orders.api';
 import { MATERIAL_ORDERS_QUERY_KEY } from '../../materials/queryKeys';
 import type { MaterialOrder } from '../../../types/materialOrder';
+import { MATERIAL_DEAL_STATUSES } from '../../../types/deal';
 
 function normalizeId(value: unknown): string {
   if (typeof value === 'string') {
@@ -115,6 +116,7 @@ type BudgetFormValuesMaterial = {
   fecha_estimada_entrega_material: string;
   direccion_envio: string;
   forma_pago_material: string;
+  estado_material: string;
 };
 
 type DealNoteView = DealDetailViewModel['notes'][number];
@@ -226,6 +228,25 @@ function getProductDisplayLabel(name: string | null | undefined, code: string | 
   if (normalizedCode.length) return normalizedCode;
 
   return '—';
+}
+
+function getOrderEstimatedDelivery(order: MaterialOrder): string {
+  const values = order.products.items
+    .map((item) => {
+      const match = (item.totalLabel ?? '').match(/(\d{4}-\d{2}-\d{2})/);
+      return match?.[1] ?? null;
+    })
+    .filter((value): value is string => Boolean(value));
+
+  if (!values.length) return '—';
+  return values.reduce((latest, current) => (current > latest ? current : latest), values[0]);
+}
+
+function formatOrderDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '—';
+  return parsed.toLocaleDateString('es-ES');
 }
 
 export function BudgetDetailModalMaterial({
@@ -377,6 +398,7 @@ export function BudgetDetailModalMaterial({
   const [poDocumentReference, setPoDocumentReference] = useState('');
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<MaterialOrder | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const isFollowUpFieldLoading = (field: FollowUpFieldKey) =>
@@ -639,7 +661,8 @@ export function BudgetDetailModalMaterial({
         observaciones: deal.observaciones ?? '',
         fecha_estimada_entrega_material: deal.fecha_estimada_entrega_material ?? '',
         direccion_envio: deal.direccion_envio ?? '',
-        forma_pago_material: deal.forma_pago_material ?? ''
+        forma_pago_material: deal.forma_pago_material ?? '',
+        estado_material: deal.estado_material ?? ''
       });
     } else if (summary) {
       setForm({
@@ -647,7 +670,8 @@ export function BudgetDetailModalMaterial({
         observaciones: summary.observaciones ?? '',
         fecha_estimada_entrega_material: summary.fecha_estimada_entrega_material ?? '',
         direccion_envio: summary.direccion_envio ?? '',
-        forma_pago_material: summary.forma_pago_material ?? ''
+        forma_pago_material: summary.forma_pago_material ?? '',
+        estado_material: summary.estado_material ?? ''
       });
     } else {
       setForm(null);
@@ -667,7 +691,8 @@ export function BudgetDetailModalMaterial({
       observaciones: source.observaciones ?? '',
       fecha_estimada_entrega_material: source.fecha_estimada_entrega_material ?? '',
       direccion_envio: source.direccion_envio ?? '',
-      forma_pago_material: source.forma_pago_material ?? ''
+      forma_pago_material: source.forma_pago_material ?? '',
+      estado_material: source.estado_material ?? ''
     };
   }, [deal, summary]);
 
@@ -737,6 +762,26 @@ export function BudgetDetailModalMaterial({
 
     return orderedTrainingProductKeySet.size === 1;
   }, [orderedTrainingProductKeySet.size, trainingProducts.length]);
+
+  const associatedOrders = useMemo(() => {
+    const currentDealId = String(detailView.dealId ?? '').trim();
+    if (!currentDealId.length) return [];
+
+    const allOrders = materialOrdersQuery.data?.orders ?? [];
+    return allOrders
+      .filter((order) =>
+        (Array.isArray(order.sourceBudgetIds) ? order.sourceBudgetIds : []).some(
+          (budgetId) => String(budgetId ?? '').trim() === currentDealId,
+        ),
+      )
+      .sort((a, b) => {
+        const aTime = new Date(a.createdAt).getTime();
+        const bTime = new Date(b.createdAt).getTime();
+        return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+      });
+  }, [detailView.dealId, materialOrdersQuery.data?.orders]);
+
+  const isAssociatedOrdersExpanded = openSections.includes('associated-orders');
 
   const initialProductHours = useMemo(() => {
     const map: Record<string, string> = {};
@@ -988,6 +1033,11 @@ export function BudgetDetailModalMaterial({
     ) {
       patch.forma_pago_material = toNullableString(form?.forma_pago_material);
     }
+    if (
+      normalizeString(form?.estado_material) !== normalizeString(initialEditable?.estado_material)
+    ) {
+      patch.estado_material = (toNullableString(form?.estado_material) as DealEditablePatch['estado_material']) ?? null;
+    }
 
     const productPatches: DealProductEditablePatch[] = [];
 
@@ -1032,6 +1082,7 @@ export function BudgetDetailModalMaterial({
       );
       await qc.invalidateQueries({ queryKey: detailQueryKey });
       await qc.invalidateQueries({ queryKey: DEALS_QUERY_KEY });
+      await qc.invalidateQueries({ queryKey: DEALS_ALL_QUERY_KEY });
       await qc.invalidateQueries({ queryKey: ['calendarSessions'] });
       setShowConfirm(false);
     } catch (e: any) {
@@ -1269,6 +1320,21 @@ export function BudgetDetailModalMaterial({
                   title={buildFieldTooltip(form.forma_pago_material)}
                 />
               </Col>
+              <Col md={4}>
+                <Form.Label>Estado del presupuesto</Form.Label>
+                <Form.Select
+                  value={form.estado_material}
+                  onChange={(e) => updateForm('estado_material', e.target.value)}
+                  title={buildFieldTooltip(form.estado_material)}
+                >
+                  <option value="">—</option>
+                  {MATERIAL_DEAL_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Col>
               <Col md={12}>
                 <Form.Label>Observaciones</Form.Label>
                 <Form.Control
@@ -1493,6 +1559,56 @@ export function BudgetDetailModalMaterial({
                       <p className="text-muted small mb-0">Sin Notas</p>
                     </>
                   )}
+                </Accordion.Body>
+              </Accordion.Item>
+
+              <Accordion.Item eventKey="associated-orders">
+                <Accordion.Header>
+                  <div className="d-flex justify-content-between align-items-center w-100">
+                    <span className="erp-accordion-title">
+                      Pedidos Asociados
+                      {isAssociatedOrdersExpanded ? (
+                        <span className="erp-accordion-count">{associatedOrders.length}</span>
+                      ) : null}
+                    </span>
+                  </div>
+                </Accordion.Header>
+                <Accordion.Body>
+                  {materialOrdersQuery.isLoading ? (
+                    <div className="d-flex align-items-center gap-2 text-muted small">
+                      <Spinner animation="border" size="sm" role="status" /> Cargando pedidos…
+                    </div>
+                  ) : null}
+                  {materialOrdersQuery.isError ? (
+                    <Alert variant="warning" className="mb-0">
+                      No se pudieron cargar los pedidos asociados.
+                    </Alert>
+                  ) : null}
+                  {!materialOrdersQuery.isLoading && !materialOrdersQuery.isError ? (
+                    associatedOrders.length ? (
+                      <ListGroup>
+                        {associatedOrders.map((order) => {
+                          const orderLabel =
+                            typeof order.orderNumber === 'number'
+                              ? `Pedido #${order.orderNumber}`
+                              : `Pedido ${order.id}`;
+                          return (
+                            <ListGroup.Item
+                              key={order.id}
+                              action
+                              onClick={() => setSelectedOrder(order)}
+                              className="d-flex justify-content-between align-items-center gap-2"
+                            >
+                              <span className="fw-semibold">{orderLabel}</span>
+                              <span className="text-muted small">{formatOrderDate(order.createdAt)}</span>
+                            </ListGroup.Item>
+                          );
+                        })}
+                      </ListGroup>
+                    ) : (
+                      <p className="text-muted small mb-0">No hay pedidos de material asociados.</p>
+                    )
+                  ) : null}
                 </Accordion.Body>
               </Accordion.Item>
 
@@ -1814,19 +1930,83 @@ export function BudgetDetailModalMaterial({
     </Modal>
 
     {!onShowProductComment ? (
-      <Modal show={!!viewingComment} onHide={handleCloseCommentModal} centered>
+      <>
+        <Modal show={!!viewingComment} onHide={handleCloseCommentModal} centered>
+          <Modal.Header closeButton>
+            <Modal.Title>Comentario de la formación</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            {viewingComment?.productName ? (
+              <div className="mb-2">
+                <strong>Formación:</strong> {viewingComment.productName}
+              </div>
+            ) : null}
+            <div style={{ whiteSpace: 'pre-wrap' }}>{viewingComment?.comment ?? ''}</div>
+          </Modal.Body>
+        </Modal>
+
+        <Modal show={Boolean(selectedOrder)} onHide={() => setSelectedOrder(null)} size="lg" centered>
         <Modal.Header closeButton>
-          <Modal.Title>Comentario de la formación</Modal.Title>
+          <Modal.Title>
+            {selectedOrder?.orderNumber ? `Pedido #${selectedOrder.orderNumber}` : 'Pedido sin número'}
+          </Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {viewingComment?.productName ? (
-            <div className="mb-2">
-              <strong>Formación:</strong> {viewingComment.productName}
+          {selectedOrder ? (
+            <div className="d-grid gap-4">
+              <Row className="g-3">
+                <Col md={4}>
+                  <Form.Label>Número</Form.Label>
+                  <Form.Control readOnly value={selectedOrder.orderNumber ? `#${selectedOrder.orderNumber}` : '—'} />
+                </Col>
+                <Col md={4}>
+                  <Form.Label>Enviado por</Form.Label>
+                  <Form.Control readOnly value={selectedOrder.sentFrom?.trim() || '—'} />
+                </Col>
+                <Col md={4}>
+                  <Form.Label>Proveedor</Form.Label>
+                  <Form.Control readOnly value={selectedOrder.supplierName ?? selectedOrder.supplierEmail ?? '—'} />
+                </Col>
+                <Col md={6}>
+                  <Form.Label>Fecha de realización del pedido</Form.Label>
+                  <Form.Control readOnly value={formatOrderDate(selectedOrder.createdAt)} />
+                </Col>
+                <Col md={6}>
+                  <Form.Label>Fecha estimada de entrega</Form.Label>
+                  <Form.Control readOnly value={getOrderEstimatedDelivery(selectedOrder)} />
+                </Col>
+              </Row>
+
+              <section className="d-grid gap-2">
+                <h2 className="h6 fw-semibold mb-0">Productos y cantidades</h2>
+                {!selectedOrder.products.items.length ? (
+                  <p className="text-muted mb-0">No hay productos asociados al pedido.</p>
+                ) : (
+                  <Table size="sm" bordered responsive className="mb-0 align-middle">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        <th className="text-end">Cantidad proveedor</th>
+                        <th className="text-end">Cantidad stock</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedOrder.products.items.map((item, index) => (
+                        <tr key={`${item.productName}-${index}`}>
+                          <td>{item.productName || '—'}</td>
+                          <td className="text-end">{item.supplierQuantity}</td>
+                          <td className="text-end">{item.stockQuantity}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                )}
+              </section>
             </div>
           ) : null}
-          <div style={{ whiteSpace: 'pre-wrap' }}>{viewingComment?.comment ?? ''}</div>
         </Modal.Body>
-      </Modal>
+        </Modal>
+      </>
     ) : null}
 
     {/* Confirmación cambios pendientes */}
