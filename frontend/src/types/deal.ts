@@ -8,6 +8,7 @@ export type MaterialDealStatus =
   | 'Pedido a proveedor'
   | 'Pedido a medias'
   | 'Mercancía en tránsito'
+  | 'Recepción Parcial'
   | 'Recepción almacén'
   | 'Listos para preparar'
   | 'Enviados al cliente'
@@ -19,6 +20,7 @@ export const MATERIAL_DEAL_STATUSES: readonly MaterialDealStatus[] = [
   'Pedido a proveedor',
   'Pedido a medias',
   'Mercancía en tránsito',
+  'Recepción Parcial',
   'Recepción almacén',
   'Listos para preparar',
   'Enviados al cliente',

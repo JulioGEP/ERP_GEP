@@ -226,6 +226,7 @@ export function MaterialsBoardPage({
       new Set<MaterialDealStatus>([
         'Pedido a proveedor',
         'Mercancía en tránsito',
+        'Recepción Parcial',
         'Recepción almacén',
         'Listos para preparar',
         'Enviados al cliente',
@@ -399,6 +400,14 @@ export function MaterialsBoardPage({
 
   const hasError = !!error;
   const isRefreshing = isFetching && !isLoading;
+  const firstRowStatuses: MaterialDealStatus[] = [
+    'Pedidos confirmados',
+    'Pendiente compra',
+    'Pedido a proveedor',
+    'Pedido a medias',
+    'Mercancía en tránsito',
+  ];
+  const secondRowStatuses = MATERIAL_DEAL_STATUSES.filter((status) => !firstRowStatuses.includes(status));
 
   return (
     <div className="d-grid gap-4">
@@ -451,8 +460,8 @@ export function MaterialsBoardPage({
         </Alert>
       ) : null}
 
-      <div className="d-grid gap-3" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
-        {MATERIAL_DEAL_STATUSES.slice(0, 4).map((status) => {
+      <div className="d-grid gap-3" style={{ gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}>
+        {firstRowStatuses.map((status) => {
           const items = dealsByStatus.get(status) ?? [];
           return (
             <section
@@ -530,7 +539,7 @@ export function MaterialsBoardPage({
       </div>
 
       <div className="d-grid gap-3" style={{ gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}>
-        {MATERIAL_DEAL_STATUSES.slice(4).map((status) => {
+        {secondRowStatuses.map((status) => {
           const items = dealsByStatus.get(status) ?? [];
           return (
             <section
