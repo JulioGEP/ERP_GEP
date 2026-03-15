@@ -16,6 +16,9 @@ export type CreateMaterialOrderPayload = {
   products: MaterialOrderProduct[];
   sourceBudgetIds: string[];
   notes?: string | null;
+  textoPedido?: string | null;
+  pedidoRealizado?: boolean;
+  pedidoRecibido?: boolean;
 };
 
 export async function fetchMaterialOrders() {

@@ -33,6 +33,9 @@ type CreateMaterialOrderBody = {
   products?: ProductRequest[];
   sourceBudgetIds?: string[];
   notes?: string | null;
+  textoPedido?: string | null;
+  pedidoRealizado?: boolean | string | number | null;
+  pedidoRecibido?: boolean | string | number | null;
 };
 
 function normalizeString(value: unknown): string | null {
@@ -75,6 +78,15 @@ function normalizeStringArray(value: unknown): string[] {
   }
 
   return Array.from(unique);
+}
+
+function normalizeBoolean(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  if (typeof value !== 'string') return false;
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'si' || normalized === 'sí';
 }
 
 function normalizeProducts(value: unknown): ProductRequest[] {
@@ -124,6 +136,9 @@ function serializeOrder(order: Prisma.pedidosGetPayload<{}>) {
     products: order.products,
     sourceBudgetIds: order.source_budget_ids ?? [],
     notes: order.notes,
+    textoPedido: order.texto_pedido,
+    pedidoRealizado: order.pedido_realizado,
+    pedidoRecibido: order.pedido_recibido,
     sentFrom: order.sent_from,
   };
 }
@@ -219,6 +234,9 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
   const products = normalizeProducts(request.body.products);
   const sourceBudgetIds = normalizeStringArray(request.body.sourceBudgetIds);
   const notes = normalizeString(request.body.notes);
+  const textoPedido = normalizeString(request.body.textoPedido);
+  const pedidoRealizado = normalizeBoolean(request.body.pedidoRealizado);
+  const pedidoRecibido = pedidoRealizado && normalizeBoolean(request.body.pedidoRecibido);
 
   if (!supplierEmail) {
     return errorResponse('VALIDATION_ERROR', 'El correo del proveedor es obligatorio', 400);
@@ -273,6 +291,9 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
       products: buildProductsPayload(products, supplierEmailPayload, logisticsEmailPayload),
       source_budget_ids: sourceBudgetIds,
       notes,
+      texto_pedido: textoPedido,
+      pedido_realizado: pedidoRealizado,
+      pedido_recibido: pedidoRecibido,
       sent_from: normalizeEmail(auth.user.email) ?? MATERIAL_ORDERS_SENDER_EMAIL,
     },
   });

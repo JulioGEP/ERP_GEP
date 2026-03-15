@@ -849,6 +849,9 @@ model pedidos {
   products          Json
   source_budget_ids String[]
   notes             String?
+  texto_pedido      String?
+  pedido_realizado  Boolean  @default(false)
+  pedido_recibido   Boolean  @default(false)
   sent_from         String?  @default("erp@gepgroup.es")
 
   @@map("pedidos")
