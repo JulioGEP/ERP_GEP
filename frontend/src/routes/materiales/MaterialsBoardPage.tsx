@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Badge, Button, Spinner } from 'react-bootstrap';
-import { Link } from 'react-router-dom';
+import { Alert, Badge, Button, Modal, Spinner } from 'react-bootstrap';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { DealSummary, MaterialDealStatus } from '../../types/deal';
 import { MATERIAL_DEAL_STATUSES } from '../../types/deal';
@@ -182,6 +182,16 @@ function canMoveToStatus(
   return targetStatus !== 'Pedidos confirmados' && targetStatus !== 'Pendiente compra';
 }
 
+function hasAnyAssociatedOrder(budget: DealSummary, orders: MaterialOrder[]): boolean {
+  const budgetId = getBudgetId(budget);
+  if (!budgetId) return false;
+
+  return orders.some((order) => {
+    const sourceBudgetIds = Array.isArray(order.sourceBudgetIds) ? order.sourceBudgetIds : [];
+    return sourceBudgetIds.some((sourceBudgetId) => String(sourceBudgetId ?? '').trim() === budgetId);
+  });
+}
+
 const ARCHIVED_MATERIAL_STATUS: MaterialDealStatus = 'Enviados al cliente';
 
 function isArchivedMaterialBudget(budget: DealSummary): boolean {
@@ -205,9 +215,24 @@ export function MaterialsBoardPage({
   onRetry,
   onSelect,
 }: MaterialsBoardPageProps) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [updatingDealId, setUpdatingDealId] = useState<string | null>(null);
+  const [pendingOrderPromptBudgetId, setPendingOrderPromptBudgetId] = useState<string | null>(null);
+
+  const requiresOrderStatuses = useMemo(
+    () =>
+      new Set<MaterialDealStatus>([
+        'Pedido a proveedor',
+        'Mercancía en tránsito',
+        'Recepción almacén',
+        'Listos para preparar',
+        'Enviados al cliente',
+        'Cerrado',
+      ]),
+    [],
+  );
 
   const materialsBudgets = useMemo(
     () => budgets.filter((budget) => isMaterialPipeline(budget)),
@@ -357,6 +382,14 @@ export function MaterialsBoardPage({
       if (!budget) return;
       const currentStatus = resolveStatus(budget);
       if (currentStatus === targetStatus) return;
+      if (targetStatus === 'Pedido a medias') {
+        setUpdateError('No puedes mover manualmente un presupuesto a "Pedido a medias".');
+        return;
+      }
+      if (requiresOrderStatuses.has(targetStatus) && !hasAnyAssociatedOrder(budget, orders)) {
+        setPendingOrderPromptBudgetId(data.budgetId);
+        return;
+      }
       if (!canMoveToStatus(budget, targetStatus, orderedProductKeys)) return;
       handleStatusChange(budget, targetStatus);
     } catch (error) {
@@ -580,6 +613,36 @@ export function MaterialsBoardPage({
           <span>Actualizando tablero…</span>
         </div>
       ) : null}
+
+      <Modal
+        show={pendingOrderPromptBudgetId !== null}
+        onHide={() => setPendingOrderPromptBudgetId(null)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Crear pedido</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          No puedes mover un presupuesto a este estado sin hacer el pedido al proveedor, ¿quieres
+          crear un pedido?
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setPendingOrderPromptBudgetId(null)}>
+            No
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              const budgetId = pendingOrderPromptBudgetId;
+              setPendingOrderPromptBudgetId(null);
+              if (!budgetId) return;
+              navigate(`/materiales/pendientes?budgetId=${encodeURIComponent(budgetId)}`);
+            }}
+          >
+            Sí
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }
