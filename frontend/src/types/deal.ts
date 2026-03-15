@@ -4,23 +4,25 @@ import type { SessionEstado } from '../api/sessions.types';
 
 export type MaterialDealStatus =
   | 'Pedidos confirmados'
-  | 'Pendiente de compra a proveedores'
-  | 'En espera proveedor'
-  | 'Presupuesto pedido a medias'
+  | 'Pendiente compra'
+  | 'Pedido a proveedor'
+  | 'Pedido a medias'
   | 'Mercancía en tránsito'
-  | 'Recepción parcial'
+  | 'Recepción almacén'
   | 'Listos para preparar'
-  | 'Enviados al cliente';
+  | 'Enviados al cliente'
+  | 'Cerrado';
 
 export const MATERIAL_DEAL_STATUSES: readonly MaterialDealStatus[] = [
   'Pedidos confirmados',
-  'Pendiente de compra a proveedores',
-  'En espera proveedor',
-  'Presupuesto pedido a medias',
+  'Pendiente compra',
+  'Pedido a proveedor',
+  'Pedido a medias',
   'Mercancía en tránsito',
-  'Recepción parcial',
+  'Recepción almacén',
   'Listos para preparar',
   'Enviados al cliente',
+  'Cerrado',
 ] as const;
 
 /* ======================
