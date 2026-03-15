@@ -1,5 +1,6 @@
 import type { SVGProps } from 'react';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { isApiError } from '../../api/client';
@@ -406,6 +407,8 @@ export function MaterialsPendingProductsPage({
   const [logisticsCcInput, setLogisticsCcInput] = useState('');
   const [logisticsCcEmails, setLogisticsCcEmails] = useState<string[]>([defaultCommercialEmail]);
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
+
   const [filters, setFilters] = useState<PendingProductsFilters>({
     budgetId: '',
     organizationName: '',
@@ -421,6 +424,16 @@ export function MaterialsPendingProductsPage({
   useEffect(() => {
     setNextOrderNumber(initialNextOrderNumber);
   }, [initialNextOrderNumber]);
+
+  useEffect(() => {
+    const budgetIdFilter = searchParams.get('budgetId')?.trim() ?? '';
+    if (!budgetIdFilter) return;
+
+    setFilters((current) => ({
+      ...current,
+      budgetId: budgetIdFilter,
+    }));
+  }, [searchParams]);
 
   const hasMissingProductStock = useMemo(
     () => pendingProducts.some((row) => row.missingProductStockField),
