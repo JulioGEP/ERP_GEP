@@ -259,11 +259,13 @@ export function AppRouter({
           }
         />
 
-        <Route path="/materiales" element={<Navigate to="/materiales/todos" replace />} />
+        <Route path="/materiales" element={<Navigate to="/materiales/presupuestos" replace />} />
+
+        <Route path="/materiales/todos" element={<Navigate to="/materiales/presupuestos" replace />} />
 
         <Route
-          path="/materiales/todos"
-          element={<GuardedRoute path="/materiales/todos" element={<MaterialsBudgetsPage {...materialsBudgetsPageProps} />} />}
+          path="/materiales/presupuestos"
+          element={<GuardedRoute path="/materiales/presupuestos" element={<MaterialsBudgetsPage {...materialsBudgetsPageProps} />} />}
         />
 
         <Route
