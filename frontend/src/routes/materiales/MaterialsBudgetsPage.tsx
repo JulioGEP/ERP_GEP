@@ -59,6 +59,7 @@ export function MaterialsBudgetsPage({ budgets, tableLabels, serverQueryOptions,
       title="Materiales · Todos"
       subtitle="Presupuestos del embudo Materiales"
       enableFallback={false}
+      tableVariant="materials"
       budgets={materialsBudgets}
       tableLabels={mergedLabels}
       serverQueryOptions={filteredServerQueryOptions}
