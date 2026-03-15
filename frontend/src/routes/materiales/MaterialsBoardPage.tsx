@@ -193,7 +193,7 @@ export function MaterialsBoardPage({
     const grouped = new Map<MaterialDealStatus, DealSummary[]>();
     MATERIAL_DEAL_STATUSES.forEach((status) => grouped.set(status, []));
     const orderedProductKeys = buildOrderedProductKeys(orders);
-    const mixedOrderStatus: MaterialDealStatus = 'Presupuesto pedido a medias';
+    const mixedOrderStatus: MaterialDealStatus = 'Pedido a medias';
 
     materialsBudgets.forEach((budget) => {
       if (isArchivedMaterialBudget(budget)) return;
@@ -366,8 +366,86 @@ export function MaterialsBoardPage({
         </Alert>
       ) : null}
 
-      <div className="d-grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
-        {MATERIAL_DEAL_STATUSES.map((status) => {
+      <div className="d-grid gap-3" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
+        {MATERIAL_DEAL_STATUSES.slice(0, 4).map((status) => {
+          const items = dealsByStatus.get(status) ?? [];
+          return (
+            <section
+              key={status}
+              className="bg-white rounded-3 shadow-sm border p-3 d-flex flex-column gap-3"
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => handleDrop(event, status)}
+            >
+              <header className="d-flex align-items-start justify-content-between gap-2">
+                <div className="d-flex flex-column">
+                  <h2 className="h6 mb-0">{status}</h2>
+                </div>
+                <Badge bg="secondary" pill>
+                  {items.length}
+                </Badge>
+              </header>
+
+              <div
+                className="d-flex flex-column gap-3"
+                style={{
+                  maxHeight: `calc(${MAX_VISIBLE_CARDS_PER_COLUMN} * ${KANBAN_CARD_ESTIMATED_HEIGHT_REM}rem)`,
+                  overflowY: 'auto',
+                  paddingRight: '0.25rem',
+                }}
+              >
+                {isLoading ? (
+                  <div className="text-center text-muted py-3">
+                    <Spinner animation="border" role="status" size="sm" />
+                  </div>
+                ) : items.length === 0 ? (
+                  <p className="text-muted text-center mb-0">No hay presupuestos en este estado.</p>
+                ) : (
+                  items.map((budget) => {
+                    const budgetId = getBudgetId(budget);
+                    const estimatedDelivery = formatEstimatedDelivery(budget.fecha_estimada_entrega_material);
+                    const isUpdating = updatingDealId === (budget.deal_id ?? budget.dealId);
+
+                    return (
+                      <article
+                        key={budgetId ?? budget.deal_id ?? budget.dealId ?? budget.title}
+                        className="border rounded-3 p-3 d-flex flex-column gap-2"
+                        style={{ cursor: 'grab' }}
+                        draggable
+                        onDragStart={(event) => handleDragStart(event, budget, status)}
+                        onDragEnd={(event) => event.dataTransfer?.clearData?.()}
+                        onClick={() => onSelect(budget)}
+                      >
+                        <div className="d-flex align-items-center justify-content-between gap-2">
+                          <div className="d-flex flex-column">
+                            <span className="fw-semibold">{budgetId ? `#${budgetId}` : budget.title}</span>
+                            <small className="text-muted">{getOrganizationName(budget)}</small>
+                          </div>
+                          {isUpdating && <Spinner animation="border" role="status" size="sm" />}
+                        </div>
+                        <div className="text-muted small">
+                          <div className="mb-1">
+                            <span className="fw-semibold text-dark">Producto:</span> {getProductNames(budget)}
+                          </div>
+                          <div className="mb-1">
+                            <span className="fw-semibold text-dark">Proveedores:</span>{' '}
+                            {budget.proveedores?.trim() || '—'}
+                          </div>
+                          <div>
+                            <span className="fw-semibold text-dark">Entrega estimada:</span> {estimatedDelivery}
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })
+                )}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+
+      <div className="d-grid gap-3" style={{ gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}>
+        {MATERIAL_DEAL_STATUSES.slice(4).map((status) => {
           const items = dealsByStatus.get(status) ?? [];
           return (
             <section
