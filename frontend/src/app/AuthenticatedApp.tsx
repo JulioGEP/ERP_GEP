@@ -114,7 +114,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     children: [
       { key: 'Materiales/Tablero', label: 'Tablero', path: '/materiales/tablero' },
       { key: 'Materiales/Presupuestos', label: 'Presupuestos', path: '/materiales/presupuestos' },
-      { key: 'Materiales/Pendientes', label: 'Pendientes', path: '/materiales/pendientes' },
+      { key: 'Materiales/Materiales', label: 'Materiales', path: '/materiales/materiales' },
       { key: 'Materiales/Pedidos', label: 'Pedidos', path: '/materiales/pedidos' },
     ],
   },

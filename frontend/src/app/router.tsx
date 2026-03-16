@@ -268,11 +268,13 @@ export function AppRouter({
           element={<GuardedRoute path="/materiales/presupuestos" element={<MaterialsBudgetsPage {...materialsBudgetsPageProps} />} />}
         />
 
+        <Route path="/materiales/pendientes" element={<Navigate to="/materiales/materiales" replace />} />
+
         <Route
-          path="/materiales/pendientes"
+          path="/materiales/materiales"
           element={
             <GuardedRoute
-              path="/materiales/pendientes"
+              path="/materiales/materiales"
               element={<MaterialsPendingProductsPage {...materialsPendingProductsPageProps} />}
             />
           }
