@@ -43,6 +43,7 @@ type PendingProductRow = {
   supplier: string;
   estimatedDelivery: string;
   estimatedDeliveryValue: number | null;
+  isPendingInBudgetWithOrders: boolean;
 };
 
 type ProductHandling = 'stock' | 'supplier';
@@ -256,6 +257,22 @@ function buildOrderedProductKeys(orders: MaterialOrder[]): Set<string> {
   return orderedKeys;
 }
 
+function buildOrderedBudgetIds(orders: MaterialOrder[]): Set<string> {
+  const orderedBudgetIds = new Set<string>();
+
+  for (const order of orders) {
+    const sourceBudgetIds = Array.isArray(order.sourceBudgetIds) ? order.sourceBudgetIds : [];
+    for (const budgetId of sourceBudgetIds) {
+      const normalizedBudgetId = String(budgetId ?? '').trim();
+      if (normalizedBudgetId) {
+        orderedBudgetIds.add(normalizedBudgetId);
+      }
+    }
+  }
+
+  return orderedBudgetIds;
+}
+
 function isClosedMaterialBudget(budget: DealSummary): boolean {
   const rawStatus = budget.estado_material?.trim();
   if (!rawStatus) return false;
@@ -265,6 +282,7 @@ function isClosedMaterialBudget(budget: DealSummary): boolean {
 
 function buildPendingProducts(budgets: DealSummary[], orders: MaterialOrder[]): PendingProductRow[] {
   const orderedProductKeys = buildOrderedProductKeys(orders);
+  const orderedBudgetIds = buildOrderedBudgetIds(orders);
   const filteredBudgets = budgets.filter((budget) => isMaterialPipeline(budget) && !isClosedMaterialBudget(budget));
 
   return filteredBudgets.flatMap((budget, budgetIndex) => {
@@ -297,6 +315,7 @@ function buildPendingProducts(budgets: DealSummary[], orders: MaterialOrder[]): 
       supplier: getSupplierLabel(budget),
       estimatedDelivery,
       estimatedDeliveryValue: getEstimatedDeliveryTimestamp(getEstimatedDeliveryValue(budget)),
+      isPendingInBudgetWithOrders: Boolean(budgetId && orderedBudgetIds.has(budgetId)),
     }));
   });
 }
@@ -1068,7 +1087,7 @@ export function MaterialsPendingProductsPage({
                   <tr
                     key={row.key || `pending-product-${index}`}
                     role="button"
-                    className="align-middle"
+                    className={`align-middle ${row.isPendingInBudgetWithOrders ? 'table-danger' : ''}`}
                     onClick={() => onSelect(row.budget)}
                     style={{ cursor: 'pointer' }}
                   >
