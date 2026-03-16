@@ -284,6 +284,15 @@ body > .modal-backdrop.show:nth-of-type(n + 3) {
   opacity: 0.8;
 }
 
+
+.associated-order-modal {
+  z-index: 1080;
+}
+
+.associated-order-backdrop {
+  z-index: 1075;
+}
+
 .erp-modal-content {
   border-radius: 18px;
   border: none;

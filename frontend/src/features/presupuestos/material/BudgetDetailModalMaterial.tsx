@@ -1984,7 +1984,14 @@ export function BudgetDetailModalMaterial({
           </Modal.Body>
         </Modal>
 
-        <Modal show={Boolean(selectedOrder)} onHide={() => setSelectedOrder(null)} size="lg" centered>
+        <Modal
+          show={Boolean(selectedOrder)}
+          onHide={() => setSelectedOrder(null)}
+          size="lg"
+          centered
+          className="associated-order-modal"
+          backdropClassName="associated-order-backdrop"
+        >
         <Modal.Header closeButton>
           <Modal.Title>
             {selectedOrder?.orderNumber ? `Pedido #${selectedOrder.orderNumber}` : 'Pedido sin número'}
