@@ -192,7 +192,7 @@ function addQuantity(map: Map<string, number>, key: string, quantity: number): v
 }
 
 async function syncMaterialDealReceptionStatus(
-  prisma: Prisma.TransactionClient,
+  prisma: Prisma.TransactionClient | PrismaClient,
   sourceBudgetIds: string[],
 ): Promise<void> {
   const budgetIds = Array.from(
@@ -285,7 +285,7 @@ async function syncMaterialDealReceptionStatus(
   }
 
   if (updates.length) {
-    await prisma.$transaction(updates);
+    await Promise.all(updates);
   }
 }
 
@@ -346,19 +346,16 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
     const pedidoRealizado = normalizeBoolean(body.pedidoRealizado);
     const pedidoRecibido = pedidoRealizado && normalizeBoolean(body.pedidoRecibido);
 
-    const updated = await prisma.$transaction(async (tx) => {
-      const order = await tx.pedidos.update({
-        where: { id: orderId },
-        data: {
-          texto_pedido: textoPedido,
-          pedido_realizado: pedidoRealizado,
-          pedido_recibido: pedidoRecibido,
-        },
-      });
-
-      await syncMaterialDealReceptionStatus(tx, order.source_budget_ids ?? []);
-      return order;
+    const updated = await prisma.pedidos.update({
+      where: { id: orderId },
+      data: {
+        texto_pedido: textoPedido,
+        pedido_realizado: pedidoRealizado,
+        pedido_recibido: pedidoRecibido,
+      },
     });
+
+    await syncMaterialDealReceptionStatus(prisma, updated.source_budget_ids ?? []);
 
     return successResponse({ order: serializeOrder(updated) });
   }
