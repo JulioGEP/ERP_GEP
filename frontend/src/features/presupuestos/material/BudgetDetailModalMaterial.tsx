@@ -2004,8 +2004,7 @@ export function BudgetDetailModalMaterial({
       size="lg"
       centered
       scrollable
-      dialogClassName="associated-order-modal"
-      backdropClassName="associated-order-backdrop"
+      backdrop={false}
       contentClassName="erp-modal-content"
     >
       <Modal.Header className="erp-modal-header border-0 pb-0">
