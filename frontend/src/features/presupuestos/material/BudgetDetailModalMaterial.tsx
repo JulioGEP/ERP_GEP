@@ -260,6 +260,16 @@ function formatOrderDate(value: string | null | undefined): string {
   return parsed.toLocaleDateString('es-ES');
 }
 
+function getOrderStatus(order: MaterialOrder): { label: string; bg: string } {
+  if (order.pedidoRecibido) {
+    return { label: 'Recibido', bg: 'success' };
+  }
+  if (order.pedidoRealizado) {
+    return { label: 'Realizado', bg: 'primary' };
+  }
+  return { label: 'Pendiente', bg: 'secondary' };
+}
+
 export function BudgetDetailModalMaterial({
   dealId,
   summary,
@@ -1629,6 +1639,7 @@ export function BudgetDetailModalMaterial({
                             typeof order.orderNumber === 'number'
                               ? `Pedido #${order.orderNumber}`
                               : `Pedido ${order.id}`;
+                          const orderStatus = getOrderStatus(order);
                           return (
                             <ListGroup.Item
                               key={order.id}
@@ -1638,7 +1649,10 @@ export function BudgetDetailModalMaterial({
                               onClick={() => setSelectedOrder(order)}
                               className="d-flex justify-content-between align-items-center gap-2"
                             >
-                              <span className="fw-semibold">{orderLabel}</span>
+                              <div className="d-flex flex-column align-items-start">
+                                <span className="fw-semibold">{orderLabel}</span>
+                                <Badge bg={orderStatus.bg}>{orderStatus.label}</Badge>
+                              </div>
                               <span className="text-muted small">{formatOrderDate(order.createdAt)}</span>
                             </ListGroup.Item>
                           );
