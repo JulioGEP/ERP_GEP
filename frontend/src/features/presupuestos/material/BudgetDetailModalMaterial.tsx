@@ -1969,103 +1969,101 @@ export function BudgetDetailModalMaterial({
     </Modal>
 
     {!onShowProductComment ? (
-      <>
-        <Modal show={!!viewingComment} onHide={handleCloseCommentModal} centered>
-          <Modal.Header closeButton>
-            <Modal.Title>Comentario de la formación</Modal.Title>
-          </Modal.Header>
-          <Modal.Body>
-            {viewingComment?.productName ? (
-              <div className="mb-2">
-                <strong>Formación:</strong> {viewingComment.productName}
-              </div>
-            ) : null}
-            <div style={{ whiteSpace: 'pre-wrap' }}>{viewingComment?.comment ?? ''}</div>
-          </Modal.Body>
-        </Modal>
-
-        <Modal
-          show={Boolean(selectedOrder)}
-          onHide={() => setSelectedOrder(null)}
-          size="lg"
-          centered
-          contentClassName="erp-modal-content"
-        >
-          <Modal.Header className="erp-modal-header border-0 pb-0">
-            <Modal.Title as="div" className="erp-modal-header-main">
-              <div className="erp-modal-title text-truncate">Detalle pedido de materiales</div>
-              <div className="erp-modal-subtitle text-truncate">
-                {selectedOrder?.orderNumber ? `Pedido #${selectedOrder.orderNumber}` : 'Pedido sin número'}
-              </div>
-            </Modal.Title>
-            <div className="erp-modal-header-actions">
-              <Button
-                variant="outline-light"
-                size="sm"
-                className="erp-modal-action"
-                onClick={() => setSelectedOrder(null)}
-              >
-                Cerrar
-              </Button>
-            </div>
-          </Modal.Header>
-          <Modal.Body className="erp-modal-body">
-            {selectedOrder ? (
-              <div className="d-grid gap-4">
-              <Row className="g-3">
-                <Col md={4}>
-                  <Form.Label>Número</Form.Label>
-                  <Form.Control readOnly value={selectedOrder.orderNumber ? `#${selectedOrder.orderNumber}` : '—'} />
-                </Col>
-                <Col md={4}>
-                  <Form.Label>Enviado por</Form.Label>
-                  <Form.Control readOnly value={selectedOrder.sentFrom?.trim() || '—'} />
-                </Col>
-                <Col md={4}>
-                  <Form.Label>Proveedor</Form.Label>
-                  <Form.Control readOnly value={selectedOrder.supplierName ?? selectedOrder.supplierEmail ?? '—'} />
-                </Col>
-                <Col md={6}>
-                  <Form.Label>Fecha de realización del pedido</Form.Label>
-                  <Form.Control readOnly value={formatOrderDate(selectedOrder.createdAt)} />
-                </Col>
-                <Col md={6}>
-                  <Form.Label>Fecha estimada de entrega</Form.Label>
-                  <Form.Control readOnly value={getOrderEstimatedDelivery(selectedOrder)} />
-                </Col>
-              </Row>
-
-              <section className="d-grid gap-2">
-                <h2 className="h6 fw-semibold mb-0">Productos y cantidades</h2>
-                {!selectedOrder.products.items.length ? (
-                  <p className="text-muted mb-0">No hay productos asociados al pedido.</p>
-                ) : (
-                  <Table size="sm" bordered responsive className="mb-0 align-middle">
-                    <thead>
-                      <tr>
-                        <th>Producto</th>
-                        <th className="text-end">Cantidad proveedor</th>
-                        <th className="text-end">Cantidad stock</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedOrder.products.items.map((item, index) => (
-                        <tr key={`${item.productName}-${index}`}>
-                          <td>{item.productName || '—'}</td>
-                          <td className="text-end">{item.supplierQuantity}</td>
-                          <td className="text-end">{item.stockQuantity}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                )}
-              </section>
+      <Modal show={!!viewingComment} onHide={handleCloseCommentModal} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Comentario de la formación</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {viewingComment?.productName ? (
+            <div className="mb-2">
+              <strong>Formación:</strong> {viewingComment.productName}
             </div>
           ) : null}
+          <div style={{ whiteSpace: 'pre-wrap' }}>{viewingComment?.comment ?? ''}</div>
         </Modal.Body>
-        </Modal>
-      </>
+      </Modal>
     ) : null}
+
+    <Modal
+      show={Boolean(selectedOrder)}
+      onHide={() => setSelectedOrder(null)}
+      size="lg"
+      centered
+      contentClassName="erp-modal-content"
+    >
+      <Modal.Header className="erp-modal-header border-0 pb-0">
+        <Modal.Title as="div" className="erp-modal-header-main">
+          <div className="erp-modal-title text-truncate">Detalle pedido de materiales</div>
+          <div className="erp-modal-subtitle text-truncate">
+            {selectedOrder?.orderNumber ? `Pedido #${selectedOrder.orderNumber}` : 'Pedido sin número'}
+          </div>
+        </Modal.Title>
+        <div className="erp-modal-header-actions">
+          <Button
+            variant="outline-light"
+            size="sm"
+            className="erp-modal-action"
+            onClick={() => setSelectedOrder(null)}
+          >
+            Cerrar
+          </Button>
+        </div>
+      </Modal.Header>
+      <Modal.Body className="erp-modal-body">
+        {selectedOrder ? (
+          <div className="d-grid gap-4">
+            <Row className="g-3">
+              <Col md={4}>
+                <Form.Label>Número</Form.Label>
+                <Form.Control readOnly value={selectedOrder.orderNumber ? `#${selectedOrder.orderNumber}` : '—'} />
+              </Col>
+              <Col md={4}>
+                <Form.Label>Enviado por</Form.Label>
+                <Form.Control readOnly value={selectedOrder.sentFrom?.trim() || '—'} />
+              </Col>
+              <Col md={4}>
+                <Form.Label>Proveedor</Form.Label>
+                <Form.Control readOnly value={selectedOrder.supplierName ?? selectedOrder.supplierEmail ?? '—'} />
+              </Col>
+              <Col md={6}>
+                <Form.Label>Fecha de realización del pedido</Form.Label>
+                <Form.Control readOnly value={formatOrderDate(selectedOrder.createdAt)} />
+              </Col>
+              <Col md={6}>
+                <Form.Label>Fecha estimada de entrega</Form.Label>
+                <Form.Control readOnly value={getOrderEstimatedDelivery(selectedOrder)} />
+              </Col>
+            </Row>
+
+            <section className="d-grid gap-2">
+              <h2 className="h6 fw-semibold mb-0">Productos y cantidades</h2>
+              {!selectedOrder.products.items.length ? (
+                <p className="text-muted mb-0">No hay productos asociados al pedido.</p>
+              ) : (
+                <Table size="sm" bordered responsive className="mb-0 align-middle">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th className="text-end">Cantidad proveedor</th>
+                      <th className="text-end">Cantidad stock</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedOrder.products.items.map((item, index) => (
+                      <tr key={`${item.productName}-${index}`}>
+                        <td>{item.productName || '—'}</td>
+                        <td className="text-end">{item.supplierQuantity}</td>
+                        <td className="text-end">{item.stockQuantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              )}
+            </section>
+          </div>
+        ) : null}
+      </Modal.Body>
+    </Modal>
 
     {/* Confirmación cambios pendientes */}
     <Modal show={showConfirm} onHide={() => setShowConfirm(false)} centered>
