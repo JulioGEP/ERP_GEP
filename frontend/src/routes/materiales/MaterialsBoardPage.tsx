@@ -204,7 +204,7 @@ function isArchivedMaterialBudget(budget: DealSummary): boolean {
   return normalized === 'true' || normalized === '1' || normalized === 'si' || normalized === 'yes';
 }
 
-const MAX_VISIBLE_CARDS_PER_COLUMN = 5;
+const MAX_VISIBLE_CARDS_PER_COLUMN = 2.5;
 const KANBAN_CARD_ESTIMATED_HEIGHT_REM = 10;
 export function MaterialsBoardPage({
   budgets,
