@@ -1989,17 +1989,29 @@ export function BudgetDetailModalMaterial({
           onHide={() => setSelectedOrder(null)}
           size="lg"
           centered
-          className="associated-order-modal"
-          backdropClassName="associated-order-backdrop"
+          contentClassName="erp-modal-content"
         >
-        <Modal.Header closeButton>
-          <Modal.Title>
-            {selectedOrder?.orderNumber ? `Pedido #${selectedOrder.orderNumber}` : 'Pedido sin número'}
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {selectedOrder ? (
-            <div className="d-grid gap-4">
+          <Modal.Header className="erp-modal-header border-0 pb-0">
+            <Modal.Title as="div" className="erp-modal-header-main">
+              <div className="erp-modal-title text-truncate">Detalle pedido de materiales</div>
+              <div className="erp-modal-subtitle text-truncate">
+                {selectedOrder?.orderNumber ? `Pedido #${selectedOrder.orderNumber}` : 'Pedido sin número'}
+              </div>
+            </Modal.Title>
+            <div className="erp-modal-header-actions">
+              <Button
+                variant="outline-light"
+                size="sm"
+                className="erp-modal-action"
+                onClick={() => setSelectedOrder(null)}
+              >
+                Cerrar
+              </Button>
+            </div>
+          </Modal.Header>
+          <Modal.Body className="erp-modal-body">
+            {selectedOrder ? (
+              <div className="d-grid gap-4">
               <Row className="g-3">
                 <Col md={4}>
                   <Form.Label>Número</Form.Label>
