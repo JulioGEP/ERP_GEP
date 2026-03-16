@@ -645,7 +645,7 @@ export function MaterialsBoardPage({
               const budgetId = pendingOrderPromptBudgetId;
               setPendingOrderPromptBudgetId(null);
               if (!budgetId) return;
-              navigate(`/materiales/pendientes?budgetId=${encodeURIComponent(budgetId)}`);
+              navigate(`/materiales/materiales?budgetId=${encodeURIComponent(budgetId)}`);
             }}
           >
             Sí

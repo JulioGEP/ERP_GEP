@@ -441,7 +441,7 @@ export function MaterialsPendingProductsPage({
   );
 
   if (hasMissingProductStock) {
-    throw new Error('El endpoint de materiales pendientes no devuelve product_stock.');
+    throw new Error('El endpoint de materiales no devuelve product_stock.');
   }
 
   const hasSufficientStock = (row: PendingProductRow) => {
@@ -832,7 +832,7 @@ export function MaterialsPendingProductsPage({
     <div className="d-grid gap-4">
       <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
         <div className="d-flex flex-column gap-2">
-          <h1 className="h3 fw-bold mb-0">Materiales · Pendientes</h1>
+          <h1 className="h3 fw-bold mb-0">Materiales</h1>
           <p className="text-muted mb-0">Productos de presupuestos del embudo Material</p>
         </div>
         <div className="d-flex align-items-center gap-3">
@@ -881,7 +881,7 @@ export function MaterialsPendingProductsPage({
         <Alert variant="danger" className="mb-0">
           <div className="d-flex align-items-center justify-content-between gap-3 flex-wrap">
             <div>
-              <h2 className="h6 mb-1">Error al cargar los productos pendientes</h2>
+              <h2 className="h6 mb-1">Error al cargar los materiales</h2>
               <p className="mb-2">No se pudieron obtener los productos. Inténtalo de nuevo.</p>
               {errorDetails.length ? (
                 <div className="bg-light border rounded-3 p-2">
@@ -1070,7 +1070,7 @@ export function MaterialsPendingProductsPage({
               ) : !hasRows ? (
                 <tr>
                   <td colSpan={8} className="text-center py-4 text-muted">
-                    No hay productos pendientes del embudo Material.
+                    No hay materiales del embudo Material.
                   </td>
                 </tr>
               ) : !hasFilteredRows ? (

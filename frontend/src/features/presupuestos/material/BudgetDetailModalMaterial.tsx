@@ -2130,7 +2130,7 @@ export function BudgetDetailModalMaterial({
             const budgetId = String(detailView.dealId ?? '').trim();
             if (!budgetId.length) return;
             window.location.assign(
-              `https://erpgep.netlify.app/materiales/pendientes?budgetId=${encodeURIComponent(budgetId)}`,
+              `https://erpgep.netlify.app/materiales/materiales?budgetId=${encodeURIComponent(budgetId)}`,
             );
           }}
         >
