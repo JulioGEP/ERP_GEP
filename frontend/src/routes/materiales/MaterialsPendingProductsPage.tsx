@@ -11,28 +11,6 @@ import { MATERIAL_ORDERS_QUERY_KEY } from '../../features/materials/queryKeys';
 import type { DealProduct, DealSummary } from '../../types/deal';
 import { isMaterialPipeline } from './MaterialsBudgetsPage';
 
-const ORDERED_MATERIAL_STATUSES = new Set([
-  'mercancia en transito',
-  'recepcion almacen',
-  'listos para preparar',
-  'enviados al cliente',
-  'cerrado',
-]);
-
-function normalizeMaterialStatus(value: unknown): string {
-  if (typeof value !== 'string') return '';
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
-}
-
-function hasOrderedMaterialStatus(budget: DealSummary): boolean {
-  return ORDERED_MATERIAL_STATUSES.has(normalizeMaterialStatus(budget.estado_material));
-}
-
 export type MaterialsPendingProductsPageProps = {
   budgets: DealSummary[];
   orders?: MaterialOrder[];
@@ -280,9 +258,7 @@ function buildOrderedProductKeys(orders: MaterialOrder[]): Set<string> {
 
 function buildPendingProducts(budgets: DealSummary[], orders: MaterialOrder[]): PendingProductRow[] {
   const orderedProductKeys = buildOrderedProductKeys(orders);
-  const filteredBudgets = budgets.filter(
-    (budget) => isMaterialPipeline(budget) && !hasOrderedMaterialStatus(budget),
-  );
+  const filteredBudgets = budgets.filter((budget) => isMaterialPipeline(budget));
 
   return filteredBudgets.flatMap((budget, budgetIndex) => {
     const budgetId = getBudgetId(budget);
