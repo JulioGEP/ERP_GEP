@@ -900,6 +900,9 @@ export default function AuthenticatedApp() {
           return { ...current, orders: updatedOrders, nextOrderNumber: resolvedNextOrderNumber };
         },
       );
+
+      void queryClient.invalidateQueries({ queryKey: DEALS_ALL_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: DEALS_QUERY_KEY });
     },
     [queryClient],
   );
@@ -914,6 +917,8 @@ export default function AuthenticatedApp() {
           orders: current.orders.filter((order) => order.id !== orderId),
         };
       });
+      void queryClient.invalidateQueries({ queryKey: DEALS_ALL_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: DEALS_QUERY_KEY });
       pushToast({ variant: 'success', message: 'Pedido eliminado' });
     },
     onError: (error: unknown) => {
@@ -949,6 +954,8 @@ export default function AuthenticatedApp() {
           orders: current.orders.map((currentOrder) => (currentOrder.id === order.id ? order : currentOrder)),
         };
       });
+      void queryClient.invalidateQueries({ queryKey: DEALS_ALL_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: DEALS_QUERY_KEY });
       pushToast({ variant: 'success', message: 'Pedido actualizado' });
     },
     onError: (error: unknown) => {

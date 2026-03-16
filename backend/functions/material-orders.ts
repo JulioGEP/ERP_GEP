@@ -191,7 +191,22 @@ function addQuantity(map: Map<string, number>, key: string, quantity: number): v
   map.set(key, (map.get(key) ?? 0) + quantity);
 }
 
-async function syncMaterialDealReceptionStatus(
+const MATERIAL_POST_RECEIPT_STATUSES = new Set([
+  'Recepción almacén',
+  'Listos para preparar',
+  'Enviados al cliente',
+  'Cerrado',
+]);
+
+const MATERIAL_IN_TRANSIT_STATUSES = new Set([
+  'Pedido a proveedor',
+  'Pedido a medias',
+  'Mercancía en tránsito',
+]);
+
+const MATERIAL_PRE_ORDER_STATUSES = new Set(['Pedidos confirmados', 'Pendiente compra']);
+
+async function syncMaterialDealStatusesFromOrders(
   prisma: Prisma.TransactionClient | PrismaClient,
   sourceBudgetIds: string[],
 ): Promise<void> {
@@ -201,17 +216,25 @@ async function syncMaterialDealReceptionStatus(
 
   if (!budgetIds.length) return;
 
-  const [dealProducts, receivedOrders] = await Promise.all([
+  const [deals, dealProducts, relatedOrders] = await Promise.all([
+    prisma.deals.findMany({
+      where: { deal_id: { in: budgetIds } },
+      select: { deal_id: true, estado_material: true },
+    }),
     prisma.deal_products.findMany({
       where: { deal_id: { in: budgetIds } },
       select: { deal_id: true, name: true, code: true, quantity: true },
     }),
     prisma.pedidos.findMany({
       where: {
-        pedido_recibido: true,
         source_budget_ids: { hasSome: budgetIds },
       },
-      select: { source_budget_ids: true, products: true },
+      select: {
+        source_budget_ids: true,
+        products: true,
+        pedido_realizado: true,
+        pedido_recibido: true,
+      },
     }),
   ]);
 
@@ -232,8 +255,10 @@ async function syncMaterialDealReceptionStatus(
     addQuantity(requiredByBudget.get(budgetId)!, key, quantity);
   }
 
-  const receivedByBudget = new Map<string, Map<string, number>>();
-  for (const order of receivedOrders) {
+  const orderedByBudget = new Map<string, Map<string, number>>();
+  const flagsByBudget = new Map<string, { hasOrders: boolean; hasRealizado: boolean; hasRecibido: boolean }>();
+
+  for (const order of relatedOrders) {
     const payload =
       order.products && typeof order.products === 'object' && !Array.isArray(order.products)
         ? (order.products as { items?: unknown[] })
@@ -249,36 +274,79 @@ async function syncMaterialDealReceptionStatus(
     for (const budgetId of orderBudgetIds) {
       if (!budgetIds.includes(budgetId)) continue;
 
-      if (!receivedByBudget.has(budgetId)) {
-        receivedByBudget.set(budgetId, new Map<string, number>());
+      if (!orderedByBudget.has(budgetId)) {
+        orderedByBudget.set(budgetId, new Map<string, number>());
       }
+
+      const currentFlags = flagsByBudget.get(budgetId) ?? {
+        hasOrders: false,
+        hasRealizado: false,
+        hasRecibido: false,
+      };
+      currentFlags.hasOrders = true;
+      if (order.pedido_realizado) currentFlags.hasRealizado = true;
+      if (order.pedido_recibido) currentFlags.hasRecibido = true;
+      flagsByBudget.set(budgetId, currentFlags);
 
       for (const item of items) {
         const productName = normalizeProductKey((item as { productName?: unknown })?.productName);
         const quantity = normalizeQuantity((item as { supplierQuantity?: unknown })?.supplierQuantity);
         if (!productName || quantity <= 0 || isShippingExpense(productName)) continue;
-        addQuantity(receivedByBudget.get(budgetId)!, productName, quantity);
+        addQuantity(orderedByBudget.get(budgetId)!, productName, quantity);
       }
     }
   }
 
+  const currentStatusByBudget = new Map(
+    deals.map((deal) => [String(deal.deal_id ?? '').trim(), deal.estado_material]),
+  );
+
   const updates: Prisma.PrismaPromise<unknown>[] = [];
 
   for (const budgetId of budgetIds) {
-    const requiredProducts = requiredByBudget.get(budgetId);
-    if (!requiredProducts || requiredProducts.size === 0) continue;
+    const requiredProducts = requiredByBudget.get(budgetId) ?? new Map<string, number>();
+    const orderedProducts = orderedByBudget.get(budgetId) ?? new Map<string, number>();
+    const flags = flagsByBudget.get(budgetId) ?? {
+      hasOrders: false,
+      hasRealizado: false,
+      hasRecibido: false,
+    };
+    const currentStatus = String(currentStatusByBudget.get(budgetId) ?? '').trim();
 
-    const receivedProducts = receivedByBudget.get(budgetId) ?? new Map<string, number>();
+    const hasRequiredProducts = requiredProducts.size > 0;
+    const hasAllProductsInOrders =
+      hasRequiredProducts &&
+      Array.from(requiredProducts.entries()).every(
+        ([productKey, requiredQuantity]) => (orderedProducts.get(productKey) ?? 0) >= requiredQuantity,
+      );
 
-    const isComplete = Array.from(requiredProducts.entries()).every(
-      ([productKey, requiredQuantity]) => (receivedProducts.get(productKey) ?? 0) >= requiredQuantity,
-    );
+    let nextStatus: string | null = null;
+
+    if (flags.hasRecibido) {
+      if (MATERIAL_POST_RECEIPT_STATUSES.has(currentStatus)) {
+        nextStatus = currentStatus;
+      } else {
+        nextStatus = hasAllProductsInOrders ? 'Recepción almacén' : 'Recepción Parcial';
+      }
+    } else if (flags.hasRealizado) {
+      if (MATERIAL_IN_TRANSIT_STATUSES.has(currentStatus)) {
+        nextStatus = currentStatus;
+      } else {
+        nextStatus = hasAllProductsInOrders ? 'Pedido a proveedor' : 'Pedido a medias';
+      }
+    } else if (!flags.hasOrders) {
+      nextStatus = MATERIAL_PRE_ORDER_STATUSES.has(currentStatus) ? currentStatus : 'Pedidos confirmados';
+    } else {
+      nextStatus = MATERIAL_PRE_ORDER_STATUSES.has(currentStatus) ? currentStatus : 'Pedidos confirmados';
+    }
+
+    if (!nextStatus || nextStatus === currentStatus) continue;
 
     updates.push(
       prisma.deals.updateMany({
         where: { deal_id: budgetId },
         data: {
-          estado_material: isComplete ? 'Recepción almacén' : 'Recepción Parcial',
+          estado_material: nextStatus,
         },
       }),
     );
@@ -355,7 +423,7 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
       },
     });
 
-    await syncMaterialDealReceptionStatus(prisma, updated.source_budget_ids ?? []);
+    await syncMaterialDealStatusesFromOrders(prisma, updated.source_budget_ids ?? []);
 
     return successResponse({ order: serializeOrder(updated) });
   }
@@ -375,6 +443,7 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
     }
 
     await prisma.pedidos.delete({ where: { id: orderId } });
+    await syncMaterialDealStatusesFromOrders(prisma, existing.source_budget_ids ?? []);
 
     return successResponse({ deleted: true, id: orderId });
   }
@@ -457,6 +526,8 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
       sent_from: normalizeEmail(auth.user.email) ?? MATERIAL_ORDERS_SENDER_EMAIL,
     },
   });
+
+  await syncMaterialDealStatusesFromOrders(prisma, created.source_budget_ids ?? []);
 
   await sendEmail({
     to: supplierEmailPayload.to,

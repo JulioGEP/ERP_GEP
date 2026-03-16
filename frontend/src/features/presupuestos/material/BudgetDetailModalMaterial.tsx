@@ -61,7 +61,7 @@ const REQUIRES_ASSOCIATED_ORDER_STATUSES = new Set([
   'Cerrado',
 ]);
 
-const AUTOMATIC_MATERIAL_STATUS = 'Pedido a medias';
+const AUTOMATIC_MATERIAL_STATUSES = new Set(['Pedido a medias', 'Recepción Parcial']);
 
 function normalizeId(value: unknown): string {
   if (typeof value === 'string') {
@@ -1024,8 +1024,8 @@ export function BudgetDetailModalMaterial({
     const initialStatus = normalizeString(initialEditable?.estado_material);
     const nextStatus = normalizeString(form?.estado_material);
 
-    if (nextStatus === AUTOMATIC_MATERIAL_STATUS) {
-      alert('No puedes mover manualmente un presupuesto a "Pedido a medias".');
+    if (AUTOMATIC_MATERIAL_STATUSES.has(nextStatus)) {
+      alert(`No puedes mover manualmente un presupuesto a "${nextStatus}".`);
       setForm((current) =>
         current
           ? {
@@ -1365,7 +1365,7 @@ export function BudgetDetailModalMaterial({
                   title={buildFieldTooltip(form.estado_material)}
                 >
                   <option value="">—</option>
-                  {MATERIAL_DEAL_STATUSES.filter((status) => status !== AUTOMATIC_MATERIAL_STATUS).map((status) => (
+                  {MATERIAL_DEAL_STATUSES.filter((status) => !AUTOMATIC_MATERIAL_STATUSES.has(status)).map((status) => (
                     <option key={status} value={status}>
                       {status}
                     </option>
