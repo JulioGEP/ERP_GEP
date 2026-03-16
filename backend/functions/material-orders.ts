@@ -191,8 +191,7 @@ function addQuantity(map: Map<string, number>, key: string, quantity: number): v
   map.set(key, (map.get(key) ?? 0) + quantity);
 }
 
-const MATERIAL_POST_RECEIPT_STATUSES = new Set([
-  'Recepción almacén',
+const MATERIAL_POST_RECEIPT_LOCKED_STATUSES = new Set([
   'Listos para preparar',
   'Enviados al cliente',
   'Cerrado',
@@ -256,6 +255,7 @@ async function syncMaterialDealStatusesFromOrders(
   }
 
   const orderedByBudget = new Map<string, Map<string, number>>();
+  const receivedByBudget = new Map<string, Map<string, number>>();
   const flagsByBudget = new Map<string, { hasOrders: boolean; hasRealizado: boolean; hasRecibido: boolean }>();
 
   for (const order of relatedOrders) {
@@ -278,6 +278,10 @@ async function syncMaterialDealStatusesFromOrders(
         orderedByBudget.set(budgetId, new Map<string, number>());
       }
 
+      if (!receivedByBudget.has(budgetId)) {
+        receivedByBudget.set(budgetId, new Map<string, number>());
+      }
+
       const currentFlags = flagsByBudget.get(budgetId) ?? {
         hasOrders: false,
         hasRealizado: false,
@@ -293,6 +297,9 @@ async function syncMaterialDealStatusesFromOrders(
         const quantity = normalizeQuantity((item as { supplierQuantity?: unknown })?.supplierQuantity);
         if (!productName || quantity <= 0 || isShippingExpense(productName)) continue;
         addQuantity(orderedByBudget.get(budgetId)!, productName, quantity);
+        if (order.pedido_recibido) {
+          addQuantity(receivedByBudget.get(budgetId)!, productName, quantity);
+        }
       }
     }
   }
@@ -306,6 +313,7 @@ async function syncMaterialDealStatusesFromOrders(
   for (const budgetId of budgetIds) {
     const requiredProducts = requiredByBudget.get(budgetId) ?? new Map<string, number>();
     const orderedProducts = orderedByBudget.get(budgetId) ?? new Map<string, number>();
+    const receivedProducts = receivedByBudget.get(budgetId) ?? new Map<string, number>();
     const flags = flagsByBudget.get(budgetId) ?? {
       hasOrders: false,
       hasRealizado: false,
@@ -319,14 +327,19 @@ async function syncMaterialDealStatusesFromOrders(
       Array.from(requiredProducts.entries()).every(
         ([productKey, requiredQuantity]) => (orderedProducts.get(productKey) ?? 0) >= requiredQuantity,
       );
+    const hasAllProductsReceived =
+      hasRequiredProducts &&
+      Array.from(requiredProducts.entries()).every(
+        ([productKey, requiredQuantity]) => (receivedProducts.get(productKey) ?? 0) >= requiredQuantity,
+      );
 
     let nextStatus: string | null = null;
 
     if (flags.hasRecibido) {
-      if (MATERIAL_POST_RECEIPT_STATUSES.has(currentStatus)) {
+      if (MATERIAL_POST_RECEIPT_LOCKED_STATUSES.has(currentStatus)) {
         nextStatus = currentStatus;
       } else {
-        nextStatus = hasAllProductsInOrders ? 'Recepción almacén' : 'Recepción Parcial';
+        nextStatus = hasAllProductsReceived ? 'Recepción almacén' : 'Recepción Parcial';
       }
     } else if (flags.hasRealizado) {
       if (MATERIAL_IN_TRANSIT_STATUSES.has(currentStatus)) {
