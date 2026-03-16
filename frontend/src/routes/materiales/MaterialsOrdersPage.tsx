@@ -75,6 +75,10 @@ function getOrderEstimatedDelivery(order: MaterialOrder, budgetsById: Map<string
   return formatOrderDate(firstDelivery);
 }
 
+function getNormalizedTextoPedido(textoPedido: string | null | undefined): string | null {
+  return textoPedido?.trim() ? textoPedido.trim() : null;
+}
+
 export function MaterialsOrdersPage({
   orders,
   budgets,
@@ -135,7 +139,7 @@ export function MaterialsOrdersPage({
     try {
       await onUpdate({
         id: selectedOrder.id,
-        textoPedido: textoPedidoDraft.trim() ? textoPedidoDraft.trim() : null,
+        textoPedido: getNormalizedTextoPedido(textoPedidoDraft),
         pedidoRealizado: checked,
         pedidoRecibido: nextPedidoRecibido,
       });
@@ -161,7 +165,7 @@ export function MaterialsOrdersPage({
     try {
       await onUpdate({
         id: selectedOrder.id,
-        textoPedido: textoPedidoDraft.trim() ? textoPedidoDraft.trim() : null,
+        textoPedido: getNormalizedTextoPedido(textoPedidoDraft),
         pedidoRealizado: nextPedidoRealizado,
         pedidoRecibido: checked,
       });
@@ -178,7 +182,7 @@ export function MaterialsOrdersPage({
   const handleTextoPedidoBlur = async () => {
     if (!selectedOrder || !onUpdate || isSavingOrder) return;
 
-    const normalizedTextoPedido = textoPedidoDraft.trim() ? textoPedidoDraft.trim() : null;
+    const normalizedTextoPedido = getNormalizedTextoPedido(textoPedidoDraft);
     const currentTextoPedido = selectedOrder.textoPedido?.trim() || null;
 
     if (
@@ -216,6 +220,20 @@ export function MaterialsOrdersPage({
   const selectedOrderEstimatedDelivery = selectedOrder
     ? getOrderEstimatedDelivery(selectedOrder, budgetsById)
     : '—';
+
+  const handleRowToggleUpdate = async (
+    order: MaterialOrder,
+    updates: { pedidoRealizado: boolean; pedidoRecibido: boolean },
+  ) => {
+    if (!onUpdate || updatingOrderId !== null) return;
+
+    await onUpdate({
+      id: order.id,
+      textoPedido: getNormalizedTextoPedido(order.textoPedido),
+      pedidoRealizado: updates.pedidoRealizado,
+      pedidoRecibido: updates.pedidoRecibido,
+    });
+  };
 
   return (
     <div className="d-grid gap-4">
@@ -286,23 +304,64 @@ export function MaterialsOrdersPage({
                       <td>{getOrderBudgetLabel(order)}</td>
                       <td>{getOrderEstimatedDelivery(order, budgetsById)}</td>
                       <td className="text-end" onClick={(event) => event.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="btn btn-outline-danger btn-sm"
-                          aria-label="Eliminar pedido"
-                          title="Eliminar pedido"
-                          onClick={() => {
-                            if (!order.id || deletingOrderId) return;
-                            onDelete?.(order.id);
-                          }}
-                          disabled={!order.id || Boolean(deletingOrderId)}
-                        >
-                          {deletingOrderId === order.id ? (
-                            <Spinner animation="border" role="status" size="sm" />
-                          ) : (
-                            <span aria-hidden="true">🗑️</span>
-                          )}
-                        </button>
+                        <div className="d-inline-flex align-items-center gap-3 flex-wrap justify-content-end">
+                          <div className="form-check mb-0">
+                            <input
+                              id={`pedido-realizado-${rowKey}`}
+                              className="form-check-input"
+                              type="checkbox"
+                              checked={Boolean(order.pedidoRealizado)}
+                              onChange={(event) => {
+                                const nextPedidoRealizado = event.target.checked;
+                                const nextPedidoRecibido = nextPedidoRealizado ? Boolean(order.pedidoRecibido) : false;
+                                void handleRowToggleUpdate(order, {
+                                  pedidoRealizado: nextPedidoRealizado,
+                                  pedidoRecibido: nextPedidoRecibido,
+                                });
+                              }}
+                              disabled={updatingOrderId !== null}
+                            />
+                            <label className="form-check-label small" htmlFor={`pedido-realizado-${rowKey}`}>
+                              Realizado
+                            </label>
+                          </div>
+                          <div className="form-check mb-0">
+                            <input
+                              id={`pedido-recibido-${rowKey}`}
+                              className="form-check-input"
+                              type="checkbox"
+                              checked={Boolean(order.pedidoRecibido)}
+                              onChange={(event) => {
+                                const nextPedidoRecibido = event.target.checked;
+                                void handleRowToggleUpdate(order, {
+                                  pedidoRealizado: nextPedidoRecibido ? true : Boolean(order.pedidoRealizado),
+                                  pedidoRecibido: nextPedidoRecibido,
+                                });
+                              }}
+                              disabled={updatingOrderId !== null}
+                            />
+                            <label className="form-check-label small" htmlFor={`pedido-recibido-${rowKey}`}>
+                              Recibido
+                            </label>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-outline-danger btn-sm"
+                            aria-label="Eliminar pedido"
+                            title="Eliminar pedido"
+                            onClick={() => {
+                              if (!order.id || deletingOrderId) return;
+                              onDelete?.(order.id);
+                            }}
+                            disabled={!order.id || Boolean(deletingOrderId)}
+                          >
+                            {deletingOrderId === order.id ? (
+                              <Spinner animation="border" role="status" size="sm" />
+                            ) : (
+                              <span aria-hidden="true">🗑️</span>
+                            )}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
