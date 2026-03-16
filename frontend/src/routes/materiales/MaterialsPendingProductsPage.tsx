@@ -272,10 +272,17 @@ function buildOrderedBudgetIds(orders: MaterialOrder[]): Set<string> {
   return orderedBudgetIds;
 }
 
+function isClosedMaterialBudget(budget: DealSummary): boolean {
+  const rawStatus = budget.estado_material?.trim();
+  if (!rawStatus) return false;
+
+  return rawStatus.localeCompare('Cerrado', 'es', { sensitivity: 'base' }) === 0;
+}
+
 function buildPendingProducts(budgets: DealSummary[], orders: MaterialOrder[]): PendingProductRow[] {
   const orderedProductKeys = buildOrderedProductKeys(orders);
   const orderedBudgetIds = buildOrderedBudgetIds(orders);
-  const filteredBudgets = budgets.filter((budget) => isMaterialPipeline(budget));
+  const filteredBudgets = budgets.filter((budget) => isMaterialPipeline(budget) && !isClosedMaterialBudget(budget));
 
   return filteredBudgets.flatMap((budget, budgetIndex) => {
     const budgetId = getBudgetId(budget);
