@@ -1989,6 +1989,9 @@ export function BudgetDetailModalMaterial({
       onHide={() => setSelectedOrder(null)}
       size="lg"
       centered
+      scrollable
+      dialogClassName="associated-order-modal"
+      backdropClassName="associated-order-backdrop"
       contentClassName="erp-modal-content"
     >
       <Modal.Header className="erp-modal-header border-0 pb-0">
