@@ -175,11 +175,48 @@ function canMoveToStatus(
   budget: DealSummary,
   targetStatus: MaterialDealStatus,
   orderedProductKeys: Set<string>,
+  orders: MaterialOrder[],
 ): boolean {
+  const orderFlags = getBudgetOrderFlags(budget, orders);
+
+  if (orderFlags.hasRecibido) {
+    return ['Recepción almacén', 'Listos para preparar', 'Enviados al cliente', 'Cerrado'].includes(targetStatus);
+  }
+
+  if (orderFlags.hasRealizado) {
+    return ['Pedido a proveedor', 'Mercancía en tránsito'].includes(targetStatus);
+  }
+
   const hasFullOrder = hasAllProductsInOrder(budget, orderedProductKeys);
   if (!hasFullOrder) return true;
 
   return targetStatus !== 'Pedidos confirmados' && targetStatus !== 'Pendiente compra';
+}
+
+
+function getBudgetOrderFlags(
+  budget: DealSummary,
+  orders: MaterialOrder[],
+): { hasAssociatedOrder: boolean; hasRealizado: boolean; hasRecibido: boolean } {
+  const budgetId = getBudgetId(budget);
+  if (!budgetId) {
+    return { hasAssociatedOrder: false, hasRealizado: false, hasRecibido: false };
+  }
+
+  let hasAssociatedOrder = false;
+  let hasRealizado = false;
+  let hasRecibido = false;
+
+  for (const order of orders) {
+    const sourceBudgetIds = Array.isArray(order.sourceBudgetIds) ? order.sourceBudgetIds : [];
+    const isRelated = sourceBudgetIds.some((sourceBudgetId) => String(sourceBudgetId ?? '').trim() === budgetId);
+    if (!isRelated) continue;
+    hasAssociatedOrder = true;
+    if (order.pedidoRealizado) hasRealizado = true;
+    if (order.pedidoRecibido) hasRecibido = true;
+  }
+
+  return { hasAssociatedOrder, hasRealizado, hasRecibido };
 }
 
 function hasAnyAssociatedOrder(budget: DealSummary, orders: MaterialOrder[]): boolean {
@@ -206,6 +243,7 @@ function isArchivedMaterialBudget(budget: DealSummary): boolean {
 
 const MAX_VISIBLE_CARDS_PER_COLUMN = 2.5;
 const KANBAN_CARD_ESTIMATED_HEIGHT_REM = 10;
+const AUTOMATIC_ONLY_STATUSES = new Set<MaterialDealStatus>(['Pedido a medias', 'Recepción Parcial']);
 export function MaterialsBoardPage({
   budgets,
   orders = [],
@@ -383,15 +421,15 @@ export function MaterialsBoardPage({
       if (!budget) return;
       const currentStatus = resolveStatus(budget);
       if (currentStatus === targetStatus) return;
-      if (targetStatus === 'Pedido a medias') {
-        setUpdateError('No puedes mover manualmente un presupuesto a "Pedido a medias".');
+      if (AUTOMATIC_ONLY_STATUSES.has(targetStatus)) {
+        setUpdateError(`No puedes mover manualmente un presupuesto a "${targetStatus}".`);
         return;
       }
       if (requiresOrderStatuses.has(targetStatus) && !hasAnyAssociatedOrder(budget, orders)) {
         setPendingOrderPromptBudgetId(data.budgetId);
         return;
       }
-      if (!canMoveToStatus(budget, targetStatus, orderedProductKeys)) return;
+      if (!canMoveToStatus(budget, targetStatus, orderedProductKeys, orders)) return;
       handleStatusChange(budget, targetStatus);
     } catch (error) {
       console.error('Error handling drop', error);

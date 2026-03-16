@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Alert, Badge, Button, Col, Modal, Row, Spinner, Table } from 'react-bootstrap';
 import type { MaterialOrder } from '../../types/materialOrder';
 import type { DealSummary } from '../../types/deal';
@@ -98,6 +99,8 @@ export function MaterialsOrdersPage({
   const [pedidoRealizadoDraft, setPedidoRealizadoDraft] = useState(false);
   const [pedidoRecibidoDraft, setPedidoRecibidoDraft] = useState(false);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
+  const [showReceiveWarning, setShowReceiveWarning] = useState(false);
+  const navigate = useNavigate();
   const hasError = !!error;
   const hasOrders = orders.length > 0;
   const budgetsById = useMemo(() => buildBudgetLookup(budgets), [budgets]);
@@ -127,6 +130,11 @@ export function MaterialsOrdersPage({
     setPedidoRecibidoDraft(Boolean(selectedOrder.pedidoRecibido));
   }, [selectedOrder]);
 
+
+  const openReceiveWarning = () => {
+    setShowReceiveWarning(true);
+  };
+
   const handleTogglePedidoRealizado = async (checked: boolean) => {
     if (!selectedOrder || !onUpdate || isSavingOrder) return;
 
@@ -155,6 +163,11 @@ export function MaterialsOrdersPage({
 
   const handleTogglePedidoRecibido = async (checked: boolean) => {
     if (!selectedOrder || !onUpdate || isSavingOrder) return;
+
+    if (checked && !pedidoRealizadoDraft) {
+      openReceiveWarning();
+      return;
+    }
 
     const nextPedidoRealizado = checked ? true : pedidoRealizadoDraft;
 
@@ -226,6 +239,11 @@ export function MaterialsOrdersPage({
     updates: { pedidoRealizado: boolean; pedidoRecibido: boolean },
   ) => {
     if (!onUpdate || updatingOrderId !== null) return;
+
+    if (updates.pedidoRecibido && !updates.pedidoRealizado) {
+      openReceiveWarning();
+      return;
+    }
 
     await onUpdate({
       id: order.id,
@@ -334,7 +352,7 @@ export function MaterialsOrdersPage({
                               onChange={(event) => {
                                 const nextPedidoRecibido = event.target.checked;
                                 void handleRowToggleUpdate(order, {
-                                  pedidoRealizado: nextPedidoRecibido ? true : Boolean(order.pedidoRealizado),
+                                  pedidoRealizado: Boolean(order.pedidoRealizado),
                                   pedidoRecibido: nextPedidoRecibido,
                                 });
                               }}
@@ -526,6 +544,33 @@ export function MaterialsOrdersPage({
             </div>
           ) : null}
         </Modal.Body>
+      </Modal>
+
+      <Modal
+        show={showReceiveWarning}
+        onHide={() => setShowReceiveWarning(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Aviso</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          No puedes recibir un materia, sino lo has pedido antes, ¿Quieres hacer un pedido?
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowReceiveWarning(false)}>
+            No
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              setShowReceiveWarning(false);
+              navigate('/materiales/materiales');
+            }}
+          >
+            Sí
+          </Button>
+        </Modal.Footer>
       </Modal>
     </div>
   );
