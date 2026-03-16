@@ -256,12 +256,31 @@ function buildOrderedProductKeys(orders: MaterialOrder[]): Set<string> {
   return orderedKeys;
 }
 
+function buildOrderedBudgetIds(orders: MaterialOrder[]): Set<string> {
+  const orderedBudgetIds = new Set<string>();
+
+  for (const order of orders) {
+    const sourceBudgetIds = Array.isArray(order.sourceBudgetIds) ? order.sourceBudgetIds : [];
+
+    for (const budgetId of sourceBudgetIds) {
+      const normalizedBudgetId = String(budgetId ?? '').trim();
+      if (!normalizedBudgetId) continue;
+      orderedBudgetIds.add(normalizedBudgetId);
+    }
+  }
+
+  return orderedBudgetIds;
+}
+
 function buildPendingProducts(budgets: DealSummary[], orders: MaterialOrder[]): PendingProductRow[] {
   const orderedProductKeys = buildOrderedProductKeys(orders);
+  const orderedBudgetIds = buildOrderedBudgetIds(orders);
   const filteredBudgets = budgets.filter((budget) => isMaterialPipeline(budget));
 
   return filteredBudgets.flatMap((budget, budgetIndex) => {
     const budgetId = getBudgetId(budget);
+    if (budgetId && orderedBudgetIds.has(budgetId)) return [];
+
     const organizationName = getOrganizationName(budget);
     const estimatedDelivery = formatEstimatedDelivery(getEstimatedDeliveryValue(budget));
     const products = (Array.isArray(budget.products) ? budget.products : []).filter((product) => {
