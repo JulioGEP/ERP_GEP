@@ -1,140 +1,259 @@
 # ERP GEP
 
-ERP GEP es un **monorepo** con dos piezas principales:
+ERP GEP es un **monorepo** que concentra toda la operación de una plataforma interna de formación: ciclo comercial, planificación, ejecución, documentación y control.
 
-- **Frontend**: panel interno en React (operativa diaria de equipos de formación).
-- **Backend**: API en Netlify Functions (lógica de negocio, integraciones y datos).
+Este README está pensado como **guía técnica y funcional detallada** para que cualquier persona del equipo pueda:
 
-> Este README está orientado a ser práctico: qué hay, dónde está y cómo arrancarlo rápido.
+- Entender rápidamente **qué hace** el sistema.
+- Ubicar **dónde vive cada parte** en el código.
+- Comprender **cómo fluye la información** entre módulos.
+- Arrancar entorno local y validar cambios con un flujo de trabajo consistente.
+
+---
 
 ## Tabla de contenidos
 
 - [1) Qué resuelve este ERP](#1-qué-resuelve-este-erp)
-- [2) Stack técnico](#2-stack-técnico)
-- [3) Estructura real del repositorio](#3-estructura-real-del-repositorio)
-- [4) Módulos funcionales (backend + frontend)](#4-módulos-funcionales-backend--frontend)
-- [5) Autenticación, roles y permisos](#5-autenticación-roles-y-permisos)
-- [6) Modelo de datos (Prisma)](#6-modelo-de-datos-prisma)
-- [7) Variables de entorno](#7-variables-de-entorno)
-- [8) Puesta en marcha local](#8-puesta-en-marcha-local)
-- [9) Comandos útiles](#9-comandos-útiles)
-- [10) Flujo recomendado para cambios](#10-flujo-recomendado-para-cambios)
-- [11) Despliegue en Netlify](#11-despliegue-en-netlify)
-- [12) Mapa visual para memoria](#12-mapa-visual-para-memoria)
-- [13) Memoria funcional redactada](#13-memoria-funcional-redactada)
+- [2) Visión de arquitectura](#2-visión-de-arquitectura)
+- [3) Stack técnico](#3-stack-técnico)
+- [4) Estructura real del repositorio](#4-estructura-real-del-repositorio)
+- [5) Funcionamiento end-to-end del sistema](#5-funcionamiento-end-to-end-del-sistema)
+- [6) Módulos funcionales y dónde están en código](#6-módulos-funcionales-y-dónde-están-en-código)
+- [7) Backend en detalle: patrón de Netlify Functions](#7-backend-en-detalle-patrón-de-netlify-functions)
+- [8) Frontend en detalle: páginas, features y estado](#8-frontend-en-detalle-páginas-features-y-estado)
+- [9) Autenticación, roles y permisos](#9-autenticación-roles-y-permisos)
+- [10) Modelo de datos (Prisma)](#10-modelo-de-datos-prisma)
+- [11) Integraciones externas](#11-integraciones-externas)
+- [12) Variables de entorno](#12-variables-de-entorno)
+- [13) Puesta en marcha local](#13-puesta-en-marcha-local)
+- [14) Comandos útiles](#14-comandos-útiles)
+- [15) Flujo recomendado para cambios](#15-flujo-recomendado-para-cambios)
+- [16) Despliegue en Netlify](#16-despliegue-en-netlify)
+- [17) Documentación funcional adicional](#17-documentación-funcional-adicional)
 
 ## 1) Qué resuelve este ERP
 
-El sistema centraliza la operación de GEP alrededor de:
+El sistema unifica en una sola plataforma procesos que habitualmente están repartidos en varias herramientas:
 
-- Gestión de **presupuestos/deals**.
-- Planificación de **sesiones formativas** y asignación de recursos.
-- Gestión de **recursos** (formadores, salas, unidades móviles, variantes de producto).
-- **Portal público de alumnos** para altas/bajas/ediciones con enlace seguro.
-- **Informes y certificados**, incluyendo soporte con OpenAI y catálogo WooCommerce.
-- **Reporting interno** operativo y de control.
+- Gestión comercial de **presupuestos/deals**.
+- Planificación de **sesiones formativas**.
+- Asignación de **recursos** (personas, espacios y medios).
+- Interacción externa mediante **portal público de alumnos**.
+- Generación de **informes y certificados**.
+- **Reporting** operativo y de control para seguimiento interno.
 
-## 2) Stack técnico
+Resultado práctico: más trazabilidad, menos trabajo manual y menos pérdida de información entre áreas.
 
-- **Node.js + TypeScript** en todo el monorepo.
-- **Frontend**: React 18, Vite, React Router, React Query, Bootstrap 5.
-- **Backend**: Netlify Functions TypeScript.
+## 2) Visión de arquitectura
+
+A nivel lógico, la arquitectura sigue este patrón:
+
+1. **Frontend React** (operación diaria interna + flujos públicos concretos).
+2. **API serverless** en `backend/functions` (reglas de negocio y acceso a datos).
+3. **Prisma + PostgreSQL** como capa de persistencia.
+4. **Servicios externos** (Pipedrive, S3, Google Drive, OpenAI, WooCommerce).
+
+### Esquema simplificado
+
+```text
+Usuario interno (navegador)
+        │
+        ▼
+Frontend React (Vite)
+        │ llamadas /api/*
+        ▼
+Netlify Functions (TypeScript)
+        │
+        ├── Prisma Client ──► PostgreSQL
+        └── Integraciones ──► Pipedrive / S3 / Drive / OpenAI / WooCommerce
+```
+
+## 3) Stack técnico
+
+- **Lenguaje base**: TypeScript.
+- **Frontend**: React 18 + Vite + React Router + React Query + Bootstrap 5.
+- **Backend**: Netlify Functions (Node.js + TypeScript).
 - **Datos**: PostgreSQL + Prisma ORM.
-- **Integraciones**: Pipedrive, AWS S3, Google Drive, OpenAI, WooCommerce.
+- **Infra/hosting**: Netlify (build + functions + redirects).
 
-## 3) Estructura real del repositorio
+## 4) Estructura real del repositorio
 
 ```text
 ERP_GEP/
 ├── backend/
-│   ├── functions/
-│   │   ├── _lib/           # Bootstrap y utilidades de bajo nivel
-│   │   ├── _shared/        # Helpers transversales (HTTP, auth, integraciones...)
-│   │   ├── types/          # Tipos compartidos en funciones
-│   │   └── *.ts            # Endpoints serverless
-│   ├── package.json
-│   └── tsconfig.json
+│   ├── functions/               # Endpoints serverless y utilidades de backend
+│   │   ├── _lib/                # Helpers y bootstrap de infraestructura
+│   │   ├── _shared/             # Utilidades compartidas (auth, HTTP, integraciones)
+│   │   ├── types/               # Tipos usados por múltiples funciones
+│   │   └── *.ts                 # Funciones por dominio (deals, sessions, etc.)
+│   ├── prisma/                  # Esquema/migraciones del workspace backend
+│   ├── sql/                     # SQL de soporte y evolutivos puntuales
+│   └── package.json
 ├── frontend/
 │   ├── src/
-│   │   ├── api/            # Cliente HTTP y adaptadores
-│   │   ├── app/            # Router/layout
-│   │   ├── features/       # Lógica por dominio
-│   │   ├── pages/          # Pantallas por ruta
-│   │   ├── public/         # Flujos públicos de alumnos
-│   │   └── shared/         # Componentes/hooks utilitarios
+│   │   ├── api/                 # Cliente API y normalización de llamadas
+│   │   ├── app/                 # Configuración de aplicación y routing principal
+│   │   ├── components/          # Componentes reutilizables transversales
+│   │   ├── context/             # Context providers globales (ej. auth)
+│   │   ├── features/            # Módulos por dominio funcional
+│   │   ├── pages/               # Páginas de navegación interna
+│   │   ├── public/              # Páginas de acceso externo por token
+│   │   └── shared/              # Helpers/UI utilities compartidas
+│   ├── public/                  # Assets estáticos
 │   └── package.json
 ├── prisma/
-│   └── schema.prisma       # Modelo de datos único
-├── scripts/                # Scripts de mantenimiento y SQL puntual
-├── netlify.toml
-├── backend.toml
+│   ├── schema.prisma            # Modelo principal de datos (raíz)
+│   └── migrations/              # Historial evolutivo de base de datos
+├── docs/                        # Documentación funcional y mapas
+├── scripts/                     # Automatizaciones de mantenimiento
+├── netlify.toml                 # Configuración principal de Netlify
+├── backend.toml                 # Configuración específica build backend
 └── README.md
 ```
 
-## 4) Módulos funcionales (backend + frontend)
+## 5) Funcionamiento end-to-end del sistema
 
-### 4.1 Presupuestos (deals)
+Este es el flujo típico de trabajo de negocio:
 
-- Backend principal: `backend/functions/deals.ts`, `deal_notes.ts`, `deal_documents.ts`.
-- Frontend principal: `frontend/src/features/presupuestos`, `frontend/src/pages/presupuestos/*`.
-- Función: sincronización/consulta de oportunidades, notas y documentos.
+1. Se crea/actualiza una oportunidad en el módulo de **presupuestos**.
+2. Esa oportunidad se aterriza en **sesiones** dentro del calendario operativo.
+3. Sobre cada sesión se asignan **recursos** (formadores, salas, materiales, variantes).
+4. Se habilita el **portal público** para altas/bajas/ediciones de alumnado cuando aplica.
+5. La ejecución produce **informes**, adjuntos y potenciales **certificados**.
+6. Toda la actividad deja rastro en **reporting** (logs, horas, control, costes).
 
-### 4.2 Calendario y planificación
+Este diseño permite separar claramente:
 
-- Backend: `sessions.ts`, `calendar-variants.ts`, `session_comments.ts`, `session_documents.ts`, `resources-confirmations.ts`.
-- Frontend: `frontend/src/features/calendar`, `frontend/src/pages/calendario/*`.
-- Función: planificación de sesiones, variantes, comentarios y documentos operativos.
+- **Entrada comercial** (deals).
+- **Ejecución operativa** (calendario + recursos).
+- **Salida documental** (informes/certificados).
+- **Control de gestión** (reporting).
 
-### 4.3 Recursos
+## 6) Módulos funcionales y dónde están en código
 
-- Backend: `trainers.ts`, `rooms.ts`, `mobile-units.ts`, `products.ts`, `products-variants.ts`, `variant-siblings.ts`.
-- Frontend: `frontend/src/pages/recursos/*`.
-- Función: mantenimiento del catálogo de recursos y sus reglas/variantes.
+### 6.1 Presupuestos / CRM
 
-### 4.4 Portal público de alumnos
+- **Backend**: funciones de deals y documentos/notas asociadas en `backend/functions/`.
+- **Frontend**: `frontend/src/features/presupuestos` y rutas bajo `frontend/src/routes/presupuestos`.
+- **Responsabilidad**: gestionar oportunidad comercial y su contexto documental.
 
-- Backend: `public-session-students.ts`, `session_public_links.ts`, `alumnos.ts`.
-- Frontend: `frontend/src/public/PublicSessionStudentsPage.tsx`.
-- Función: gestión pública con token y limitación de peticiones.
+### 6.2 Calendario y sesiones
 
-### 4.5 Informes, certificados y panel de formadores
+- **Backend**: funciones centradas en sesiones, comentarios y adjuntos de sesión en `backend/functions/`.
+- **Frontend**: `frontend/src/features/calendar` y páginas de calendario/control horario.
+- **Responsabilidad**: planificar ejecución real de acciones formativas.
 
-- Backend informes: `generateReport.ts`, `improveReport.ts`, `reportUpload.ts`, `reportPrefill.ts`.
-- Backend formadores: `trainer-dashboard.ts`, `trainer-sessions.ts`, `trainer_documents.ts`, `trainer-availability.ts`.
-- Frontend: `frontend/src/pages/informes/*`, `frontend/src/pages/certificados/*`, `frontend/src/pages/usuarios/trainer/*`.
+### 6.3 Recursos
 
-### 4.6 Reporting
+- **Backend**: catálogos como `trainers`, `rooms`, `mobile-units`, `products`, `variant-siblings`.
+- **Frontend**: vistas de recursos en `frontend/src/features/recursos` y `frontend/src/pages/recursos`.
+- **Responsabilidad**: alta/mantenimiento de recursos y disponibilidad operativa.
 
-- Backend: `audit-events.ts`, `reporting-logs.ts`, `reporting-horas-formadores.ts`, `reporting-control-horario.ts`, `reporting-costes-extra.ts`.
-- Frontend: `frontend/src/pages/reporting/*`, `frontend/src/pages/dashboard/*`.
+### 6.4 Portal público de alumnos
 
-## 5) Autenticación, roles y permisos
+- **Backend**: endpoints de acceso público por token (alumnos y sesión pública) en `backend/functions/`.
+- **Frontend**: páginas públicas en `frontend/src/public`.
+- **Responsabilidad**: permitir interacción externa controlada sin abrir el panel interno.
 
-- Las rutas de autenticación están en endpoints `/auth-*` del backend.
+### 6.5 Informes, certificados y área de formadores
+
+- **Backend**: generación/mejora/carga de informes, endpoints de panel de formadores.
+- **Frontend**: `frontend/src/pages/informes`, `frontend/src/features/certificados`, `frontend/src/pages/usuarios/trainer`.
+- **Responsabilidad**: salida documental y operativa diaria del personal formador.
+
+### 6.6 Reporting y control
+
+- **Backend**: funciones de logs, auditoría, control horario y costes.
+- **Frontend**: páginas de reporting y dashboard en `frontend/src/pages/reporting` y `frontend/src/pages/dashboard`.
+- **Responsabilidad**: seguimiento, control y explotación de la información.
+
+## 7) Backend en detalle: patrón de Netlify Functions
+
+En `backend/functions` cada archivo suele representar un endpoint o grupo de endpoints de un dominio.
+
+Patrón habitual:
+
+1. Parseo/validación de request.
+2. Resolución de identidad/permisos.
+3. Lógica de negocio.
+4. Lectura/escritura con Prisma.
+5. Respuesta HTTP normalizada.
+
+### Qué revisar al tocar backend
+
+- Contrato de entrada/salida del endpoint.
+- Impacto en permisos/roles.
+- Uso correcto de Prisma (relaciones incluidas, transacciones si aplica).
+- Manejo de errores y códigos HTTP consistentes.
+- Si hay integración externa, timeouts/reintentos y trazabilidad mínima.
+
+## 8) Frontend en detalle: páginas, features y estado
+
+El frontend separa responsabilidades para facilitar mantenimiento:
+
+- **`pages/`**: composición de pantalla y navegación.
+- **`features/`**: lógica por dominio (API + componentes + utilidades de negocio).
+- **`components/` / `shared/`**: piezas reutilizables transversales.
+- **`context/`**: estado global (ej. sesión/autenticación).
+
+### Convención práctica
+
+Cuando añadas una funcionalidad nueva:
+
+1. Crear/ajustar capa API en el dominio correspondiente.
+2. Encapsular lógica de negocio en `features/<dominio>`.
+3. Mantener `pages/` como capa de ensamblado de UI.
+4. Evitar duplicar utilidades globales ya existentes en `shared/`.
+
+## 9) Autenticación, roles y permisos
+
+- Los endpoints de autenticación viven en funciones `auth-*` del backend.
 - El frontend centraliza estado de sesión en `frontend/src/context/AuthContext.tsx`.
-- La protección de rutas se aplica con guardas (`RequireAuth` / `GuardedRoute`).
-- El sistema permite validación por permisos y patrones de ruta.
+- El enrutado protegido usa guardas de autenticación/autorización.
+- Los permisos se aplican por capacidad funcional y/o ruta.
 
-## 6) Modelo de datos (Prisma)
+Recomendación: cualquier endpoint nuevo debe nacer con su política de acceso explícita.
 
-- El esquema está en `prisma/schema.prisma`.
-- Áreas principales del modelo:
-  - CRM: organizaciones, personas, deals, notas y ficheros.
-  - Planificación: sesiones, recursos de sesión, comentarios, documentos.
-  - Recursos: formadores, salas, unidades móviles, productos y variantes.
-  - Portal público: tokens, enlaces públicos, alumnos de sesión.
+## 10) Modelo de datos (Prisma)
 
-### Prisma Client
+- Esquema principal: `prisma/schema.prisma`.
+- Hay además esquema/migraciones en `backend/prisma` según procesos del workspace backend.
+- Evolución de datos: carpetas `prisma/migrations` y `backend/prisma/migrations`.
 
-Generar cliente cuando cambie el modelo:
+### Dominios de datos principales
+
+- **Comercial**: deals, notas y documentos relacionados.
+- **Operación**: sesiones, relaciones de sesión y comentarios.
+- **Recursos**: formadores, salas, unidades móviles, productos, variantes.
+- **Portal público**: tokens/enlaces para acceso externo y gestión de alumnos.
+- **Control**: logs, reporting y datos de soporte operativo.
+
+### Comandos de Prisma
 
 ```bash
 npm run generate
+npm run prisma:format
 ```
 
-## 7) Variables de entorno
+## 11) Integraciones externas
 
-Crear `.env` en la raíz del proyecto.
+El ERP está preparado para operar con varios proveedores:
+
+- **Pipedrive**: contexto comercial y sincronizaciones CRM.
+- **AWS S3**: almacenamiento de determinados documentos/activos.
+- **Google Drive**: gestión de documentación compartida.
+- **OpenAI**: soporte en generación/mejora de contenido de informes.
+- **WooCommerce**: acceso a catálogo/producto en procesos concretos.
+
+Cuando se modifique una integración, revisar:
+
+- Credenciales y variables de entorno implicadas.
+- Contrato de datos recibido/enviado.
+- Gestión de errores y fallback de negocio.
+
+## 12) Variables de entorno
+
+Crear un archivo `.env` en la raíz.
 
 ### Núcleo
 
@@ -159,68 +278,72 @@ Crear `.env` en la raíz del proyecto.
 - `PUBLIC_SESSION_RATE_LIMIT_MAX_REQUESTS`
 - `REPORTS_ALLOWED_ORIGIN`
 
-## 8) Puesta en marcha local
+## 13) Puesta en marcha local
 
-1. Instalar dependencias:
+1. Instalar dependencias en raíz:
+
    ```bash
    npm install
    ```
+
 2. Generar Prisma Client:
+
    ```bash
    npm run generate
    ```
-3. Levantar frontend + funciones con Netlify:
+
+3. Levantar frontend + functions con Netlify:
+
    ```bash
    npx netlify dev -p 8888
    ```
-4. Abrir:
-   - App: `http://localhost:8888`
-   - API (proxy): `http://localhost:8888/api/*`
 
-> Opcional: ejecutar solo frontend
+4. Abrir:
+
+- App: `http://localhost:8888`
+- API proxificada: `http://localhost:8888/api/*`
+
+### Arranque aislado de frontend (opcional)
 
 ```bash
 npm run dev --workspace frontend
 ```
 
-## 9) Comandos útiles
+## 14) Comandos útiles
 
-Desde la raíz:
+Desde raíz:
 
 - `npm run build` — build de frontend.
-- `npm run test --workspace frontend` — tests de interfaz.
-- `npm run typecheck --workspace frontend` — types frontend.
-- `npm run typecheck:functions` — types backend functions.
+- `npm run test --workspace frontend` — tests unitarios/interfaz frontend.
+- `npm run typecheck --workspace frontend` — chequeo de tipos frontend.
+- `npm run typecheck:functions` — chequeo de tipos de funciones backend.
 - `npm run prisma:format` — formato de esquema Prisma.
 - `npm run prisma:prune` — limpieza de binarios Prisma para CI/Netlify.
-- `npm run netlify:build` — pipeline de build de despliegue.
+- `npm run netlify:build` — pipeline de build para despliegue.
 
-## 10) Flujo recomendado para cambios
+## 15) Flujo recomendado para cambios
 
-1. Identificar módulo funcional (deals, calendario, recursos, etc.).
-2. Cambiar backend (`backend/functions`) y validar contrato de API.
-3. Ajustar frontend (`frontend/src/features` o `frontend/src/pages`).
-4. Si hay cambios de datos, modificar `prisma/schema.prisma` + regenerar Prisma Client.
-5. Ejecutar typecheck y tests mínimos antes de abrir PR.
+1. Identificar el módulo funcional impactado.
+2. Cambiar backend y validar contrato API.
+3. Ajustar frontend en `features`/`pages` según corresponda.
+4. Si hay cambios de datos, actualizar Prisma + migraciones.
+5. Ejecutar checks (typecheck/tests/build mínimo).
+6. Revisar permisos y casos de borde.
+7. Documentar cambio en README/docs si altera comportamiento estructural.
 
-## 11) Despliegue en Netlify
+## 16) Despliegue en Netlify
 
-- Netlify ejecuta `npm run netlify:build`.
-- `netlify.toml` define redirects (`/api/*` hacia funciones, auth y fallback SPA).
-- `backend.toml` define build del workspace backend y empaquetado de dependencias necesarias.
+- Comando de referencia de build: `npm run netlify:build`.
+- `netlify.toml` define redirects (incluyendo `/api/*`) y fallback SPA.
+- `backend.toml` ajusta empaquetado/build del workspace backend.
+
+## 17) Documentación funcional adicional
+
+Para ampliar contexto funcional y de memoria:
+
+- Mapa visual: `docs/mapa-funcionalidades-erp.md`.
+- Memoria funcional extensa: `docs/memoria-funcional-erp-gep.md`.
 
 ---
 
-Si vas a ampliar el ERP (nuevos módulos o endpoints), mantén este README alineado para que siga siendo útil como mapa operativo del proyecto.
-
-
-## 12) Mapa visual para memoria
-
-- Documento recomendado: `docs/mapa-funcionalidades-erp.md`.
-- Incluye un **mindmap** y un **flujo operativo** en formato Mermaid, listos para copiar en una memoria funcional.
-
-
-## 13) Memoria funcional redactada
-
-- Documento completo: `docs/memoria-funcional-erp-gep.md`.
-- Incluye secciones de **introducción, objetivos, alcance, metodología, conclusiones y anexos**.
+Si incorporas un módulo nuevo (o cambias un flujo clave), actualiza este README para mantenerlo como fuente principal de onboarding técnico-funcional.
