@@ -93,11 +93,6 @@ type NavItem = {
 
 const BASE_NAVIGATION_ITEMS: NavItem[] = [
   {
-    key: 'Dashboard',
-    label: 'Dashboard',
-    path: '/dashboard',
-  },
-  {
     key: 'Presupuestos',
     label: 'Presupuestos',
     children: [
