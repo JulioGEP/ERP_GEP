@@ -12,22 +12,11 @@ included_files = ["node_modules/.prisma/**"]
 NODE_VERSION = "20"
 
 
-[[scheduled]]
-function = "daily-availability-slack"
-cron = "0 5 * * 1-5"
+[functions."daily-availability-slack"]
+schedule = "0 5,6 * * 1-5"
 
-[[scheduled]]
-function = "daily-availability-slack"
-cron = "0 6 * * 1-5"
+[functions."daily-trainers-slack"]
+schedule = "0 5,6 * * *"
 
-[[scheduled]]
-function = "daily-trainers-slack"
-cron = "0 5 * * *"
-
-[[scheduled]]
-function = "daily-trainers-slack"
-cron = "0 6 * * *"
-
-[[scheduled]]
-function = "control-horario-reminders"
-cron = "*/15 * * * *"
+[functions."control-horario-reminders"]
+schedule = "*/15 * * * *"
