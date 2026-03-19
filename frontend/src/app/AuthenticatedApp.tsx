@@ -77,6 +77,7 @@ const ACTIVE_PATH_STORAGE_KEY = 'erp-gep-active-path';
 const NAVBAR_OFFCANVAS_ID = 'app-navbar-offcanvas';
 const NAVBAR_OFFCANVAS_LABEL_ID = 'app-navbar-offcanvas-label';
 const CONTROL_HORARIO_URL = 'https://erpgep.netlify.app/control_horario';
+const DASHBOARD_URL = 'https://erpgep.netlify.app/dashboard';
 
 type NavChild = {
   key: string;
@@ -1894,14 +1895,7 @@ export default function AuthenticatedApp() {
     <div className="min-vh-100 d-flex flex-column">
       <Navbar bg="white" expand="xl" className="shadow-sm py-3">
         <Container fluid="xl" className="d-flex align-items-center gap-4">
-          <Navbar.Brand
-            href="#"
-            className="d-flex align-items-center"
-            onClick={(event) => {
-              event.preventDefault();
-              navigate(homePath);
-            }}
-          >
+          <Navbar.Brand href={DASHBOARD_URL} className="d-flex align-items-center">
             <img src={logo} height={64} alt="GEP Group" />
           </Navbar.Brand>
           {canAccessControlHorario && (
