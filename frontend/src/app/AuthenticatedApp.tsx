@@ -191,6 +191,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         path: '/reporting/webhooks_pipedrive',
       },
       {
+        key: 'Reporting/WoocommerceCompras',
+        label: 'Woocommerce Compras',
+        path: '/reporting/woocommerce_compras',
+      },
+      {
         key: 'Reporting/Slack',
         label: 'Slack',
         path: '/reporting/slack',
