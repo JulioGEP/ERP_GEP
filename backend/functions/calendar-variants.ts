@@ -19,6 +19,13 @@ type CalendarVariantDeal = {
   transporte: string | null;
 };
 
+type VariantTrainerLink = {
+  trainer_id: string;
+  name: string | null;
+  apellido: string | null;
+  position: number;
+};
+
 type CalendarVariantEvent = {
   id: string;
   start: string;
@@ -50,6 +57,8 @@ type CalendarVariantEvent = {
     date: string | null;
     trainer_id: string | null;
     trainer: { trainer_id: string | null; name: string | null; apellido: string | null } | null;
+    trainer_ids: string[];
+    trainers: Array<{ trainer_id: string | null; name: string | null; apellido: string | null }>;
     sala_id: string | null;
     sala: { sala_id: string | null; name: string | null; sede: string | null } | null;
     unidad_movil_id: string | null;
@@ -164,6 +173,7 @@ function normalizeVariantRecord(
     sala_id?: string | null;
     unidad_movil_id?: string | null;
     trainers?: { trainer_id: string | null; name: string | null; apellido: string | null } | null;
+    trainer_links?: VariantTrainerLink[];
     salas?: { sala_id: string | null; name: string | null; sede: string | null } | null;
     unidades_moviles?: { unidad_id: string | null; name: string | null; matricula: string | null } | null;
     created_at: Date | null;
@@ -174,7 +184,47 @@ function normalizeVariantRecord(
   const normalizedStudentsTotal =
     typeof studentsTotal === 'number' && Number.isFinite(studentsTotal) ? studentsTotal : null;
 
-  const trainerRecord = record.trainers ?? null;
+  const trainerLinks = Array.isArray(record.trainer_links) ? record.trainer_links : [];
+  const trainerRecordsMap = new Map<string, { trainer_id: string | null; name: string | null; apellido: string | null }>();
+
+  for (const link of trainerLinks) {
+    const trainerId = toTrimmed(link.trainer_id);
+    if (!trainerId) continue;
+    if (!trainerRecordsMap.has(trainerId)) {
+      trainerRecordsMap.set(trainerId, {
+        trainer_id: trainerId,
+        name: link.name ?? null,
+        apellido: link.apellido ?? null,
+      });
+    }
+  }
+
+  const primaryTrainerId = toTrimmed(record.trainer_id);
+  if (record.trainers?.trainer_id) {
+    const trainerId = toTrimmed(record.trainers.trainer_id);
+    if (trainerId && !trainerRecordsMap.has(trainerId)) {
+      trainerRecordsMap.set(trainerId, {
+        trainer_id: trainerId,
+        name: record.trainers.name ?? null,
+        apellido: record.trainers.apellido ?? null,
+      });
+    }
+  }
+  if (primaryTrainerId && !trainerRecordsMap.has(primaryTrainerId)) {
+    trainerRecordsMap.set(primaryTrainerId, {
+      trainer_id: primaryTrainerId,
+      name: null,
+      apellido: null,
+    });
+  }
+
+  const trainerIds = Array.from(trainerRecordsMap.keys());
+  const trainerRecords = Array.from(trainerRecordsMap.values());
+  const primaryTrainer =
+    (primaryTrainerId
+      ? trainerRecords.find((trainer) => trainer.trainer_id === primaryTrainerId) ?? null
+      : null) ?? trainerRecords[0] ?? null;
+
   const salaRecord = record.salas ?? null;
   const unidadRecord = record.unidades_moviles ?? null;
 
@@ -194,14 +244,10 @@ function normalizeVariantRecord(
     stock_status: record.stock_status ?? null,
     sede: record.sede ?? null,
     date: toMadridISOString(record.date),
-    trainer_id: record.trainer_id ?? null,
-    trainer: trainerRecord
-      ? {
-          trainer_id: trainerRecord.trainer_id ?? null,
-          name: trainerRecord.name ?? null,
-          apellido: trainerRecord.apellido ?? null,
-        }
-      : null,
+    trainer_id: primaryTrainer?.trainer_id ?? primaryTrainerId ?? null,
+    trainer: primaryTrainer,
+    trainer_ids: trainerIds,
+    trainers: trainerRecords,
     sala_id: record.sala_id ?? null,
     sala: salaRecord
       ? {
@@ -305,6 +351,60 @@ function isTwoDayVerticalProduct(product: {
     .filter((value): value is string => Boolean(value));
 
   return identifiers.some((identifier) => TWO_DAY_VERTICAL_PRODUCT_KEYS.has(identifier));
+}
+
+
+async function fetchVariantTrainerAssignments(
+  prisma: ReturnType<typeof getPrisma>,
+  variantIds: string[],
+): Promise<Map<string, VariantTrainerLink[]>> {
+  const map = new Map<string, VariantTrainerLink[]>();
+  if (!variantIds.length) return map;
+
+  try {
+    const rows = (await prisma.$queryRaw<Array<{
+      variant_id: string;
+      trainer_id: string;
+      name: string | null;
+      apellido: string | null;
+      position: number;
+    }>>(
+      Prisma.sql`
+        SELECT vtl.variant_id::text AS variant_id,
+               vtl.trainer_id,
+               t.name,
+               t.apellido,
+               vtl.position
+        FROM variant_trainer_links vtl
+        LEFT JOIN trainers t ON t.trainer_id = vtl.trainer_id
+        WHERE vtl.variant_id IN (${Prisma.join(variantIds.map((id) => Prisma.sql`${id}::uuid`))})
+        ORDER BY vtl.variant_id, vtl.position ASC
+      `,
+    )) as Array<{
+      variant_id: string;
+      trainer_id: string;
+      name: string | null;
+      apellido: string | null;
+      position: number;
+    }>;
+
+    for (const row of rows) {
+      const list = map.get(row.variant_id) ?? [];
+      list.push({
+        trainer_id: row.trainer_id,
+        name: row.name ?? null,
+        apellido: row.apellido ?? null,
+        position: row.position,
+      });
+      map.set(row.variant_id, list);
+    }
+  } catch (error) {
+    if (!isMissingRelationError(error, 'variant_trainer_links')) {
+      throw error;
+    }
+  }
+
+  return map;
 }
 
 function sanitizeVariantDeal(record: {
@@ -511,6 +611,13 @@ export const handler = async (event: any) => {
       }
     }
 
+    const variantIds = Array.isArray(variants)
+      ? (variants as any[])
+          .map((variant) => toTrimmed(variant?.id))
+          .filter((variantId): variantId is string => Boolean(variantId))
+      : [];
+    const trainerAssignments = await fetchVariantTrainerAssignments(prisma, variantIds);
+
     const events: CalendarVariantEvent[] = [];
 
     // Claves únicas de variación (Woo)
@@ -624,7 +731,13 @@ export const handler = async (event: any) => {
       const studentsTotal = wooIdKey ? studentsCountByVariant.get(wooIdKey) ?? 0 : null;
       const variantDeals = wooIdKey ? dealsByVariant.get(wooIdKey) ?? [] : [];
 
-      const normalizedVariant = normalizeVariantRecord(record, studentsTotal);
+      const normalizedVariant = normalizeVariantRecord(
+        {
+          ...record,
+          trainer_links: trainerAssignments.get(record.id) ?? [],
+        },
+        studentsTotal,
+      );
 
       const pushEvent = (id: string, start: Date, end: Date) => {
         events.push({
