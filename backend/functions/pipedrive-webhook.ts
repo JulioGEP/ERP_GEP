@@ -165,6 +165,29 @@ function resolveDealId(body: Record<string, unknown>): string | null {
   return null;
 }
 
+function resolveRelatedDealId(body: Record<string, unknown>): string | null {
+  const data = body?.['data'] as Record<string, unknown> | undefined;
+  const meta = body?.['meta'] as Record<string, unknown> | undefined;
+
+  const candidates = [
+    data?.['deal_id'],
+    data?.['dealId'],
+    data && typeof data === 'object' ? (data as any).current?.deal_id : null,
+    data && typeof data === 'object' ? (data as any).current?.dealId : null,
+    data && typeof data === 'object' ? (data as any).previous?.deal_id : null,
+    data && typeof data === 'object' ? (data as any).previous?.dealId : null,
+    meta?.['deal_id'],
+    meta?.['dealId'],
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeDealId(candidate);
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
 function resolveDealStatus(body: Record<string, unknown>): string | null {
   const data = body?.['data'] as Record<string, unknown> | undefined;
   const candidates = [
@@ -395,6 +418,7 @@ export const handler: Handler = async (event) => {
   try {
     const action = resolveAction(body);
     const dealId = resolveDealId(body);
+    const relatedDealId = resolveRelatedDealId(body);
     const status = resolveDealStatus(body);
     const entity = resolveEntity(body);
 
@@ -425,6 +449,24 @@ export const handler: Handler = async (event) => {
           processedDealId = person_id;
           processedAction = action === 'create' ? 'person_created' : 'person_updated';
         }
+      }
+    }
+
+    if (
+      entity === 'note' &&
+      relatedDealId &&
+      (action === 'create' || action === 'change' || action === 'update')
+    ) {
+      const storedDeal = await prisma.deals.findUnique({
+        where: { deal_id: relatedDealId },
+        select: { deal_id: true, pipeline_label: true, pipeline_id: true },
+      });
+
+      const storedPipeline = storedDeal?.pipeline_label ?? storedDeal?.pipeline_id ?? null;
+      if (storedDeal && isFormacionAbiertaPipeline(storedPipeline)) {
+        await refreshDealAfterWebhook(prisma, relatedDealId);
+        processedDealId = relatedDealId;
+        processedAction = 'updated';
       }
     }
 
