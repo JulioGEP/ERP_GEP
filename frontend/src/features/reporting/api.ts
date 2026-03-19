@@ -572,6 +572,76 @@ export async function fetchPipedriveWebhookEvents(
     .filter((record): record is PipedriveWebhookEvent => record !== null);
 }
 
+
+export type WooCommerceComprasWebhookEvent = {
+  id: string;
+  createdAt: string | null;
+  source: string | null;
+  eventName: string | null;
+  orderId: string | null;
+  orderNumber: string | null;
+  orderStatus: string | null;
+  orderTotal: string | null;
+  currency: string | null;
+  customerName: string | null;
+  customerEmail: string | null;
+  paymentMethod: string | null;
+  payload: unknown;
+};
+
+function sanitizeWooCommerceComprasWebhookEvent(record: unknown): WooCommerceComprasWebhookEvent | null {
+  if (!record || typeof record !== 'object') {
+    return null;
+  }
+
+  const raw = record as Record<string, unknown>;
+  const id = sanitizeText(raw.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    createdAt: sanitizeDate(raw.createdAt ?? raw.created_at),
+    source: sanitizeText(raw.source),
+    eventName: sanitizeText(raw.eventName ?? raw.event_name),
+    orderId: sanitizeText(raw.orderId ?? raw.order_id),
+    orderNumber: sanitizeText(raw.orderNumber ?? raw.order_number),
+    orderStatus: sanitizeText(raw.orderStatus ?? raw.order_status),
+    orderTotal: sanitizeText(raw.orderTotal ?? raw.order_total),
+    currency: sanitizeText(raw.currency),
+    customerName: sanitizeText(raw.customerName ?? raw.customer_name),
+    customerEmail: sanitizeText(raw.customerEmail ?? raw.customer_email),
+    paymentMethod: sanitizeText(raw.paymentMethod ?? raw.payment_method),
+    payload: raw.payload ?? null,
+  } satisfies WooCommerceComprasWebhookEvent;
+}
+
+export type FetchWooCommerceComprasWebhookEventsOptions = {
+  limit?: number;
+};
+
+export async function fetchWooCommerceComprasWebhooks(
+  options: FetchWooCommerceComprasWebhookEventsOptions = {}
+): Promise<WooCommerceComprasWebhookEvent[]> {
+  const params = new URLSearchParams();
+  const limit = options.limit;
+  if (typeof limit === 'number' && Number.isFinite(limit) && limit > 0) {
+    params.set('limit', String(Math.min(Math.trunc(limit), 500)));
+  }
+
+  const query = params.toString();
+  const url = query.length
+    ? `/reporting-woocommerce-compras?${query}`
+    : '/reporting-woocommerce-compras';
+
+  const data = await getJson<{ events?: unknown }>(url);
+  const events = Array.isArray(data?.events) ? data.events : [];
+  return events
+    .map(sanitizeWooCommerceComprasWebhookEvent)
+    .filter((record): record is WooCommerceComprasWebhookEvent => record !== null);
+}
+
 const EXTRA_COST_FIELD_KEYS = [
   'precioCosteFormacion',
   'precioCostePreventivo',
