@@ -1,14 +1,16 @@
+import crypto from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import type { Handler } from '@netlify/functions';
 import { COMMON_HEADERS } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
 
-const WEBHOOK_KEY = process.env.WEBHOOK_KEY || process.env.webhook_key || '';
+const WOOCOMMERCE_COMPRAS_WEBHOOK_TOKEN = 'wc_compras_2026_ERP_GEP_4wJ8nK7pQ2xL9vR6tM1sH5dF3bY0cZ';
 const ACCEPTED_STATUSES = new Set(['completed', 'completado']);
 const WEBHOOK_HEADERS = {
   ...COMMON_HEADERS,
   'Access-Control-Allow-Methods': 'POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Webhook-Key, X-WooCommerce-Webhook-Secret',
+  'Access-Control-Allow-Headers':
+    'Content-Type, Authorization, X-WC-Webhook-Signature, X-WooCommerce-Webhook-Signature',
 };
 
 type JsonObject = Record<string, unknown>;
@@ -93,26 +95,10 @@ function joinName(...values: Array<string | null>): string | null {
   return parts.length ? parts.join(' ') : null;
 }
 
-function resolveSecret(
-  headers: Record<string, string>,
-  body: JsonObject,
-  query: Parameters<Handler>[0]['queryStringParameters'],
-): string | null {
-  const authHeader = readString(headers.authorization);
-  if (authHeader?.toLowerCase().startsWith('bearer ')) {
-    return readString(authHeader.slice(7));
-  }
-
+function resolveSignature(headers: Record<string, string>): string | null {
   const candidates = [
-    headers['x-webhook-key'],
-    headers['x-webhook-secret'],
-    headers['x-woocommerce-webhook-secret'],
-    query?.key,
-    query?.webhook_key,
-    query?.webhookKey,
-    body.webhook_key,
-    body.webhookKey,
-    body.secret,
+    headers['x-wc-webhook-signature'],
+    headers['x-woocommerce-webhook-signature'],
   ];
 
   for (const candidate of candidates) {
@@ -140,7 +126,7 @@ function resolveSource(body: JsonObject): string | null {
     readString(body.origin) ??
     readString(body.provider) ??
     readString(body.platform) ??
-    'zapier-woocommerce'
+    'woocommerce'
   );
 }
 
@@ -150,7 +136,7 @@ function resolveEventName(body: JsonObject): string | null {
     readString(body.topic) ??
     readString(body.action) ??
     readString(body.type) ??
-    'order.completed'
+    'order.updated'
   );
 }
 
@@ -188,6 +174,23 @@ function isAcceptedStatus(status: string | null): boolean {
   return status !== null && ACCEPTED_STATUSES.has(status.trim().toLowerCase());
 }
 
+function isValidWooCommerceSignature(rawBody: string | null, receivedSignature: string | null): boolean {
+  const normalizedSignature = readString(receivedSignature);
+  if (!rawBody || !normalizedSignature) {
+    return false;
+  }
+
+  const expectedSignature = crypto
+    .createHmac('sha256', WOOCOMMERCE_COMPRAS_WEBHOOK_TOKEN)
+    .update(rawBody, 'utf8')
+    .digest('base64');
+
+  const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
+  const receivedBuffer = Buffer.from(normalizedSignature, 'utf8');
+
+  return expectedBuffer.length === receivedBuffer.length && crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
+}
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: WEBHOOK_HEADERS, body: '' };
@@ -201,18 +204,10 @@ export const handler: Handler = async (event) => {
     });
   }
 
-  if (!WEBHOOK_KEY) {
-    console.error('[woocommerce-compras-webhook] Missing WEBHOOK_KEY/webhook_key env var');
-    return jsonResponse(500, {
-      ok: false,
-      error_code: 'WEBHOOK_NOT_CONFIGURED',
-      message: 'La clave del webhook no está configurada.',
-    });
-  }
-
+  const rawBody = decodeBody(event);
   let body: JsonObject;
   try {
-    body = parseBody(decodeBody(event));
+    body = parseBody(rawBody);
   } catch (error) {
     console.error('[woocommerce-compras-webhook] Invalid JSON payload', error);
     return jsonResponse(400, {
@@ -223,12 +218,12 @@ export const handler: Handler = async (event) => {
   }
 
   const headers = normalizeHeaders(event.headers);
-  const receivedSecret = resolveSecret(headers, body, event.queryStringParameters);
-  if (!receivedSecret || receivedSecret !== WEBHOOK_KEY) {
+  const receivedSignature = resolveSignature(headers);
+  if (!isValidWooCommerceSignature(rawBody, receivedSignature)) {
     return jsonResponse(401, {
       ok: false,
-      error_code: 'INVALID_WEBHOOK_KEY',
-      message: 'La clave secreta del webhook no es válida.',
+      error_code: 'INVALID_SIGNATURE',
+      message: 'La firma del webhook de WooCommerce no es válida.',
     });
   }
 
@@ -261,13 +256,15 @@ export const handler: Handler = async (event) => {
 
     return jsonResponse(200, {
       ok: true,
-      stored: true,
+      message: 'Webhook procesado correctamente.',
+      orderId: summary.orderId,
+      orderNumber: summary.orderNumber,
     });
   } catch (error) {
     console.error('[woocommerce-compras-webhook] Failed to persist webhook', error);
     return jsonResponse(500, {
       ok: false,
-      error_code: 'DATABASE_ERROR',
+      error_code: 'PERSISTENCE_ERROR',
       message: 'No se pudo guardar el webhook.',
     });
   }

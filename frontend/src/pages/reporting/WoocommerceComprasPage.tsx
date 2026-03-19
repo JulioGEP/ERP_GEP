@@ -140,10 +140,10 @@ export default function WoocommerceComprasPage() {
         </Card.Header>
         <Card.Body>
           <p className="text-muted mb-2">
-            Registro de pedidos completados recibidos desde el webhook de WooCommerce/Zapier.
+            Registro de pedidos completados recibidos desde el webhook nativo de WooCommerce.
           </p>
           <p className="small text-muted mb-4">
-            Endpoint de recepción: <code>/api/woocommerce-compras-webhook</code>. Debe enviarse la clave en la cabecera <code>X-Webhook-Key</code> o como bearer token.
+            Endpoint de recepción: <code>https://erpgep.netlify.app/api/woocommerce-compras-webhook</code>. Configura en WooCommerce el campo <code>Secret</code> con el token compartido para que la cabecera <code>X-WC-Webhook-Signature</code> se valide automáticamente.
           </p>
           {content}
         </Card.Body>
