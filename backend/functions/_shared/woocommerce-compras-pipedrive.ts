@@ -66,6 +66,12 @@ type ProductResolution = {
   productName: string | null;
 };
 
+type DealSingleOptionValues = {
+  trainingOptionId: string | null;
+  siteOptionId: string | null;
+  fundaeOptionId: string | null;
+};
+
 const DEFAULT_ORG_OWNER_ID = parseIntegerEnv(process.env.WOOCOMMERCE_PIPE_DEFAULT_OWNER_ID, 13444807);
 const DEFAULT_PIPELINE_ID = parseIntegerEnv(process.env.WOOCOMMERCE_PIPE_PIPELINE_ID, 3);
 const DEFAULT_OPEN_STAGE_ID = parseIntegerEnv(process.env.WOOCOMMERCE_PIPE_OPEN_STAGE_ID, 13);
@@ -85,6 +91,7 @@ const DEAL_WC_ORDER_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_DEAL_WC_ORDER_FIELD
 const DEAL_TRAFFIC_SOURCE_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_DEAL_TRAFFIC_SOURCE_FIELD_KEY || 'abfa216589d01466453514fdcfeb1c6e5b9fdf8d';
 const DEAL_SOURCE_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_DEAL_SOURCE_FIELD_KEY || 'c6eabce7c04f864646aa72c944f875fd71cdf178';
 const DEAL_SERVICE_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_DEAL_SERVICE_FIELD_KEY || 'e72120b9e27221b560c8480ff422f3fe28f8dbae';
+const DEAL_TRAINING_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_DEAL_TRAINING_FIELD_KEY || 'c99554c188c3f63ad9bc8b2cf7b50cbd145455ab';
 const DEAL_SITE_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_DEAL_SITE_FIELD_KEY || '676d6bd51e52999c582c01f67c99a35ed30bf6ae';
 const DEAL_STUDENTS_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_DEAL_STUDENTS_FIELD_KEY || '6cfa536f9a54a07f849c1eba52a9b3f8d1f411f5';
 const DEAL_FUNDAE_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_DEAL_FUNDAE_FIELD_KEY || '245d60d4d18aec40ba888998ef92e5d00e494583';
@@ -403,6 +410,52 @@ async function resolveProduct(prisma: PrismaClient, order: NormalizedWooOrder): 
   return { idPipe: null, productName: order.productName };
 }
 
+function normalizeLookupLabel(value: string | null): string | null {
+  if (!value) return null;
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+async function resolveSingleOptionId(
+  prisma: PrismaClient,
+  fieldKey: string,
+  optionLabel: string | null,
+): Promise<string | null> {
+  const normalizedLabel = normalizeLookupLabel(optionLabel);
+  if (!normalizedLabel) return null;
+
+  const options = await prisma.pipedrive_custom_field_options.findMany({
+    where: { field_key: fieldKey },
+    select: { option_id: true, option_label: true },
+    orderBy: [{ option_order: 'asc' }, { option_label: 'asc' }],
+  });
+
+  const match = options.find((option) => normalizeLookupLabel(option.option_label) === normalizedLabel);
+  return match?.option_id ?? null;
+}
+
+async function resolveDealSingleOptionValues(
+  prisma: PrismaClient,
+  order: NormalizedWooOrder,
+): Promise<DealSingleOptionValues> {
+  const parentName = order.productName;
+  const [trainingOptionId, siteOptionId, fundaeOptionId] = await Promise.all([
+    resolveSingleOptionId(prisma, DEAL_TRAINING_FIELD_KEY, parentName),
+    resolveSingleOptionId(prisma, DEAL_SITE_FIELD_KEY, parentName),
+    resolveSingleOptionId(prisma, DEAL_FUNDAE_FIELD_KEY, parentName),
+  ]);
+
+  return {
+    trainingOptionId,
+    siteOptionId,
+    fundaeOptionId,
+  };
+}
+
 function buildStudentsNote(order: NormalizedWooOrder): string {
   if (!order.students.length) {
     return '"Alumnos del Deal"\nSin alumnos informados desde WooCommerce.';
@@ -478,7 +531,12 @@ function buildPersonPayload(order: NormalizedWooOrder, organizationId: string) {
   };
 }
 
-function buildDealCreatePayload(order: NormalizedWooOrder, organizationId: string, personId: string) {
+function buildDealCreatePayload(
+  order: NormalizedWooOrder,
+  organizationId: string,
+  personId: string,
+  singleOptionValues: DealSingleOptionValues,
+) {
   return {
     title: buildDealTitle(order),
     status: 'open',
@@ -490,6 +548,7 @@ function buildDealCreatePayload(order: NormalizedWooOrder, organizationId: strin
     visible_to: DEFAULT_VISIBLE_TO,
     [DEAL_SERVICE_FIELD_KEY]: DEAL_INITIAL_SERVICE_VALUE,
     [DEAL_TRAINING_DATE_FIELD_KEY]: order.formattedDate,
+    [DEAL_TRAINING_FIELD_KEY]: singleOptionValues.trainingOptionId,
     [DEAL_WC_ORDER_FIELD_KEY]: order.orderId,
     [DEAL_TRAFFIC_SOURCE_FIELD_KEY]: order.trafficSource,
     [DEAL_SOURCE_FIELD_KEY]: DEAL_INITIAL_SOURCE_VALUE,
@@ -497,7 +556,7 @@ function buildDealCreatePayload(order: NormalizedWooOrder, organizationId: strin
   };
 }
 
-function buildDealUpdatePayload(order: NormalizedWooOrder) {
+function buildDealUpdatePayload(order: NormalizedWooOrder, singleOptionValues: DealSingleOptionValues) {
   return {
     status: 'won',
     stage_id: DEFAULT_WON_STAGE_ID,
@@ -505,9 +564,10 @@ function buildDealUpdatePayload(order: NormalizedWooOrder) {
     visible_to: DEFAULT_VISIBLE_TO,
     currency: order.subtotal > 0 ? 'EUR' : undefined,
     [DEAL_SERVICE_FIELD_KEY]: DEAL_WON_SERVICE_VALUE,
-    [DEAL_SITE_FIELD_KEY]: order.formattedLocation,
+    [DEAL_TRAINING_FIELD_KEY]: singleOptionValues.trainingOptionId,
+    [DEAL_SITE_FIELD_KEY]: singleOptionValues.siteOptionId,
     [DEAL_STUDENTS_FIELD_KEY]: String(order.quantity),
-    [DEAL_FUNDAE_FIELD_KEY]: order.fundae,
+    [DEAL_FUNDAE_FIELD_KEY]: singleOptionValues.fundaeOptionId,
     [DEAL_WC_ORDER_FIELD_KEY]: `Order en Woocommerce: ${order.orderNumber}`,
     [DEAL_SKU_FIELD_KEY]: order.sku,
     [DEAL_VARIATION_FIELD_KEY]: order.variationIdWoo,
@@ -731,8 +791,18 @@ export async function sendWooOrderToPipedrive(params: {
   const warnings: string[] = [];
   const classification = classifyOrder(order);
   const resolvedProduct = await resolveProduct(params.prisma, order);
+  const singleOptionValues = await resolveDealSingleOptionValues(params.prisma, order);
   if (!resolvedProduct.idPipe) {
     warnings.push('No se ha encontrado el producto de Pipedrive vinculado al pedido.');
+  }
+  if (order.productName && !singleOptionValues.trainingOptionId) {
+    warnings.push(`No se ha encontrado la opción de Pipedrive para Formación con parent_name "${order.productName}".`);
+  }
+  if (order.productName && !singleOptionValues.siteOptionId) {
+    warnings.push(`No se ha encontrado la opción de Pipedrive para Sede de la Formación con parent_name "${order.productName}".`);
+  }
+  if (order.productName && !singleOptionValues.fundaeOptionId) {
+    warnings.push(`No se ha encontrado la opción de Pipedrive para FUNDAE con parent_name "${order.productName}".`);
   }
 
   const organizationPayload = buildOrganizationPayload(order);
@@ -766,11 +836,11 @@ export async function sendWooOrderToPipedrive(params: {
   const dealEntity = existingDeal
     ? await pdRequest(`/deals/${encodeURIComponent(String(extractEntityId(existingDeal)))}`, {
         method: 'PUT',
-        body: buildDealCreatePayload(order, organizationId, personId),
+        body: buildDealCreatePayload(order, organizationId, personId, singleOptionValues),
       })
     : await pdRequest('/deals', {
         method: 'POST',
-        body: buildDealCreatePayload(order, organizationId, personId),
+        body: buildDealCreatePayload(order, organizationId, personId, singleOptionValues),
       });
   const dealId = extractEntityId(dealEntity?.data ?? dealEntity);
   if (!dealId) {
@@ -805,7 +875,7 @@ export async function sendWooOrderToPipedrive(params: {
 
   await pdRequest(`/deals/${encodeURIComponent(dealId)}`, {
     method: 'PUT',
-    body: buildDealUpdatePayload(order),
+    body: buildDealUpdatePayload(order, singleOptionValues),
   });
 
   if (classification.requiresFundae) {
