@@ -30,6 +30,27 @@ import { DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY } from './queryKeys';
 import type { DealsListOptions } from './api/deals.api';
 import { fetchProducts } from '../recursos/products.api';
 
+
+function DollarIcon({ size = 16 }: { size?: number }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: size,
+        height: size,
+        fontSize: Math.max(12, size - 1),
+        lineHeight: 1,
+        fontWeight: 700,
+      }}
+    >
+      $
+    </span>
+  );
+}
+
 function TrashIcon({ size = 16 }: { size?: number }) {
   return (
     <svg
@@ -121,6 +142,7 @@ interface BudgetTableProps {
   onRetry: () => void;
   onSelect: (budget: DealSummary) => void;
   onDelete?: (budget: DealSummary) => Promise<void>;
+  onSendToHolded?: (budget: DealSummary) => Promise<void>;
   labels?: Partial<BudgetTableLabels>;
   enableFallback?: boolean;
   filtersContainer?: HTMLElement | null;
@@ -783,6 +805,7 @@ export function BudgetTable({
   onRetry,
   onSelect,
   onDelete,
+  onSendToHolded,
   labels: labelsProp,
   enableFallback = true,
   filtersContainer,
@@ -1129,6 +1152,7 @@ export function BudgetTable({
   );
 
   const showDeleteAction = typeof onDelete === 'function';
+  const showSendToHoldedAction = typeof onSendToHolded === 'function';
 
   const handleFilterChange = useCallback(
     (key: string, value: string) => {
@@ -1143,6 +1167,39 @@ export function BudgetTable({
       setSearchValue(value);
     },
     [setSearchValue],
+  );
+
+  const handleSendToHolded = useCallback(
+    async (event: React.MouseEvent, budget: DealSummary) => {
+      event.stopPropagation();
+      if (!showSendToHoldedAction || !onSendToHolded) return;
+
+      const budgetId = getBudgetId(budget);
+      if (!budgetId) {
+        window.alert('No se pudo determinar el identificador del presupuesto.');
+        return;
+      }
+
+      const confirmed = window.confirm(
+        '¿Quieres simular el envío del presupuesto a Holded con las reglas del zap de abierta?'
+      );
+
+      if (!confirmed) return;
+
+      try {
+        setSendingToHoldedId(budgetId);
+        await onSendToHolded(budget);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'No se pudo enviar el presupuesto a Holded. Inténtalo de nuevo más tarde.';
+        window.alert(message);
+      } finally {
+        setSendingToHoldedId(null);
+      }
+    },
+    [onSendToHolded, showSendToHoldedAction]
   );
 
   const handleDelete = useCallback(
@@ -1177,6 +1234,8 @@ export function BudgetTable({
     },
     [onDelete, showDeleteAction]
   );
+
+  const [sendingToHoldedId, setSendingToHoldedId] = useState<string | null>(null);
 
   const columns = useMemo<ColumnDef<DealSummary, unknown>[]>(() => {
     const presupuestoColumn: ColumnDef<DealSummary, unknown> = {
@@ -1350,7 +1409,7 @@ export function BudgetTable({
         ...followUpColumns,
       ];
 
-      if (showDeleteAction) {
+      if (showSendToHoldedAction || showDeleteAction) {
         columnsList.push({
           id: 'acciones',
           header: () => <span className="visually-hidden">Acciones</span>,
@@ -1358,22 +1417,37 @@ export function BudgetTable({
             const budget = row.original;
             const budgetId = getBudgetId(budget);
             const isDeleting = deletingId === budgetId;
+            const isSendingToHolded = sendingToHoldedId === budgetId;
             return (
-              <div className="text-end">
-                <button
-                  type="button"
-                  className="btn btn-link text-danger p-0 border-0"
-                  onClick={(event) => handleDelete(event, budget)}
-                  disabled={isDeleting}
-                  aria-label="Eliminar presupuesto"
-                >
-                  {isDeleting ? <Spinner animation="border" size="sm" /> : <TrashIcon />}
-                </button>
+              <div className="d-flex justify-content-end align-items-center gap-2">
+                {showSendToHoldedAction ? (
+                  <button
+                    type="button"
+                    className="btn btn-link text-success p-0 border-0"
+                    onClick={(event) => handleSendToHolded(event, budget)}
+                    disabled={isSendingToHolded}
+                    aria-label="Enviar presupuesto a Holded"
+                    title="Enviar presupuesto a Holded"
+                  >
+                    {isSendingToHolded ? <Spinner animation="border" size="sm" /> : <DollarIcon />}
+                  </button>
+                ) : null}
+                {showDeleteAction ? (
+                  <button
+                    type="button"
+                    className="btn btn-link text-danger p-0 border-0"
+                    onClick={(event) => handleDelete(event, budget)}
+                    disabled={isDeleting}
+                    aria-label="Eliminar presupuesto"
+                  >
+                    {isDeleting ? <Spinner animation="border" size="sm" /> : <TrashIcon />}
+                  </button>
+                ) : null}
               </div>
             );
           },
           enableSorting: false,
-          meta: { style: { width: 56 } },
+          meta: { style: { width: showSendToHoldedAction && showDeleteAction ? 84 : 56 } },
         });
       }
 
@@ -1440,7 +1514,7 @@ export function BudgetTable({
       },
     ];
 
-    if (showDeleteAction) {
+    if (showSendToHoldedAction || showDeleteAction) {
       baseColumns.push({
         id: 'acciones',
         header: () => <span className="visually-hidden">Acciones</span>,
@@ -1448,27 +1522,42 @@ export function BudgetTable({
           const budget = row.original;
           const budgetId = getBudgetId(budget);
           const isDeleting = deletingId === budgetId;
+          const isSendingToHolded = sendingToHoldedId === budgetId;
           return (
-            <div className="text-end">
-              <button
-                type="button"
-                className="btn btn-link text-danger p-0 border-0"
-                onClick={(event) => handleDelete(event, budget)}
-                disabled={isDeleting}
-                aria-label="Eliminar presupuesto"
-              >
-                {isDeleting ? <Spinner animation="border" size="sm" /> : <TrashIcon />}
-              </button>
+            <div className="d-flex justify-content-end align-items-center gap-2">
+              {showSendToHoldedAction ? (
+                <button
+                  type="button"
+                  className="btn btn-link text-success p-0 border-0"
+                  onClick={(event) => handleSendToHolded(event, budget)}
+                  disabled={isSendingToHolded}
+                  aria-label="Enviar presupuesto a Holded"
+                  title="Enviar presupuesto a Holded"
+                >
+                  {isSendingToHolded ? <Spinner animation="border" size="sm" /> : <DollarIcon />}
+                </button>
+              ) : null}
+              {showDeleteAction ? (
+                <button
+                  type="button"
+                  className="btn btn-link text-danger p-0 border-0"
+                  onClick={(event) => handleDelete(event, budget)}
+                  disabled={isDeleting}
+                  aria-label="Eliminar presupuesto"
+                >
+                  {isDeleting ? <Spinner animation="border" size="sm" /> : <TrashIcon />}
+                </button>
+              ) : null}
             </div>
           );
         },
         enableSorting: false,
-        meta: { style: { width: 56 } },
+        meta: { style: { width: showSendToHoldedAction && showDeleteAction ? 84 : 56 } },
       });
     }
 
     return baseColumns;
-  }, [deletingId, handleDelete, showDeleteAction, variant]);
+  }, [deletingId, handleDelete, handleSendToHolded, sendingToHoldedId, showDeleteAction, showSendToHoldedAction, variant]);
 
   const table = useReactTable<DealSummary>({
     data: paginatedBudgets,

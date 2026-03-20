@@ -20,6 +20,7 @@ export type BudgetSectionLayoutProps = {
   onRetry: () => void;
   onSelect: (budget: DealSummary) => void;
   onDelete?: (budget: DealSummary) => Promise<void>;
+  onSendToHolded?: (budget: DealSummary) => Promise<void>;
   onOpenImportModal: () => void;
   isImporting: boolean;
   canImport: boolean;
@@ -46,6 +47,7 @@ export function BudgetSectionLayout({
   onRetry,
   onSelect,
   onDelete,
+  onSendToHolded,
   onOpenImportModal,
   isImporting,
   canImport,
@@ -93,6 +95,7 @@ export function BudgetSectionLayout({
           onRetry={onRetry}
           onSelect={onSelect}
           onDelete={onDelete}
+          onSendToHolded={onSendToHolded}
           labels={tableLabels}
           enableFallback={enableFallback}
           filtersContainer={filtersContainer}

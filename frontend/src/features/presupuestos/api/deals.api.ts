@@ -219,6 +219,27 @@ export async function deleteDeal(dealId: string): Promise<void> {
   });
 }
 
+export type SendBudgetToHoldedResult = {
+  documentId: string;
+  holdedContactId?: string | null;
+  holdedContactCode?: string | null;
+  budgetKind?: 'empresa' | 'individual';
+  routeKey?: 'andalucia' | 'madrid' | 'sabadell';
+  simulated?: boolean;
+};
+
+export async function sendBudgetToHolded(dealId: string): Promise<SendBudgetToHoldedResult> {
+  const normalizedId = String(dealId ?? '').trim();
+  if (!normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'Falta dealId para enviar el presupuesto a Holded');
+  }
+
+  return request<SendBudgetToHoldedResult>('/budgets-send-to-holded', {
+    method: 'POST',
+    body: JSON.stringify({ dealId: normalizedId }),
+  });
+}
+
 export async function patchDealEditable(
   dealId: string,
   dealPatch: Partial<DealEditablePatch>,
