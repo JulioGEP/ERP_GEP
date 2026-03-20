@@ -33,6 +33,24 @@ const DEAL_PIPELINE_ID = '3';
 const DEAL_WON_STATUS = 'won';
 const DEAL_STAGE_NAME = 'Formación Ganada';
 const INDIVIDUAL_PAYMENT_METHOD_ID = '65845b74c9a83d8ce30d8b72';
+const HOLDED_PAYMENT_METHOD_BY_PIPEDRIVE_FORM = [
+  {
+    pipedriveValue: 'TRF CAIXABANK ES42 2100 0297 0002 0048 7560',
+    holdedId: '65845b74c9a83d8ce30d8b72',
+  },
+  {
+    pipedriveValue: 'TRF BSANTANDER ES25 0049 2558 5127 1454 6449',
+    holdedId: '65a4ea68deb80f770a03a605',
+  },
+  {
+    pipedriveValue: 'CXB TPV WEB',
+    holdedId: '6759892555d547e2c90aa0ae',
+  },
+  {
+    pipedriveValue: 'TRF BSABADELL ES77 0081 0404 8500 0126 3131',
+    holdedId: '65aa2fa043e2b80e3401df97',
+  },
+] as const;
 
 type RouteKey = 'andalucia' | 'madrid' | 'sabadell';
 type BudgetKind = 'empresa' | 'individual';
@@ -189,6 +207,21 @@ function resolveBudgetKind(serviceTypeLabel: string | null): BudgetKind | null {
 
 function getRouteConfig(kind: BudgetKind, routeKey: RouteKey): RouteConfig {
   return kind === 'empresa' ? COMPANY_ROUTE_CONFIG[routeKey] : INDIVIDUAL_ROUTE_CONFIG[routeKey];
+}
+
+function resolveHoldedPaymentMethodId(paymentForm: string | null): string | null {
+  const normalizedPaymentForm = normalizeComparison(paymentForm);
+  if (!normalizedPaymentForm) return null;
+
+  const exactMatch = HOLDED_PAYMENT_METHOD_BY_PIPEDRIVE_FORM.find(
+    (entry) => normalizeComparison(entry.pipedriveValue) === normalizedPaymentForm,
+  );
+  if (exactMatch) return exactMatch.holdedId;
+
+  const partialMatch = HOLDED_PAYMENT_METHOD_BY_PIPEDRIVE_FORM.find((entry) =>
+    normalizedPaymentForm.includes(normalizeComparison(entry.pipedriveValue)),
+  );
+  return partialMatch?.holdedId ?? null;
 }
 
 function buildBudgetNotes(params: {
@@ -441,10 +474,14 @@ export const handler = createHttpHandler<{ dealId?: string }>(async (request) =>
       individual: budgetKind === 'individual',
     });
 
+    const paymentFormLabel = resolveFieldLabel(deal, fieldDefs, [DEAL_PAYMENT_FORM_FIELD_KEY])
+      ?? normalizeText(deal?.[DEAL_PAYMENT_FORM_FIELD_KEY]);
+    const holdedPaymentMethodId = resolveHoldedPaymentMethodId(paymentFormLabel);
+
     const notes = buildBudgetNotes({
       po: normalizeText(deal?.[DEAL_PO_FIELD_KEY]),
       paymentDay: normalizeText(deal?.[DEAL_PAYMENT_DAY_FIELD_KEY]),
-      paymentForm: normalizeText(deal?.[DEAL_PAYMENT_FORM_FIELD_KEY]),
+      paymentForm: paymentFormLabel,
       invoiceEmail: normalizeText(deal?.[DEAL_INVOICE_EMAIL_FIELD_KEY]),
       trainingSite: resolveFieldLabel(deal, fieldDefs, [DEAL_TRAINING_SITE_FIELD_KEY]),
       trainingDate: normalizeText(deal?.[DEAL_TRAINING_DATE_FIELD_KEY]),
@@ -467,7 +504,9 @@ export const handler = createHttpHandler<{ dealId?: string }>(async (request) =>
       items,
     };
 
-    if (budgetKind === 'individual') {
+    if (holdedPaymentMethodId) {
+      quotePayload.paymentMethod = holdedPaymentMethodId;
+    } else if (budgetKind === 'individual') {
       quotePayload.paymentMethod = INDIVIDUAL_PAYMENT_METHOD_ID;
     }
 
