@@ -81,12 +81,17 @@ type FieldOptionLookupParams = {
   fieldKey: string;
   fieldName: string;
   candidateLabels: Array<string | null | undefined>;
+  fallbackLabels?: Array<string | null | undefined>;
 };
 
 const DEFAULT_ORG_OWNER_ID = parseIntegerEnv(process.env.WOOCOMMERCE_PIPE_DEFAULT_OWNER_ID, 13444807);
 const DEFAULT_PIPELINE_ID = parseIntegerEnv(process.env.WOOCOMMERCE_PIPE_PIPELINE_ID, 3);
 const DEFAULT_OPEN_STAGE_ID = parseIntegerEnv(process.env.WOOCOMMERCE_PIPE_OPEN_STAGE_ID, 13);
 const DEFAULT_WON_STAGE_ID = parseIntegerEnv(process.env.WOOCOMMERCE_PIPE_WON_STAGE_ID, 18);
+const DEFAULT_PRESUCLIENTE_STAGE_ID = parseIntegerEnv(
+  process.env.WOOCOMMERCE_PIPE_PRESUCLIENTE_STAGE_ID,
+  DEFAULT_WON_STAGE_ID,
+);
 const DEFAULT_VISIBLE_TO = parseIntegerEnv(process.env.WOOCOMMERCE_PIPE_VISIBLE_TO, 7);
 
 const ORG_CIF_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_ORG_CIF_FIELD_KEY || '6d39d015a33921753410c1bab0b067ca93b8cf2c';
@@ -373,6 +378,26 @@ function hasCoupon(order: NormalizedWooOrder, couponCode: string): boolean {
   return order.couponCodes.some((coupon) => coupon === normalizedCouponCode);
 }
 
+function resolveDealLifecycle(order: NormalizedWooOrder): {
+  status: 'open' | 'won';
+  stageId: number;
+  serviceValue: string;
+} {
+  if (hasCoupon(order, 'presucliente')) {
+    return {
+      status: 'open',
+      stageId: DEFAULT_PRESUCLIENTE_STAGE_ID,
+      serviceValue: DEAL_INITIAL_SERVICE_VALUE,
+    };
+  }
+
+  return {
+    status: 'won',
+    stageId: DEFAULT_WON_STAGE_ID,
+    serviceValue: DEAL_WON_SERVICE_VALUE,
+  };
+}
+
 function toBigIntOrNull(value: string | null): bigint | null {
   if (!value) return null;
   if (!/^\d+$/.test(value)) return null;
@@ -476,7 +501,12 @@ async function resolveSingleOptionId(
     .map((candidate) => normalizeLookupLabel(candidate))
     .filter((candidate): candidate is string => Boolean(candidate));
 
-  if (!normalizedCandidates.length) {
+  const normalizedFallbackCandidates = (params.fallbackLabels ?? [])
+    .map((candidate) => readString(candidate))
+    .map((candidate) => normalizeLookupLabel(candidate))
+    .filter((candidate): candidate is string => Boolean(candidate));
+
+  if (!normalizedCandidates.length && !normalizedFallbackCandidates.length) {
     return { optionId: null, matchedLabel: null };
   }
 
@@ -491,10 +521,15 @@ async function resolveSingleOptionId(
     orderBy: [{ option_order: 'asc' }, { option_label: 'asc' }],
   });
 
-  const match = options.find((option) => {
-    const normalizedOptionLabel = normalizeLookupLabel(option.option_label);
-    return normalizedOptionLabel ? normalizedCandidates.includes(normalizedOptionLabel) : false;
-  });
+  const matchFromCandidates = (candidates: string[]) =>
+    options.find((option) => {
+      const normalizedOptionLabel = normalizeLookupLabel(option.option_label);
+      return normalizedOptionLabel ? candidates.includes(normalizedOptionLabel) : false;
+    });
+
+  const match =
+    matchFromCandidates(normalizedCandidates) ??
+    matchFromCandidates(normalizedFallbackCandidates);
 
   return {
     optionId: match?.option_id ?? null,
@@ -507,8 +542,14 @@ async function resolveDealSingleOptionValues(
   order: NormalizedWooOrder,
   resolvedProduct: ProductResolution,
 ): Promise<DealSingleOptionValues> {
-  const trainingLookupCandidates = buildTrainingLookupCandidates([order.productName, resolvedProduct.productName]);
-  const trainingLookupLabel = trainingLookupCandidates[0] ?? null;
+  const trainingPrimaryLabel = readString(order.productName);
+  const trainingLookupCandidates = trainingPrimaryLabel
+    ? [trainingPrimaryLabel]
+    : buildTrainingLookupCandidates([order.productName, resolvedProduct.productName]);
+  const trainingFallbackCandidates = trainingPrimaryLabel
+    ? buildTrainingLookupCandidates([resolvedProduct.productName, order.productName]).filter((candidate) => candidate !== trainingPrimaryLabel)
+    : [];
+  const trainingLookupLabel = trainingPrimaryLabel ?? trainingLookupCandidates[0] ?? null;
   const siteLookupLabel = order.formattedLocation ?? order.rawLocation;
   const fundaeLookupLabel = normalizeBooleanText(order.fundae) === 'yes' ? 'Sí' : normalizeBooleanText(order.fundae) === 'no' ? 'No' : order.fundae;
 
@@ -517,6 +558,7 @@ async function resolveDealSingleOptionValues(
       fieldKey: DEAL_TRAINING_FIELD_KEY,
       fieldName: 'Formación',
       candidateLabels: trainingLookupCandidates,
+      fallbackLabels: trainingFallbackCandidates,
     }),
     resolveSingleOptionId(prisma, {
       fieldKey: DEAL_SITE_FIELD_KEY,
@@ -621,10 +663,12 @@ function buildDealCreatePayload(
   personId: string,
   singleOptionValues: DealSingleOptionValues,
 ) {
+  const isPresucliente = hasCoupon(order, 'presucliente');
+
   return {
     title: buildDealTitle(order),
     status: 'open',
-    stage_id: DEFAULT_OPEN_STAGE_ID,
+    stage_id: isPresucliente ? DEFAULT_PRESUCLIENTE_STAGE_ID : DEFAULT_OPEN_STAGE_ID,
     pipeline_id: DEFAULT_PIPELINE_ID,
     user_id: DEFAULT_ORG_OWNER_ID,
     org_id: organizationId,
@@ -641,14 +685,14 @@ function buildDealCreatePayload(
 }
 
 function buildDealUpdatePayload(order: NormalizedWooOrder, singleOptionValues: DealSingleOptionValues) {
-  const shouldKeepDealOpen = hasCoupon(order, 'presucliente');
+  const lifecycle = resolveDealLifecycle(order);
   return {
-    status: shouldKeepDealOpen ? 'open' : 'won',
-    stage_id: shouldKeepDealOpen ? DEFAULT_OPEN_STAGE_ID : DEFAULT_WON_STAGE_ID,
+    status: lifecycle.status,
+    stage_id: lifecycle.stageId,
     user_id: DEFAULT_ORG_OWNER_ID,
     visible_to: DEFAULT_VISIBLE_TO,
     currency: order.subtotal > 0 ? 'EUR' : undefined,
-    [DEAL_SERVICE_FIELD_KEY]: shouldKeepDealOpen ? DEAL_INITIAL_SERVICE_VALUE : DEAL_WON_SERVICE_VALUE,
+    [DEAL_SERVICE_FIELD_KEY]: lifecycle.serviceValue,
     [DEAL_TRAINING_FIELD_KEY]: singleOptionValues.trainingOptionId,
     [DEAL_SITE_FIELD_KEY]: singleOptionValues.siteOptionId,
     [DEAL_STUDENTS_FIELD_KEY]: String(order.quantity),
