@@ -162,6 +162,10 @@ function safeTrim(v: unknown): string | null {
   return t.length ? t : null;
 }
 
+function hasBeenSentToHolded(budget: DealSummary): boolean {
+  return Boolean(safeTrim(budget.presu_holded));
+}
+
 function getProductNames(budget: DealSummary): string[] {
   if (Array.isArray(budget.productNames) && budget.productNames.length) {
     return budget.productNames.filter(Boolean).map(String);
@@ -1180,9 +1184,7 @@ export function BudgetTable({
         return;
       }
 
-      const confirmed = window.confirm(
-        '¿Quieres simular el envío del presupuesto a Holded con las reglas del zap de abierta?'
-      );
+      const confirmed = window.confirm('¿Quieres enviar el presupuesto a Holded?');
 
       if (!confirmed) return;
 
@@ -1418,12 +1420,13 @@ export function BudgetTable({
             const budgetId = getBudgetId(budget);
             const isDeleting = deletingId === budgetId;
             const isSendingToHolded = sendingToHoldedId === budgetId;
+            const sendToHoldedClassName = hasBeenSentToHolded(budget) ? 'text-success' : 'text-danger';
             return (
               <div className="d-flex justify-content-end align-items-center gap-2">
                 {showSendToHoldedAction ? (
                   <button
                     type="button"
-                    className="btn btn-link text-success p-0 border-0"
+                    className={`btn btn-link ${sendToHoldedClassName} p-0 border-0`}
                     onClick={(event) => handleSendToHolded(event, budget)}
                     disabled={isSendingToHolded}
                     aria-label="Enviar presupuesto a Holded"
@@ -1523,12 +1526,13 @@ export function BudgetTable({
           const budgetId = getBudgetId(budget);
           const isDeleting = deletingId === budgetId;
           const isSendingToHolded = sendingToHoldedId === budgetId;
+          const sendToHoldedClassName = hasBeenSentToHolded(budget) ? 'text-success' : 'text-danger';
           return (
             <div className="d-flex justify-content-end align-items-center gap-2">
               {showSendToHoldedAction ? (
                 <button
                   type="button"
-                  className="btn btn-link text-success p-0 border-0"
+                  className={`btn btn-link ${sendToHoldedClassName} p-0 border-0`}
                   onClick={(event) => handleSendToHolded(event, budget)}
                   disabled={isSendingToHolded}
                   aria-label="Enviar presupuesto a Holded"
