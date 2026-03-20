@@ -66,10 +66,12 @@ type ProductResolution = {
   productName: string | null;
 };
 
+type PipedriveOptionValue = string | number | null;
+
 type DealSingleOptionValues = {
-  trainingOptionId: string | null;
-  siteOptionId: string | null;
-  fundaeOptionId: string | null;
+  trainingOptionId: PipedriveOptionValue;
+  siteOptionId: PipedriveOptionValue;
+  fundaeOptionId: PipedriveOptionValue;
   trainingLookupLabel: string | null;
   siteLookupLabel: string | null;
   fundaeLookupLabel: string | null;
@@ -429,6 +431,36 @@ function normalizeLookupLabel(value: string | null): string | null {
     .toLowerCase();
 }
 
+function buildTrainingLookupCandidates(values: Array<string | null | undefined>): string[] {
+  const candidates = new Set<string>();
+
+  for (const value of values) {
+    const normalizedValue = readString(value);
+    if (!normalizedValue) continue;
+
+    candidates.add(normalizedValue);
+
+    const withoutCursoPrefix = normalizedValue.replace(/^curso\s+/i, '').trim();
+    if (withoutCursoPrefix.length) {
+      candidates.add(withoutCursoPrefix);
+    }
+
+    const withoutCourseTypeSuffix = withoutCursoPrefix
+      .replace(/\s+-\s+(empresa|in company|abierta|preventivo)$/i, '')
+      .trim();
+    if (withoutCourseTypeSuffix.length) {
+      candidates.add(withoutCourseTypeSuffix);
+    }
+  }
+
+  return Array.from(candidates);
+}
+
+function toPipedriveOptionValue(value: string | null): PipedriveOptionValue {
+  const integerId = toIntegerIdOrNull(value);
+  return integerId ?? value;
+}
+
 async function resolveSingleOptionId(
   prisma: PrismaClient,
   params: FieldOptionLookupParams,
@@ -467,8 +499,10 @@ async function resolveSingleOptionId(
 async function resolveDealSingleOptionValues(
   prisma: PrismaClient,
   order: NormalizedWooOrder,
+  resolvedProduct: ProductResolution,
 ): Promise<DealSingleOptionValues> {
-  const trainingLookupLabel = order.productName;
+  const trainingLookupCandidates = buildTrainingLookupCandidates([order.productName, resolvedProduct.productName]);
+  const trainingLookupLabel = trainingLookupCandidates[0] ?? null;
   const siteLookupLabel = order.formattedLocation ?? order.rawLocation;
   const fundaeLookupLabel = normalizeBooleanText(order.fundae) === 'yes' ? 'Sí' : normalizeBooleanText(order.fundae) === 'no' ? 'No' : order.fundae;
 
@@ -476,7 +510,7 @@ async function resolveDealSingleOptionValues(
     resolveSingleOptionId(prisma, {
       fieldKey: DEAL_TRAINING_FIELD_KEY,
       fieldName: 'Formación',
-      candidateLabels: [trainingLookupLabel],
+      candidateLabels: trainingLookupCandidates,
     }),
     resolveSingleOptionId(prisma, {
       fieldKey: DEAL_SITE_FIELD_KEY,
@@ -491,9 +525,9 @@ async function resolveDealSingleOptionValues(
   ]);
 
   return {
-    trainingOptionId: trainingOption.optionId,
-    siteOptionId: siteOption.optionId,
-    fundaeOptionId: fundaeOption.optionId,
+    trainingOptionId: toPipedriveOptionValue(trainingOption.optionId),
+    siteOptionId: toPipedriveOptionValue(siteOption.optionId),
+    fundaeOptionId: toPipedriveOptionValue(fundaeOption.optionId),
     trainingLookupLabel,
     siteLookupLabel,
     fundaeLookupLabel,
@@ -835,7 +869,7 @@ export async function sendWooOrderToPipedrive(params: {
   const warnings: string[] = [];
   const classification = classifyOrder(order);
   const resolvedProduct = await resolveProduct(params.prisma, order);
-  const singleOptionValues = await resolveDealSingleOptionValues(params.prisma, order);
+  const singleOptionValues = await resolveDealSingleOptionValues(params.prisma, order, resolvedProduct);
   if (!resolvedProduct.idPipe) {
     warnings.push('No se ha encontrado el producto de Pipedrive vinculado al pedido.');
   }
