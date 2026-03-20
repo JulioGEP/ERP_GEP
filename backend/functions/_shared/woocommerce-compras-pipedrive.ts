@@ -742,26 +742,26 @@ async function searchOrganization(order: NormalizedWooOrder): Promise<any | null
   return null;
 }
 
-function findExactPerson(items: any[], phone: string | null, email: string | null): any | null {
-  const normalizedPhone = readString(phone);
+function extractPersonEmails(item: any): string[] {
+  const emailSources = [
+    ...readArray(item?.email),
+    ...readArray(item?.emails),
+    item?.primary_email,
+  ];
+
+  return emailSources
+    .map((value) => readString(readObject(value)?.value ?? value)?.toLowerCase() ?? null)
+    .filter((value): value is string => Boolean(value));
+}
+
+function findExactPersonByEmail(items: any[], email: string | null): any | null {
   const normalizedEmail = readString(email)?.toLowerCase() ?? null;
+  if (!normalizedEmail) return null;
 
   for (const entry of items) {
     const item = extractItemEntity(entry);
-    const phones = readArray(item?.phone)
-      .map((value) => readString(readObject(value)?.value ?? value))
-      .filter((value): value is string => Boolean(value));
-    if (normalizedPhone && phones.some((candidate) => candidate.replace(/\s+/g, '') === normalizedPhone.replace(/\s+/g, ''))) {
-      return item;
-    }
-  }
-
-  for (const entry of items) {
-    const item = extractItemEntity(entry);
-    const emails = readArray(item?.email)
-      .map((value) => readString(readObject(value)?.value ?? value)?.toLowerCase() ?? null)
-      .filter((value): value is string => Boolean(value));
-    if (normalizedEmail && emails.includes(normalizedEmail)) {
+    const emails = extractPersonEmails(item);
+    if (emails.includes(normalizedEmail)) {
       return item;
     }
   }
@@ -769,15 +769,51 @@ function findExactPerson(items: any[], phone: string | null, email: string | nul
   return null;
 }
 
+async function fetchPersonById(personId: string): Promise<any | null> {
+  const response = await pdRequest(`/persons/${encodeURIComponent(personId)}`);
+  return response?.data ?? response ?? null;
+}
+
 async function searchPerson(order: NormalizedWooOrder): Promise<any | null> {
-  const queries = [order.billingPhone, order.billingEmail].filter((value): value is string => Boolean(readString(value)));
-  for (const query of queries) {
+  const normalizedEmail = readString(order.billingEmail)?.toLowerCase() ?? null;
+  if (normalizedEmail) {
     const response = await pdRequest(
-      `/persons/search?term=${encodeURIComponent(query)}&fields=phone,email,name&exact_match=true&limit=10`,
+      `/persons/search?term=${encodeURIComponent(normalizedEmail)}&fields=email&exact_match=true&limit=10`,
     );
-    const match = findExactPerson(extractSearchItems(response), order.billingPhone, order.billingEmail);
-    if (match) return match;
+    const items = extractSearchItems(response);
+    const directMatch = findExactPersonByEmail(items, normalizedEmail);
+    if (directMatch) return directMatch;
+
+    for (const entry of items) {
+      const item = extractItemEntity(entry);
+      const personId = extractEntityId(item);
+      if (!personId) continue;
+      const person = await fetchPersonById(personId);
+      if (extractPersonEmails(person).includes(normalizedEmail)) {
+        return person;
+      }
+    }
   }
+
+  const normalizedPhone = readString(order.billingPhone);
+  if (!normalizedPhone) {
+    return null;
+  }
+
+  const response = await pdRequest(
+    `/persons/search?term=${encodeURIComponent(normalizedPhone)}&fields=phone&exact_match=true&limit=10`,
+  );
+
+  for (const entry of extractSearchItems(response)) {
+    const item = extractItemEntity(entry);
+    const phones = readArray(item?.phone)
+      .map((value) => readString(readObject(value)?.value ?? value))
+      .filter((value): value is string => Boolean(value));
+    if (phones.some((candidate) => candidate.replace(/\s+/g, '') === normalizedPhone.replace(/\s+/g, ''))) {
+      return item;
+    }
+  }
+
   return null;
 }
 
