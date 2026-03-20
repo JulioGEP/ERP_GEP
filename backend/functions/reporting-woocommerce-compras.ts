@@ -25,6 +25,46 @@ type WooCommerceComprasWebhookRecord = {
   payload_json: JsonValue;
 };
 
+function readJsonObject(value: JsonValue | null | undefined): Record<string, JsonValue> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, JsonValue>;
+}
+
+function readJsonArray(value: JsonValue | null | undefined): JsonValue[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function readText(value: JsonValue | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function resolveCouponCode(payload: JsonValue): string | null {
+  const root = readJsonObject(payload);
+  const order = readJsonObject(root?.order) ?? root;
+  const couponLines = readJsonArray(order?.coupon_lines);
+
+  const couponCodes = couponLines
+    .map((entry) => readText(readJsonObject(entry)?.code))
+    .filter((value): value is string => Boolean(value));
+
+  if (couponCodes.length) {
+    return Array.from(new Set(couponCodes)).join(', ');
+  }
+
+  return (
+    readText(order?.coupon_code) ??
+    readText(order?.discount_code) ??
+    readText(root?.coupon_code) ??
+    readText(root?.discount_code)
+  );
+}
+
 function parseLimitParam(rawLimit: string | undefined): number {
   if (!rawLimit) return DEFAULT_LIMIT;
   const parsed = Number.parseInt(rawLimit, 10);
@@ -112,6 +152,7 @@ export const handler = createHttpHandler(async (request) => {
       customerName: record.customer_name,
       customerEmail: record.customer_email,
       paymentMethod: record.payment_method,
+      couponCode: resolveCouponCode(record.payload_json),
       payload: record.payload_json,
     })),
   });
