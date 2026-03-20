@@ -1,8 +1,9 @@
 import { Fragment, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Card, Spinner, Table } from 'react-bootstrap';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isApiError } from '../../api/client';
 import {
+  deleteWooCommerceComprasWebhook,
   fetchWooCommerceComprasWebhooks,
   sendWooCommerceCompraToPipe,
   type SendWooCommerceCompraToPipeResult,
@@ -55,12 +56,16 @@ function WebhookTable({
   events,
   formatter,
   pendingEventId,
+  deletingEventId,
   onSendToPipe,
+  onDelete,
 }: {
   events: WooCommerceComprasWebhookEvent[];
   formatter: Intl.DateTimeFormat;
   pendingEventId: string | null;
+  deletingEventId: string | null;
   onSendToPipe: (eventId: string) => void;
+  onDelete: (eventId: string) => void;
 }) {
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
@@ -88,6 +93,7 @@ function WebhookTable({
           {events.map((event) => {
             const isExpanded = expandedEventId === event.id;
             const isPending = pendingEventId === event.id;
+            const isDeleting = deletingEventId === event.id;
             return (
               <Fragment key={event.id}>
                 <tr role="button" className="table-row-button" onClick={() => handleRowClick(event.id)}>
@@ -110,24 +116,44 @@ function WebhookTable({
                     <div className="text-muted small">{event.eventName ?? '—'}</div>
                   </td>
                   <td>
-                    <Button
-                      size="sm"
-                      variant="outline-primary"
-                      disabled={isPending}
-                      onClick={(buttonEvent) => {
-                        buttonEvent.stopPropagation();
-                        onSendToPipe(event.id);
-                      }}
-                    >
-                      {isPending ? (
-                        <>
-                          <Spinner as="span" animation="border" size="sm" className="me-2" />
-                          Enviando…
-                        </>
-                      ) : (
-                        'Enviar a Pipe'
-                      )}
-                    </Button>
+                    <div className="d-flex gap-2 flex-wrap">
+                      <Button
+                        size="sm"
+                        variant="outline-primary"
+                        disabled={isPending || isDeleting}
+                        onClick={(buttonEvent) => {
+                          buttonEvent.stopPropagation();
+                          onSendToPipe(event.id);
+                        }}
+                      >
+                        {isPending ? (
+                          <>
+                            <Spinner as="span" animation="border" size="sm" className="me-2" />
+                            Enviando…
+                          </>
+                        ) : (
+                          'Enviar a Pipe'
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline-danger"
+                        disabled={isPending || isDeleting}
+                        onClick={(buttonEvent) => {
+                          buttonEvent.stopPropagation();
+                          onDelete(event.id);
+                        }}
+                      >
+                        {isDeleting ? (
+                          <>
+                            <Spinner as="span" animation="border" size="sm" className="me-2" />
+                            Eliminando…
+                          </>
+                        ) : (
+                          'Eliminar'
+                        )}
+                      </Button>
+                    </div>
                   </td>
                 </tr>
                 {isExpanded ? (
@@ -148,6 +174,8 @@ function WebhookTable({
 }
 
 export default function WoocommerceComprasPage() {
+  const queryClient = useQueryClient();
+
   const dateTimeFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat('es-ES', {
@@ -162,6 +190,33 @@ export default function WoocommerceComprasPage() {
     queryKey: ['reporting', 'woocommerce-compras-webhooks'],
     queryFn: () => fetchWooCommerceComprasWebhooks({ limit: 200 }),
     staleTime: 5 * 60 * 1000,
+  });
+
+
+  const deleteWebhookMutation = useMutation({
+    mutationFn: deleteWooCommerceComprasWebhook,
+    onSuccess: (_, eventId) => {
+      setFeedback({
+        eventId,
+        kind: 'success',
+        title: 'Webhook eliminado.',
+        message: 'El registro se ha eliminado de la base de datos.',
+      });
+      queryClient.invalidateQueries({ queryKey: ['reporting', 'woocommerce-compras-webhooks'] });
+    },
+    onError: (error, eventId) => {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : 'No se pudo eliminar el webhook.';
+      setFeedback({
+        eventId,
+        kind: 'danger',
+        title: 'No se pudo eliminar el webhook.',
+        message,
+      });
+    },
   });
 
   const sendToPipeMutation = useMutation({
@@ -211,9 +266,20 @@ export default function WoocommerceComprasPage() {
         events={events}
         formatter={dateTimeFormatter}
         pendingEventId={sendToPipeMutation.isPending ? sendToPipeMutation.variables ?? null : null}
+        deletingEventId={deleteWebhookMutation.isPending ? deleteWebhookMutation.variables ?? null : null}
         onSendToPipe={(eventId) => {
           setFeedback(null);
           sendToPipeMutation.mutate(eventId);
+        }}
+        onDelete={(eventId) => {
+          if (typeof window !== 'undefined') {
+            const confirmed = window.confirm('¿Seguro que quieres eliminar este webhook? Esta acción no se puede deshacer.');
+            if (!confirmed) {
+              return;
+            }
+          }
+          setFeedback(null);
+          deleteWebhookMutation.mutate(eventId);
         }}
       />
     );

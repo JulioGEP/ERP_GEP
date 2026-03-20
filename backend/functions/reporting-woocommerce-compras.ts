@@ -39,6 +39,30 @@ export const handler = createHttpHandler(async (request) => {
     return auth.error;
   }
 
+  if (request.method === 'DELETE') {
+    const eventId = typeof request.body === 'object' && request.body !== null ? String((request.body as any).eventId ?? '').trim() : '';
+    if (!eventId.length) {
+      return errorResponse('VALIDATION_ERROR', 'El identificador del webhook es obligatorio.', 400);
+    }
+
+    try {
+      await prisma.woocommerce_compras_webhooks.delete({
+        where: { id: eventId },
+      });
+
+      return successResponse({
+        message: 'Webhook eliminado correctamente.',
+      });
+    } catch (error) {
+      console.error('[reporting-woocommerce-compras] delete webhook failed', error);
+      return errorResponse(
+        'WEBHOOK_DELETE_ERROR',
+        error instanceof Error ? error.message : 'No se pudo eliminar el webhook.',
+        500,
+      );
+    }
+  }
+
   if (request.method === 'POST') {
     const eventId = typeof request.body === 'object' && request.body !== null ? String((request.body as any).eventId ?? '').trim() : '';
     if (!eventId.length) {
