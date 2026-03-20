@@ -137,7 +137,7 @@ async function syncFieldsFromPipedrive() {
             synced_at: syncedAt,
           };
         })
-        .filter((option): option is StoredOptionCreateInput => Boolean(option));
+        .filter((option: StoredOptionCreateInput | null): option is StoredOptionCreateInput => Boolean(option));
 
       return { options };
     }),
