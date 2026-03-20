@@ -868,6 +868,15 @@ export async function saveTrainerExtraCost(
   return sanitized;
 }
 
+export async function deleteWooCommerceComprasWebhook(eventId: string): Promise<void> {
+  const normalizedEventId = sanitizeText(eventId);
+  if (!normalizedEventId) {
+    throw new Error('El identificador del webhook es obligatorio.');
+  }
+
+  await delJson('/reporting-woocommerce-compras', { eventId: normalizedEventId });
+}
+
 export type ComparativaPeriod = {
   startDate: string;
   endDate: string;
