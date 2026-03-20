@@ -367,6 +367,12 @@ function classifyOrder(order: NormalizedWooOrder): {
   };
 }
 
+function hasCoupon(order: NormalizedWooOrder, couponCode: string): boolean {
+  const normalizedCouponCode = couponCode.trim().toLowerCase();
+  if (!normalizedCouponCode.length) return false;
+  return order.couponCodes.some((coupon) => coupon === normalizedCouponCode);
+}
+
 function toBigIntOrNull(value: string | null): bigint | null {
   if (!value) return null;
   if (!/^\d+$/.test(value)) return null;
@@ -635,13 +641,14 @@ function buildDealCreatePayload(
 }
 
 function buildDealUpdatePayload(order: NormalizedWooOrder, singleOptionValues: DealSingleOptionValues) {
+  const shouldKeepDealOpen = hasCoupon(order, 'presucliente');
   return {
-    status: 'won',
-    stage_id: DEFAULT_WON_STAGE_ID,
+    status: shouldKeepDealOpen ? 'open' : 'won',
+    stage_id: shouldKeepDealOpen ? DEFAULT_OPEN_STAGE_ID : DEFAULT_WON_STAGE_ID,
     user_id: DEFAULT_ORG_OWNER_ID,
     visible_to: DEFAULT_VISIBLE_TO,
     currency: order.subtotal > 0 ? 'EUR' : undefined,
-    [DEAL_SERVICE_FIELD_KEY]: DEAL_WON_SERVICE_VALUE,
+    [DEAL_SERVICE_FIELD_KEY]: shouldKeepDealOpen ? DEAL_INITIAL_SERVICE_VALUE : DEAL_WON_SERVICE_VALUE,
     [DEAL_TRAINING_FIELD_KEY]: singleOptionValues.trainingOptionId,
     [DEAL_SITE_FIELD_KEY]: singleOptionValues.siteOptionId,
     [DEAL_STUDENTS_FIELD_KEY]: String(order.quantity),
