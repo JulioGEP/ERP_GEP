@@ -3,6 +3,7 @@ import { requireAuth } from './_shared/auth';
 import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, successResponse } from './_shared/response';
+import { sendWooOrderToPipedrive } from './_shared/woocommerce-compras-pipedrive';
 import { toMadridISOString } from './_shared/timezone';
 
 const DEFAULT_LIMIT = 200;
@@ -32,14 +33,40 @@ function parseLimitParam(rawLimit: string | undefined): number {
 }
 
 export const handler = createHttpHandler(async (request) => {
-  if (request.method !== 'GET') {
-    return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
-  }
-
   const prisma = getPrisma();
   const auth = await requireAuth(request, prisma, { requireRoles: ['Admin'] });
   if ('error' in auth) {
     return auth.error;
+  }
+
+  if (request.method === 'POST') {
+    const eventId = typeof request.body === 'object' && request.body !== null ? String((request.body as any).eventId ?? '').trim() : '';
+    if (!eventId.length) {
+      return errorResponse('VALIDATION_ERROR', 'El identificador del webhook es obligatorio.', 400);
+    }
+
+    try {
+      const result = await sendWooOrderToPipedrive({
+        prisma,
+        webhookEventId: eventId,
+      });
+
+      return successResponse({
+        message: 'Pedido enviado a Pipedrive correctamente.',
+        result,
+      });
+    } catch (error) {
+      console.error('[reporting-woocommerce-compras] send to Pipedrive failed', error);
+      return errorResponse(
+        'PIPEDRIVE_SYNC_ERROR',
+        error instanceof Error ? error.message : 'No se pudo enviar el pedido a Pipedrive.',
+        500,
+      );
+    }
+  }
+
+  if (request.method !== 'GET') {
+    return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
   }
 
   const records = (await prisma.woocommerce_compras_webhooks.findMany({
