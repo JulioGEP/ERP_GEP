@@ -42,8 +42,9 @@ function buildFeedbackSummary(result: SendWooCommerceCompraToPipeResult): string
     `Organización ${result.organizationCreated ? 'creada' : 'actualizada'}`,
     `persona ${result.personCreated ? 'creada' : 'actualizada'}`,
     `deal ${result.dealCreated ? 'creado' : 'actualizado'}`,
+    result.presupuesto ? `presupuesto ${result.presupuesto}` : null,
     result.productAdded ? 'producto añadido' : 'producto ya existente o no disponible',
-  ];
+  ].filter((part): part is string => Boolean(part));
 
   if (result.notesCreated.length) {
     parts.push(`notas creadas: ${result.notesCreated.join(', ')}`);
@@ -80,6 +81,7 @@ function WebhookTable({
           <tr>
             <th style={{ minWidth: 160 }}>Fecha</th>
             <th>Pedido</th>
+            <th>Presupuesto</th>
             <th>Estado</th>
             <th>Cliente</th>
             <th>Email</th>
@@ -105,6 +107,7 @@ function WebhookTable({
                       <div className="text-muted small">ID: {event.orderId}</div>
                     ) : null}
                   </td>
+                  <td>{event.presupuesto ?? '—'}</td>
                   <td>
                     <Badge bg="success">{event.orderStatus ?? '—'}</Badge>
                   </td>
@@ -160,7 +163,7 @@ function WebhookTable({
                 </tr>
                 {isExpanded ? (
                   <tr>
-                    <td colSpan={10}>
+                    <td colSpan={11}>
                       <div className="fw-semibold mb-2">Payload completo del webhook</div>
                       <JsonCell value={event.payload} />
                     </td>
@@ -230,6 +233,7 @@ export default function WoocommerceComprasPage() {
         title: 'Pedido enviado a Pipedrive.',
         result,
       });
+      queryClient.invalidateQueries({ queryKey: ['reporting', 'woocommerce-compras-webhooks'] });
     },
     onError: (error, eventId) => {
       const message = isApiError(error)

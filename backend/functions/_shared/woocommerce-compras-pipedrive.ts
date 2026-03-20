@@ -52,6 +52,7 @@ type PipedriveSyncResult = {
   organizationId: string;
   personId: string;
   dealId: string;
+  presupuesto: string | null;
   organizationCreated: boolean;
   personCreated: boolean;
   dealCreated: boolean;
@@ -819,10 +820,18 @@ export async function sendWooOrderToPipedrive(params: {
     );
   }
 
+  const presupuesto = dealId;
+
+  await params.prisma.woocommerce_compras_webhooks.update({
+    where: { id: params.webhookEventId },
+    data: { presupuesto },
+  });
+
   return {
     organizationId,
     personId,
     dealId,
+    presupuesto,
     organizationCreated: !existingOrganization,
     personCreated: !existingPerson,
     dealCreated: !existingDeal,

@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS public.woocommerce_compras_webhooks (
   event_name varchar(120),
   order_id varchar(80),
   order_number varchar(80),
+  presupuesto varchar(80),
   order_status varchar(40),
   order_total varchar(40),
   currency varchar(10),

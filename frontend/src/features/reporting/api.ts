@@ -580,6 +580,7 @@ export type WooCommerceComprasWebhookEvent = {
   eventName: string | null;
   orderId: string | null;
   orderNumber: string | null;
+  presupuesto: string | null;
   orderStatus: string | null;
   orderTotal: string | null;
   currency: string | null;
@@ -608,6 +609,7 @@ function sanitizeWooCommerceComprasWebhookEvent(record: unknown): WooCommerceCom
     eventName: sanitizeText(raw.eventName ?? raw.event_name),
     orderId: sanitizeText(raw.orderId ?? raw.order_id),
     orderNumber: sanitizeText(raw.orderNumber ?? raw.order_number),
+    presupuesto: sanitizeText(raw.presupuesto),
     orderStatus: sanitizeText(raw.orderStatus ?? raw.order_status),
     orderTotal: sanitizeText(raw.orderTotal ?? raw.order_total),
     currency: sanitizeText(raw.currency),
@@ -888,6 +890,7 @@ export type SendWooCommerceCompraToPipeResult = {
   organizationId: string;
   personId: string;
   dealId: string;
+  presupuesto: string | null;
   organizationCreated: boolean;
   personCreated: boolean;
   dealCreated: boolean;
@@ -913,6 +916,7 @@ export async function sendWooCommerceCompraToPipe(eventId: string): Promise<Send
     organizationId: sanitizeText(raw.organizationId) ?? '',
     personId: sanitizeText(raw.personId) ?? '',
     dealId: sanitizeText(raw.dealId) ?? '',
+    presupuesto: sanitizeText(raw.presupuesto),
     organizationCreated: Boolean(raw.organizationCreated),
     personCreated: Boolean(raw.personCreated),
     dealCreated: Boolean(raw.dealCreated),

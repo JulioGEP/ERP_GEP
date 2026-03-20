@@ -260,6 +260,7 @@ model woocommerce_compras_webhooks {
   event_name     String?  @db.VarChar(120)
   order_id       String?  @db.VarChar(80)
   order_number   String?  @db.VarChar(80)
+  presupuesto    String?  @db.VarChar(80)
   order_status   String?  @db.VarChar(40)
   order_total    String?  @db.VarChar(40)
   currency       String?  @db.VarChar(10)
