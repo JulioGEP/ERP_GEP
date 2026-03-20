@@ -16,6 +16,7 @@ import { deleteMaterialOrder, fetchMaterialOrders, updateMaterialOrder } from '.
 import { fetchTrainers } from '../features/recursos/api';
 import {
   deleteDeal,
+  sendBudgetToHolded,
   fetchDealDetail,
   fetchDeals,
   fetchDealsWithoutSessions,
@@ -1444,6 +1445,25 @@ export default function AuthenticatedApp() {
     [deleteDealMutation]
   );
 
+  const handleSendBudgetToHolded = useCallback(
+    async (budget: DealSummary) => {
+      const rawId = budget.dealId ?? budget.deal_id;
+      const id = typeof rawId === 'string' ? rawId.trim() : '';
+      if (!id) {
+        throw new Error('No se pudo determinar el identificador del presupuesto.');
+      }
+
+      const result = await sendBudgetToHolded(id);
+      const routeLabel = result.routeKey ? ` (${result.routeKey})` : '';
+      pushToast({
+        variant: 'success',
+        message: `Presupuesto enviado a Holded${routeLabel}. Documento ${result.documentId}.`,
+      });
+      queryClient.invalidateQueries({ queryKey: DEALS_QUERY_KEY });
+    },
+    [pushToast, queryClient]
+  );
+
   const handleCloseDetail = useCallback(() => {
     setSelectedBudgetSummary(null);
     setSelectedBudgetId(null);
@@ -1701,6 +1721,7 @@ export default function AuthenticatedApp() {
     onRetry: () => allBudgetsQuery.refetch(),
     onSelect: handleSelectBudget,
     onDelete: handleDeleteBudget,
+    onSendToHolded: handleSendBudgetToHolded,
     onOpenImportModal: handleOpenImportModal,
     isImporting: importMutation.isPending,
     canImport: canImportBudgets,
