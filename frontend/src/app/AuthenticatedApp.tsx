@@ -137,6 +137,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/ProductsHolded', label: 'Products Holded', path: '/recursos/products_holded' },
       { key: 'Recursos/Stock', label: 'Stock', path: '/recursos/stock' },
       { key: 'Recursos/Mailchimp', label: 'Mailchimp', path: '/recursos/mailchimp' },
+      { key: 'Recursos/CamposPipe', label: 'Campos Pipe', path: '/recursos/campos_pipe' },
       { key: 'Recursos/ImportarSesion', label: 'Importar sesiones', path: '/recursos/importar_sesion' },
       { key: 'Recursos/ImportarEnBucle', label: 'Importar en bucle', path: '/recursos/importar_en_bucle' },
       { key: 'Recursos/Proveedores', label: 'Proveedores', path: '/recursos/proveedores' },
@@ -1859,6 +1860,7 @@ export default function AuthenticatedApp() {
     onNotify: pushToast,
   };
 
+  const camposPipePageProps = {};
   const certificadosPageProps: CertificadosPageProps = { onSelectBudget: handleSelectBudget };
   const recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps = {};
   const usersPageProps: UsersPageProps = { onNotify: pushToast };
@@ -2065,6 +2067,7 @@ export default function AuthenticatedApp() {
             salasPageProps={salasPageProps}
             proveedoresPageProps={proveedoresPageProps}
             mailchimpPageProps={mailchimpPageProps}
+            camposPipePageProps={camposPipePageProps}
             templatesCertificadosPageProps={templatesCertificadosPageProps}
             productosPageProps={productosPageProps}
             productsHoldedPageProps={productsHoldedPageProps}

@@ -523,6 +523,24 @@ model pipedrive_mailchimp_persons {
   @@map("pipedrive_mailchimp_persons")
 }
 
+model pipedrive_custom_field_options {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  field_key    String   @db.VarChar(64)
+  field_name   String   @db.VarChar(255)
+  field_type   String   @db.VarChar(64)
+  option_id    String   @db.VarChar(64)
+  option_label String   @db.VarChar(500)
+  option_order Int      @default(0)
+  synced_at    DateTime @default(now()) @db.Timestamptz(6)
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([field_key, option_id], map: "ux_pipedrive_custom_field_options_field_option")
+  @@index([field_key, option_order], map: "idx_pipedrive_custom_field_options_field_order")
+  @@index([synced_at], map: "idx_pipedrive_custom_field_options_synced_at")
+  @@map("pipedrive_custom_field_options")
+}
+
 model plantillas {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name       String   @unique
