@@ -358,6 +358,14 @@ function toBigIntOrNull(value: string | null): bigint | null {
   }
 }
 
+function toIntegerIdOrNull(value: string | null): number | null {
+  if (!value) return null;
+  if (!/^\d+$/.test(value)) return null;
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
 async function resolveProduct(prisma: PrismaClient, order: NormalizedWooOrder): Promise<ProductResolution> {
   const variationId = toBigIntOrNull(order.variationIdWoo);
   if (variationId !== null) {
@@ -507,8 +515,13 @@ function buildDealUpdatePayload(order: NormalizedWooOrder) {
 }
 
 function buildAddProductPayload(order: NormalizedWooOrder, productIdPipe: string, discountPercentage: number) {
+  const normalizedProductId = toIntegerIdOrNull(productIdPipe);
+  if (normalizedProductId === null) {
+    throw new Error(`El product_id de Pipedrive no es un entero válido: ${productIdPipe}`);
+  }
+
   return {
-    product_id: productIdPipe,
+    product_id: normalizedProductId,
     item_price: order.subtotal,
     quantity: 1,
     discount_percentage: discountPercentage > 0 ? discountPercentage : undefined,
