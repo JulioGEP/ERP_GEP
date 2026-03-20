@@ -70,6 +70,15 @@ type DealSingleOptionValues = {
   trainingOptionId: string | null;
   siteOptionId: string | null;
   fundaeOptionId: string | null;
+  trainingLookupLabel: string | null;
+  siteLookupLabel: string | null;
+  fundaeLookupLabel: string | null;
+};
+
+type FieldOptionLookupParams = {
+  fieldKey: string;
+  fieldName: string;
+  candidateLabels: Array<string | null | undefined>;
 };
 
 const DEFAULT_ORG_OWNER_ID = parseIntegerEnv(process.env.WOOCOMMERCE_PIPE_DEFAULT_OWNER_ID, 13444807);
@@ -422,37 +431,72 @@ function normalizeLookupLabel(value: string | null): string | null {
 
 async function resolveSingleOptionId(
   prisma: PrismaClient,
-  fieldKey: string,
-  optionLabel: string | null,
-): Promise<string | null> {
-  const normalizedLabel = normalizeLookupLabel(optionLabel);
-  if (!normalizedLabel) return null;
+  params: FieldOptionLookupParams,
+): Promise<{ optionId: string | null; matchedLabel: string | null }> {
+  const normalizedCandidates = params.candidateLabels
+    .map((candidate) => readString(candidate))
+    .map((candidate) => normalizeLookupLabel(candidate))
+    .filter((candidate): candidate is string => Boolean(candidate));
+
+  if (!normalizedCandidates.length) {
+    return { optionId: null, matchedLabel: null };
+  }
 
   const options = await prisma.pipedrive_custom_field_options.findMany({
-    where: { field_key: fieldKey },
+    where: {
+      OR: [
+        { field_key: params.fieldKey },
+        { field_name: { equals: params.fieldName, mode: 'insensitive' } },
+      ],
+    },
     select: { option_id: true, option_label: true },
     orderBy: [{ option_order: 'asc' }, { option_label: 'asc' }],
   });
 
-  const match = options.find((option) => normalizeLookupLabel(option.option_label) === normalizedLabel);
-  return match?.option_id ?? null;
+  const match = options.find((option) => {
+    const normalizedOptionLabel = normalizeLookupLabel(option.option_label);
+    return normalizedOptionLabel ? normalizedCandidates.includes(normalizedOptionLabel) : false;
+  });
+
+  return {
+    optionId: match?.option_id ?? null,
+    matchedLabel: match?.option_label ?? null,
+  };
 }
 
 async function resolveDealSingleOptionValues(
   prisma: PrismaClient,
   order: NormalizedWooOrder,
 ): Promise<DealSingleOptionValues> {
-  const parentName = order.productName;
-  const [trainingOptionId, siteOptionId, fundaeOptionId] = await Promise.all([
-    resolveSingleOptionId(prisma, DEAL_TRAINING_FIELD_KEY, parentName),
-    resolveSingleOptionId(prisma, DEAL_SITE_FIELD_KEY, parentName),
-    resolveSingleOptionId(prisma, DEAL_FUNDAE_FIELD_KEY, parentName),
+  const trainingLookupLabel = order.productName;
+  const siteLookupLabel = order.formattedLocation ?? order.rawLocation;
+  const fundaeLookupLabel = normalizeBooleanText(order.fundae) === 'yes' ? 'Sí' : normalizeBooleanText(order.fundae) === 'no' ? 'No' : order.fundae;
+
+  const [trainingOption, siteOption, fundaeOption] = await Promise.all([
+    resolveSingleOptionId(prisma, {
+      fieldKey: DEAL_TRAINING_FIELD_KEY,
+      fieldName: 'Formación',
+      candidateLabels: [trainingLookupLabel],
+    }),
+    resolveSingleOptionId(prisma, {
+      fieldKey: DEAL_SITE_FIELD_KEY,
+      fieldName: 'Sede de la Formación',
+      candidateLabels: [siteLookupLabel, order.rawLocation],
+    }),
+    resolveSingleOptionId(prisma, {
+      fieldKey: DEAL_FUNDAE_FIELD_KEY,
+      fieldName: 'FUNDAE',
+      candidateLabels: [fundaeLookupLabel, order.fundae],
+    }),
   ]);
 
   return {
-    trainingOptionId,
-    siteOptionId,
-    fundaeOptionId,
+    trainingOptionId: trainingOption.optionId,
+    siteOptionId: siteOption.optionId,
+    fundaeOptionId: fundaeOption.optionId,
+    trainingLookupLabel,
+    siteLookupLabel,
+    fundaeLookupLabel,
   };
 }
 
@@ -795,14 +839,14 @@ export async function sendWooOrderToPipedrive(params: {
   if (!resolvedProduct.idPipe) {
     warnings.push('No se ha encontrado el producto de Pipedrive vinculado al pedido.');
   }
-  if (order.productName && !singleOptionValues.trainingOptionId) {
-    warnings.push(`No se ha encontrado la opción de Pipedrive para Formación con parent_name "${order.productName}".`);
+  if (singleOptionValues.trainingLookupLabel && !singleOptionValues.trainingOptionId) {
+    warnings.push(`No se ha encontrado la opción de Pipedrive para Formación con el valor "${singleOptionValues.trainingLookupLabel}".`);
   }
-  if (order.productName && !singleOptionValues.siteOptionId) {
-    warnings.push(`No se ha encontrado la opción de Pipedrive para Sede de la Formación con parent_name "${order.productName}".`);
+  if (singleOptionValues.siteLookupLabel && !singleOptionValues.siteOptionId) {
+    warnings.push(`No se ha encontrado la opción de Pipedrive para Sede de la Formación con el valor "${singleOptionValues.siteLookupLabel}".`);
   }
-  if (order.productName && !singleOptionValues.fundaeOptionId) {
-    warnings.push(`No se ha encontrado la opción de Pipedrive para FUNDAE con parent_name "${order.productName}".`);
+  if (singleOptionValues.fundaeLookupLabel && !singleOptionValues.fundaeOptionId) {
+    warnings.push(`No se ha encontrado la opción de Pipedrive para FUNDAE con el valor "${singleOptionValues.fundaeLookupLabel}".`);
   }
 
   const organizationPayload = buildOrganizationPayload(order);
