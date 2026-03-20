@@ -85,6 +85,7 @@ function WebhookTable({
             <th>Email</th>
             <th>Total</th>
             <th>Pago</th>
+            <th>Cupón</th>
             <th>Origen</th>
             <th style={{ minWidth: 140 }}>Acciones</th>
           </tr>
@@ -111,6 +112,7 @@ function WebhookTable({
                   <td>{event.customerEmail ?? '—'}</td>
                   <td>{event.orderTotal ? `${event.orderTotal} ${event.currency ?? ''}`.trim() : '—'}</td>
                   <td>{event.paymentMethod ?? '—'}</td>
+                  <td>{event.couponCode ?? '—'}</td>
                   <td>
                     <div>{event.source ?? '—'}</div>
                     <div className="text-muted small">{event.eventName ?? '—'}</div>
@@ -158,7 +160,7 @@ function WebhookTable({
                 </tr>
                 {isExpanded ? (
                   <tr>
-                    <td colSpan={9}>
+                    <td colSpan={10}>
                       <div className="fw-semibold mb-2">Payload completo del webhook</div>
                       <JsonCell value={event.payload} />
                     </td>

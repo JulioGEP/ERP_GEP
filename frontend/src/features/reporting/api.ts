@@ -586,6 +586,7 @@ export type WooCommerceComprasWebhookEvent = {
   customerName: string | null;
   customerEmail: string | null;
   paymentMethod: string | null;
+  couponCode: string | null;
   payload: unknown;
 };
 
@@ -613,6 +614,7 @@ function sanitizeWooCommerceComprasWebhookEvent(record: unknown): WooCommerceCom
     customerName: sanitizeText(raw.customerName ?? raw.customer_name),
     customerEmail: sanitizeText(raw.customerEmail ?? raw.customer_email),
     paymentMethod: sanitizeText(raw.paymentMethod ?? raw.payment_method),
+    couponCode: sanitizeText(raw.couponCode ?? raw.coupon_code),
     payload: raw.payload ?? null,
   } satisfies WooCommerceComprasWebhookEvent;
 }
