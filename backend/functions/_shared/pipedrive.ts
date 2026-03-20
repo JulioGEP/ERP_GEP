@@ -159,6 +159,25 @@ export async function getDealFields() {
   return setC(key, await pd(`/dealFields`));
 }
 
+export async function getDealFieldByCode(fieldCode: string) {
+  const token = process.env.PIPEDRIVE_API_TOKEN;
+  if (!token) {
+    throw new Error("Falta PIPEDRIVE_API_TOKEN en variables de entorno");
+  }
+
+  const apiRoot = BASE_URL.replace(/\/v1\/?$/i, "");
+  const url = `${apiRoot}/api/v2/dealFields/${encodeURIComponent(fieldCode)}?api_token=${encodeURIComponent(token)}`;
+  const res = await fetch(url as any, { method: "GET" });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`[pipedrive] GET /api/v2/dealFields/${fieldCode} -> ${res.status} ${text}`);
+  }
+
+  const json: any = await res.json().catch(() => ({}));
+  return json?.data ?? null;
+}
+
 export async function getProductFields() {
   const key = "productFields";
   const c = getC(key);

@@ -25,6 +25,7 @@ import type { ProductsHoldedPageProps } from '../pages/recursos/ProductsHoldedPa
 import type { StockPageProps } from '../pages/recursos/StockPage';
 import type { ProveedoresPageProps } from '../pages/recursos/ProveedoresPage';
 import type { MailchimpPageProps } from '../pages/recursos/MailchimpPage';
+import type { CamposPipePageProps } from '../pages/recursos/CamposPipePage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
 import type { ConfirmacionesPageProps } from '../pages/recursos/ConfirmacionesPage';
@@ -62,6 +63,7 @@ const SessionImportPage = lazy(() => import('../pages/recursos/SessionImportPage
 const BulkBudgetImportPage = lazy(() => import('../pages/recursos/BulkBudgetImportPage'));
 const ProveedoresPage = lazy(() => import('../pages/recursos/ProveedoresPage'));
 const MailchimpPage = lazy(() => import('../pages/recursos/MailchimpPage'));
+const CamposPipePage = lazy(() => import('../pages/recursos/CamposPipePage'));
 const ConfirmacionesPage = lazy(() => import('../pages/recursos/ConfirmacionesPage'));
 const CertificadosPage = lazy(() => import('../pages/certificados/CertificadosPage'));
 const IssuedCertificatesPage = lazy(() => import('../pages/certificados/IssuedCertificatesPage'));
@@ -136,6 +138,7 @@ type AppRouterProps = {
   salasPageProps: SalasPageProps;
   proveedoresPageProps: ProveedoresPageProps;
   mailchimpPageProps: MailchimpPageProps;
+  camposPipePageProps: CamposPipePageProps;
   templatesCertificadosPageProps: TemplatesCertificadosPageProps;
   productosPageProps: ProductosPageProps;
   productsHoldedPageProps: ProductsHoldedPageProps;
@@ -170,6 +173,7 @@ export function AppRouter({
   salasPageProps,
   proveedoresPageProps,
   mailchimpPageProps,
+  camposPipePageProps,
   templatesCertificadosPageProps,
   productosPageProps,
   productsHoldedPageProps,
@@ -442,6 +446,16 @@ export function AppRouter({
         <Route
           path="/recursos/mailchimp"
           element={<GuardedRoute path="/recursos/mailchimp" element={<MailchimpPage {...mailchimpPageProps} />} />}
+        />
+        <Route
+          path="/recursos/campos_pipe"
+          element={
+            <GuardedRoute
+              path="/recursos/campos_pipe"
+              roles={['Admin']}
+              element={<CamposPipePage {...camposPipePageProps} />}
+            />
+          }
         />
         <Route
           path="/recursos/importar_sesion"
