@@ -16,6 +16,7 @@ type WooCommerceComprasWebhookRecord = {
   event_name: string | null;
   order_id: string | null;
   order_number: string | null;
+  presupuesto: string | null;
   order_status: string | null;
   order_total: string | null;
   currency: string | null;
@@ -146,6 +147,7 @@ export const handler = createHttpHandler(async (request) => {
       eventName: record.event_name,
       orderId: record.order_id,
       orderNumber: record.order_number,
+      presupuesto: record.presupuesto,
       orderStatus: record.order_status,
       orderTotal: record.order_total,
       currency: record.currency,
