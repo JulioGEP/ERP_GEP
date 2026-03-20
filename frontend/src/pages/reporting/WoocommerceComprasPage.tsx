@@ -1,9 +1,11 @@
 import { Fragment, useMemo, useState } from 'react';
-import { Alert, Badge, Card, Spinner, Table } from 'react-bootstrap';
-import { useQuery } from '@tanstack/react-query';
+import { Alert, Badge, Button, Card, Spinner, Table } from 'react-bootstrap';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { isApiError } from '../../api/client';
 import {
   fetchWooCommerceComprasWebhooks,
+  sendWooCommerceCompraToPipe,
+  type SendWooCommerceCompraToPipeResult,
   type WooCommerceComprasWebhookEvent,
 } from '../../features/reporting/api';
 
@@ -26,12 +28,39 @@ function JsonCell({ value }: { value: unknown }) {
   );
 }
 
+type PipeFeedback = {
+  eventId: string;
+  kind: 'success' | 'danger';
+  title: string;
+  result?: SendWooCommerceCompraToPipeResult;
+  message?: string;
+};
+
+function buildFeedbackSummary(result: SendWooCommerceCompraToPipeResult): string {
+  const parts = [
+    `Organización ${result.organizationCreated ? 'creada' : 'actualizada'}`,
+    `persona ${result.personCreated ? 'creada' : 'actualizada'}`,
+    `deal ${result.dealCreated ? 'creado' : 'actualizado'}`,
+    result.productAdded ? 'producto añadido' : 'producto ya existente o no disponible',
+  ];
+
+  if (result.notesCreated.length) {
+    parts.push(`notas creadas: ${result.notesCreated.join(', ')}`);
+  }
+
+  return parts.join(' · ');
+}
+
 function WebhookTable({
   events,
   formatter,
+  pendingEventId,
+  onSendToPipe,
 }: {
   events: WooCommerceComprasWebhookEvent[];
   formatter: Intl.DateTimeFormat;
+  pendingEventId: string | null;
+  onSendToPipe: (eventId: string) => void;
 }) {
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
@@ -52,11 +81,13 @@ function WebhookTable({
             <th>Total</th>
             <th>Pago</th>
             <th>Origen</th>
+            <th style={{ minWidth: 140 }}>Acciones</th>
           </tr>
         </thead>
         <tbody>
           {events.map((event) => {
             const isExpanded = expandedEventId === event.id;
+            const isPending = pendingEventId === event.id;
             return (
               <Fragment key={event.id}>
                 <tr role="button" className="table-row-button" onClick={() => handleRowClick(event.id)}>
@@ -78,10 +109,30 @@ function WebhookTable({
                     <div>{event.source ?? '—'}</div>
                     <div className="text-muted small">{event.eventName ?? '—'}</div>
                   </td>
+                  <td>
+                    <Button
+                      size="sm"
+                      variant="outline-primary"
+                      disabled={isPending}
+                      onClick={(buttonEvent) => {
+                        buttonEvent.stopPropagation();
+                        onSendToPipe(event.id);
+                      }}
+                    >
+                      {isPending ? (
+                        <>
+                          <Spinner as="span" animation="border" size="sm" className="me-2" />
+                          Enviando…
+                        </>
+                      ) : (
+                        'Enviar a Pipe'
+                      )}
+                    </Button>
+                  </td>
                 </tr>
                 {isExpanded ? (
                   <tr>
-                    <td colSpan={8}>
+                    <td colSpan={9}>
                       <div className="fw-semibold mb-2">Payload completo del webhook</div>
                       <JsonCell value={event.payload} />
                     </td>
@@ -105,11 +156,37 @@ export default function WoocommerceComprasPage() {
       }),
     [],
   );
+  const [feedback, setFeedback] = useState<PipeFeedback | null>(null);
 
   const eventsQuery = useQuery({
     queryKey: ['reporting', 'woocommerce-compras-webhooks'],
     queryFn: () => fetchWooCommerceComprasWebhooks({ limit: 200 }),
     staleTime: 5 * 60 * 1000,
+  });
+
+  const sendToPipeMutation = useMutation({
+    mutationFn: sendWooCommerceCompraToPipe,
+    onSuccess: (result, eventId) => {
+      setFeedback({
+        eventId,
+        kind: 'success',
+        title: 'Pedido enviado a Pipedrive.',
+        result,
+      });
+    },
+    onError: (error, eventId) => {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : 'No se pudo enviar el pedido a Pipedrive.';
+      setFeedback({
+        eventId,
+        kind: 'danger',
+        title: 'No se pudo enviar a Pipedrive.',
+        message,
+      });
+    },
   });
 
   const events = eventsQuery.data ?? [];
@@ -129,7 +206,17 @@ export default function WoocommerceComprasPage() {
   } else if (!events.length) {
     content = <Alert variant="info">Todavía no se ha recibido ningún webhook de pedidos completados.</Alert>;
   } else {
-    content = <WebhookTable events={events} formatter={dateTimeFormatter} />;
+    content = (
+      <WebhookTable
+        events={events}
+        formatter={dateTimeFormatter}
+        pendingEventId={sendToPipeMutation.isPending ? sendToPipeMutation.variables ?? null : null}
+        onSendToPipe={(eventId) => {
+          setFeedback(null);
+          sendToPipeMutation.mutate(eventId);
+        }}
+      />
+    );
   }
 
   return (
@@ -145,6 +232,20 @@ export default function WoocommerceComprasPage() {
           <p className="small text-muted mb-4">
             Endpoint de recepción: <code>https://erpgep.netlify.app/api/woocommerce-compras-webhook</code>. Configura en WooCommerce el campo <code>Secret</code> con el token compartido para que la cabecera <code>X-WC-Webhook-Signature</code> se valide automáticamente.
           </p>
+          {feedback ? (
+            <Alert variant={feedback.kind} dismissible onClose={() => setFeedback(null)}>
+              <Alert.Heading className="h6">{feedback.title}</Alert.Heading>
+              {feedback.message ? <p className="mb-2">{feedback.message}</p> : null}
+              {feedback.result ? <p className="mb-2">{buildFeedbackSummary(feedback.result)}</p> : null}
+              {feedback.result?.warnings.length ? (
+                <ul className="mb-0 ps-3">
+                  {feedback.result.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </Alert>
+          ) : null}
           {content}
         </Card.Body>
       </Card>

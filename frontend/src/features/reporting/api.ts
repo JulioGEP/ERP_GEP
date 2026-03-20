@@ -873,6 +873,48 @@ export type ComparativaPeriod = {
   endDate: string;
 };
 
+export type SendWooCommerceCompraToPipeResult = {
+  organizationId: string;
+  personId: string;
+  dealId: string;
+  organizationCreated: boolean;
+  personCreated: boolean;
+  dealCreated: boolean;
+  productAdded: boolean;
+  notesCreated: string[];
+  warnings: string[];
+};
+
+export async function sendWooCommerceCompraToPipe(eventId: string): Promise<SendWooCommerceCompraToPipeResult> {
+  const normalizedEventId = sanitizeText(eventId);
+  if (!normalizedEventId) {
+    throw new Error('El identificador del webhook es obligatorio.');
+  }
+
+  const response = await postJson<{ result?: unknown }>(`/reporting-woocommerce-compras`, { eventId: normalizedEventId });
+  const result = response?.result;
+  if (!result || typeof result !== 'object') {
+    throw new Error('La respuesta del servidor no incluye el resultado de Pipedrive.');
+  }
+
+  const raw = result as Record<string, unknown>;
+  return {
+    organizationId: sanitizeText(raw.organizationId) ?? '',
+    personId: sanitizeText(raw.personId) ?? '',
+    dealId: sanitizeText(raw.dealId) ?? '',
+    organizationCreated: Boolean(raw.organizationCreated),
+    personCreated: Boolean(raw.personCreated),
+    dealCreated: Boolean(raw.dealCreated),
+    productAdded: Boolean(raw.productAdded),
+    notesCreated: Array.isArray(raw.notesCreated)
+      ? raw.notesCreated.map((value) => sanitizeText(value)).filter((value): value is string => Boolean(value))
+      : [],
+    warnings: Array.isArray(raw.warnings)
+      ? raw.warnings.map((value) => sanitizeText(value)).filter((value): value is string => Boolean(value))
+      : [],
+  };
+}
+
 export type ComparativaFilters = {
   currentPeriod: ComparativaPeriod;
   previousPeriod: ComparativaPeriod;
