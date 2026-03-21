@@ -3,24 +3,43 @@ import { requireAuth } from './_shared/auth';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, successResponse } from './_shared/response';
 import { toMadridISOString } from './_shared/timezone';
-import { getDealFieldByCode } from './_shared/pipedrive';
+import { getDealFieldByCode, getOrganizationFieldByCode } from './_shared/pipedrive';
 
 const ALLOWED_ROLES = ['Admin'] as const;
+
+type PipedriveFieldScope = 'deal' | 'organization';
 
 const TARGET_FIELDS = [
   {
     fieldKey: 'c99554c188c3f63ad9bc8b2cf7b50cbd145455ab',
     fallbackName: 'Formacion',
+    scope: 'deal',
   },
   {
     fieldKey: '676d6bd51e52999c582c01f67c99a35ed30bf6ae',
     fallbackName: 'Sede de la formación',
+    scope: 'deal',
   },
   {
     fieldKey: '245d60d4d18aec40ba888998ef92e5d00e494583',
     fallbackName: 'FUNDAE',
+    scope: 'deal',
   },
-] as const;
+  {
+    fieldKey: '8a65e9b780cbab3f08ccc8babe92a290fb79f216',
+    fallbackName: 'Tipo de empresa',
+    scope: 'organization',
+  },
+  {
+    fieldKey: '6eb20e6b912f055c127241c9012f20a8223637f6',
+    fallbackName: 'Canal Adquisición',
+    scope: 'organization',
+  },
+] as const satisfies ReadonlyArray<{
+  fieldKey: string;
+  fallbackName: string;
+  scope: PipedriveFieldScope;
+}>;
 
 type StoredOptionRecord = {
   field_key: string;
@@ -116,7 +135,10 @@ async function syncFieldsFromPipedrive() {
 
   const resolvedFields = await Promise.all(
     TARGET_FIELDS.map(async (target) => {
-      const field = await getDealFieldByCode(target.fieldKey);
+      const field =
+        target.scope === 'organization'
+          ? await getOrganizationFieldByCode(target.fieldKey)
+          : await getDealFieldByCode(target.fieldKey);
       const fieldName = normalizeString(field?.name) ?? target.fallbackName;
       const fieldType = normalizeString(field?.field_type) ?? normalizeString(field?.fieldType) ?? 'enum';
       const optionsRaw = Array.isArray(field?.options) ? field.options : [];
@@ -155,7 +177,7 @@ async function syncFieldsFromPipedrive() {
       .filter((field) => field.options.length > 0)
       .map((field) =>
         prisma.pipedrive_custom_field_options.createMany({
-        data: field.options,
+          data: field.options,
         }),
       ),
   ];
