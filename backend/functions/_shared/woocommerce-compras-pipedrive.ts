@@ -64,7 +64,6 @@ type PipedriveSyncResult = {
 type ProductResolution = {
   idPipe: string | null;
   productName: string | null;
-  unitPrice: number | null;
 };
 
 type PipedriveOptionValue = string | number | null;
@@ -140,18 +139,6 @@ function readNumber(value: unknown): number | null {
 
   if (typeof value === 'string') {
     const normalized = value.trim().replace(',', '.');
-    if (!normalized.length) return null;
-    const parsed = Number.parseFloat(normalized);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  if (typeof value === 'bigint') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  if (value && typeof value === 'object' && typeof (value as { toString?: () => string }).toString === 'function') {
-    const normalized = (value as { toString: () => string }).toString().trim().replace(',', '.');
     if (!normalized.length) return null;
     const parsed = Number.parseFloat(normalized);
     return Number.isFinite(parsed) ? parsed : null;
@@ -434,20 +421,10 @@ async function resolveProduct(prisma: PrismaClient, order: NormalizedWooOrder): 
   if (variationId !== null) {
     const variant = await prisma.variants.findFirst({
       where: { id_woo: variationId },
-      select: {
-        price: true,
-        products: { select: { id_pipe: true, name: true, variant_price: true, price: true } },
-      },
+      select: { products: { select: { id_pipe: true, name: true } } },
     });
     if (variant?.products?.id_pipe) {
-      return {
-        idPipe: variant.products.id_pipe,
-        productName: variant.products.name ?? order.productName,
-        unitPrice:
-          readNumber(variant.price) ??
-          readNumber(variant.products.variant_price) ??
-          readNumber(variant.products.price),
-      };
+      return { idPipe: variant.products.id_pipe, productName: variant.products.name ?? order.productName };
     }
   }
 
@@ -455,32 +432,24 @@ async function resolveProduct(prisma: PrismaClient, order: NormalizedWooOrder): 
   if (productWooId !== null) {
     const product = await prisma.products.findFirst({
       where: { id_woo: productWooId },
-      select: { id_pipe: true, name: true, variant_price: true, price: true },
+      select: { id_pipe: true, name: true },
     });
     if (product?.id_pipe) {
-      return {
-        idPipe: product.id_pipe,
-        productName: product.name ?? order.productName,
-        unitPrice: readNumber(product.variant_price) ?? readNumber(product.price),
-      };
+      return { idPipe: product.id_pipe, productName: product.name ?? order.productName };
     }
   }
 
   if (order.productName) {
     const product = await prisma.products.findFirst({
       where: { name: { equals: order.productName, mode: 'insensitive' } },
-      select: { id_pipe: true, name: true, variant_price: true, price: true },
+      select: { id_pipe: true, name: true },
     });
     if (product?.id_pipe) {
-      return {
-        idPipe: product.id_pipe,
-        productName: product.name ?? order.productName,
-        unitPrice: readNumber(product.variant_price) ?? readNumber(product.price),
-      };
+      return { idPipe: product.id_pipe, productName: product.name ?? order.productName };
     }
   }
 
-  return { idPipe: null, productName: order.productName, unitPrice: null };
+  return { idPipe: null, productName: order.productName };
 }
 
 function normalizeLookupLabel(value: string | null): string | null {
@@ -688,14 +657,6 @@ function buildPersonPayload(order: NormalizedWooOrder, organizationId: string) {
   };
 }
 
-function resolveBudgetSubtotal(order: NormalizedWooOrder, resolvedProduct: ProductResolution): number {
-  if (order.subtotal > 0) {
-    return order.subtotal;
-  }
-
-  return resolvedProduct.unitPrice ?? 0;
-}
-
 function buildDealCreatePayload(
   order: NormalizedWooOrder,
   organizationId: string,
@@ -723,18 +684,14 @@ function buildDealCreatePayload(
   };
 }
 
-function buildDealUpdatePayload(
-  order: NormalizedWooOrder,
-  singleOptionValues: DealSingleOptionValues,
-  budgetSubtotal: number,
-) {
+function buildDealUpdatePayload(order: NormalizedWooOrder, singleOptionValues: DealSingleOptionValues) {
   const lifecycle = resolveDealLifecycle(order);
   return {
     status: lifecycle.status,
     stage_id: lifecycle.stageId,
     user_id: DEFAULT_ORG_OWNER_ID,
     visible_to: DEFAULT_VISIBLE_TO,
-    currency: budgetSubtotal > 0 ? 'EUR' : undefined,
+    currency: order.subtotal > 0 ? 'EUR' : undefined,
     [DEAL_SERVICE_FIELD_KEY]: lifecycle.serviceValue,
     [DEAL_TRAINING_FIELD_KEY]: singleOptionValues.trainingOptionId,
     [DEAL_SITE_FIELD_KEY]: singleOptionValues.siteOptionId,
@@ -747,12 +704,7 @@ function buildDealUpdatePayload(
   };
 }
 
-function buildAddProductPayload(
-  order: NormalizedWooOrder,
-  productIdPipe: string,
-  discountPercentage: number,
-  budgetSubtotal: number,
-) {
+function buildAddProductPayload(order: NormalizedWooOrder, productIdPipe: string, discountPercentage: number) {
   const normalizedProductId = toIntegerIdOrNull(productIdPipe);
   if (normalizedProductId === null) {
     throw new Error(`El product_id de Pipedrive no es un entero válido: ${productIdPipe}`);
@@ -760,7 +712,7 @@ function buildAddProductPayload(
 
   return {
     product_id: normalizedProductId,
-    item_price: budgetSubtotal,
+    item_price: order.subtotal,
     quantity: 1,
     discount_percentage: discountPercentage > 0 ? discountPercentage : undefined,
     discount_type: 'percentage',
@@ -1060,14 +1012,12 @@ export async function sendWooOrderToPipedrive(params: {
     throw new Error('No se ha podido resolver el deal en Pipedrive.');
   }
 
-  const budgetSubtotal = resolveBudgetSubtotal(order, resolvedProduct);
-
   let productAdded = false;
   if (resolvedProduct.idPipe) {
     productAdded = await ensureDealProduct(
       dealId,
       resolvedProduct.idPipe,
-      buildAddProductPayload(order, resolvedProduct.idPipe, classification.discountPercentage, budgetSubtotal),
+      buildAddProductPayload(order, resolvedProduct.idPipe, classification.discountPercentage),
     );
   }
 
@@ -1090,12 +1040,8 @@ export async function sendWooOrderToPipedrive(params: {
 
   await pdRequest(`/deals/${encodeURIComponent(dealId)}`, {
     method: 'PUT',
-    body: buildDealUpdatePayload(order, singleOptionValues, budgetSubtotal),
+    body: buildDealUpdatePayload(order, singleOptionValues),
   });
-
-  if (order.subtotal <= 0 && budgetSubtotal > 0) {
-    warnings.push(`El pedido no incluía importe en WooCommerce; se ha usado el precio de catálogo (${budgetSubtotal} €) para generar el presupuesto con IVA.`);
-  }
 
   if (classification.requiresFundae) {
     warnings.push('El pedido requiere gestión FUNDAE: revisa la comunicación interna adicional fuera de Pipedrive.');
