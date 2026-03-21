@@ -1002,10 +1002,33 @@ async function ensureDealProduct(
 ): Promise<boolean> {
   const existingProducts = await getDealProducts(dealId);
   const products = Array.isArray(existingProducts) ? existingProducts : [];
-  if (
-    products.some((product) => readString((product as any)?.product_id) === productIdPipe || readString((product as any)?.product?.id) === productIdPipe)
-  ) {
-    return false;
+  const matchingProduct = products.find(
+    (product) =>
+      readString((product as any)?.product_id) === productIdPipe ||
+      readString((product as any)?.product?.id) === productIdPipe,
+  );
+
+  if (matchingProduct) {
+    const dealProductId =
+      readString((matchingProduct as any)?.id) ??
+      readString((matchingProduct as any)?.deal_product_id) ??
+      readString((matchingProduct as any)?.product_attachment_id);
+
+    if (!dealProductId) {
+      console.warn('[woocommerce-compras-pipedrive] Existing deal product found without attachment id; skipping update.', {
+        dealId,
+        productIdPipe,
+        matchingProduct,
+      });
+      return false;
+    }
+
+    await pdRequest(`/deals/${encodeURIComponent(dealId)}/products/${encodeURIComponent(dealProductId)}`, {
+      method: 'PUT',
+      body: payload,
+    });
+
+    return true;
   }
 
   await pdRequest(`/deals/${encodeURIComponent(dealId)}/products`, {
