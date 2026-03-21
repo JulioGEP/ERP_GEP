@@ -34,6 +34,7 @@ const DEAL_CAES_FIELD_KEY = 'e1971bf3a21d48737b682bf8d864ddc5eb15a351';
 const DEAL_BANK_ACCOUNT_FIELD_KEY = '18a96262c85016d68b9d4dd76c37768341928375';
 const DEAL_EMPRESA_PIPELINE_ID = '1';
 const DEAL_ABIERTA_PIPELINE_ID = '3';
+const DEAL_MATERIAL_PIPELINE_ID = '4';
 const SERVICE_PIPELINE_LABELS = {
   gepServices: 'GEP Services',
   preventivos: 'Preventivos',
@@ -79,7 +80,7 @@ type EmpresaRouteKey =
   | 'nacional';
 type RouteKey = AbiertaRouteKey | EmpresaRouteKey;
 type BudgetKind = 'empresa' | 'individual';
-type PipelineMode = 'abierta' | 'empresa' | 'services';
+type PipelineMode = 'abierta' | 'empresa' | 'services' | 'material';
 type ServicePipelineKey = keyof typeof SERVICE_PIPELINE_LABELS;
 type ServiceTypeKey = 'bomberosPrivados' | 'pci' | 'pau' | 'productos' | 'cesion' | 'formacion';
 
@@ -153,6 +154,10 @@ const EMPRESA_ROUTE_CONFIG: Record<EmpresaRouteKey, RouteConfig> = {
   },
 };
 
+const MATERIAL_ROUTE_CONFIG: RouteConfig = {
+  salesChannelId: '678787a1baee7f3c9c0c84ef',
+  tags: ['productos'],
+};
 
 const PREVENTIVOS_ROUTE_CONFIG: Record<Extract<EmpresaRouteKey, 'andaluciaInCompany' | 'madridInCompany' | 'sabadellInCompany'>, RouteConfig> = {
   andaluciaInCompany: {
@@ -591,6 +596,7 @@ function resolvePipelineMode(deal: Record<string, any>): PipelineMode | null {
   const pipelineId = normalizeText(deal?.pipeline_id);
   if (pipelineId === DEAL_EMPRESA_PIPELINE_ID) return 'empresa';
   if (pipelineId === DEAL_ABIERTA_PIPELINE_ID) return 'abierta';
+  if (pipelineId === DEAL_MATERIAL_PIPELINE_ID) return 'material';
 
   if (resolveServicePipelineKey(deal)) return 'services';
 
@@ -599,7 +605,7 @@ function resolvePipelineMode(deal: Record<string, any>): PipelineMode | null {
   if (normalizedPipeline.includes('formacion empresa')) return 'empresa';
   if (normalizedPipeline.includes('formacion abierta')) return 'abierta';
   if (isMaterialPipeline(deal?.pipeline_name) || isMaterialPipeline(deal?.pipeline_label) || isMaterialPipeline(pipelineId)) {
-    return null;
+    return 'material';
   }
   if (pipelineLabel || pipelineId) return 'services';
 
@@ -790,14 +796,18 @@ export async function syncBudgetToHolded({
     throw buildSyncError('INVALID_STATUS', 'Solo se pueden sincronizar con Holded deals ganados.', 400);
   }
 
-  const expectedStageName = pipelineMode === 'abierta' ? DEAL_ABIERTA_STAGE_NAME : DEAL_EMPRESA_STAGE_NAME;
-  if (stageName && normalizeComparison(stageName) !== normalizeComparison(expectedStageName)) {
+  const expectedStageName = pipelineMode === 'abierta'
+    ? DEAL_ABIERTA_STAGE_NAME
+    : pipelineMode === 'empresa'
+      ? DEAL_EMPRESA_STAGE_NAME
+      : null;
+  if (expectedStageName && stageName && normalizeComparison(stageName) !== normalizeComparison(expectedStageName)) {
     throw buildSyncError('INVALID_STAGE', `El deal debe estar en la fase ${expectedStageName}.`, 400);
   }
 
   const title = normalizeText(deal?.title);
   if (
-    (pipelineMode === 'empresa' || pipelineMode === 'services')
+    (pipelineMode === 'empresa' || pipelineMode === 'services' || pipelineMode === 'material')
     && title
     && normalizeComparison(title).startsWith(normalizeComparison(DEAL_EMPRESA_EXCLUDED_TITLE_PREFIX))
   ) {
@@ -817,9 +827,11 @@ export async function syncBudgetToHolded({
     ? resolveEmpresaRouteKey(routeLabel)
     : pipelineMode === 'abierta'
       ? resolveAbiertaRouteKey(routeLabel)
-      : resolveEmpresaRouteKey(routeLabel);
+      : pipelineMode === 'services'
+        ? resolveEmpresaRouteKey(routeLabel)
+        : null;
 
-  if (pipelineMode !== 'services' && !routeKey) {
+  if (pipelineMode !== 'services' && pipelineMode !== 'material' && !routeKey) {
     throw buildSyncError(
       'UNSUPPORTED_SITE',
       'La sede del presupuesto no está contemplada en la automatización.',
@@ -827,7 +839,7 @@ export async function syncBudgetToHolded({
     );
   }
 
-  const budgetKind = pipelineMode === 'empresa' || pipelineMode === 'services'
+  const budgetKind = pipelineMode === 'empresa' || pipelineMode === 'services' || pipelineMode === 'material'
     ? 'empresa'
     : resolveBudgetKind(serviceTypeLabel);
   if (!budgetKind) {
@@ -853,11 +865,13 @@ export async function syncBudgetToHolded({
     ? getEmpresaRouteConfig(routeKey as EmpresaRouteKey)
     : pipelineMode === 'abierta'
       ? getAbiertaRouteConfig(budgetKind, routeKey as AbiertaRouteKey)
-      : resolveServicesRouteConfig({
-          pipelineKey: servicePipelineKey!,
-          serviceTypeKey,
-          routeKey: routeKey as EmpresaRouteKey | null,
-        });
+      : pipelineMode === 'material'
+        ? MATERIAL_ROUTE_CONFIG
+        : resolveServicesRouteConfig({
+            pipelineKey: servicePipelineKey!,
+            serviceTypeKey,
+            routeKey: routeKey as EmpresaRouteKey | null,
+          });
 
   if (!routeConfig) {
     const code = routeKey ? 'UNSUPPORTED_SERVICE_TYPE' : 'UNSUPPORTED_SITE';
@@ -887,10 +901,12 @@ export async function syncBudgetToHolded({
   const bankAccountLabel = resolveFieldLabel(deal, fieldDefs, [DEAL_BANK_ACCOUNT_FIELD_KEY])
     ?? normalizeText(deal?.[DEAL_BANK_ACCOUNT_FIELD_KEY]);
   const holdedPaymentMethodId = resolveHoldedPaymentMethodId(
-    pipelineMode === 'empresa' || pipelineMode === 'services' ? bankAccountLabel ?? paymentFormLabel : paymentFormLabel,
+    pipelineMode === 'empresa' || pipelineMode === 'services' || pipelineMode === 'material'
+      ? bankAccountLabel ?? paymentFormLabel
+      : paymentFormLabel,
   ) ?? resolveHoldedPaymentMethodFallback(deal, fieldDefs);
 
-  const notes = pipelineMode === 'empresa' || pipelineMode === 'services'
+  const notes = pipelineMode === 'empresa' || pipelineMode === 'services' || pipelineMode === 'material'
     ? buildEmpresaBudgetNotes({
         po: normalizeText(deal?.[DEAL_PO_FIELD_KEY]),
         paymentDay: normalizeText(deal?.[DEAL_PAYMENT_DAY_FIELD_KEY]),
