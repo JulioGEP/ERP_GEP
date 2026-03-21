@@ -198,6 +198,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         path: '/reporting/woocommerce_compras',
       },
       {
+        key: 'Reporting/WebhooksLeadForm',
+        label: 'Webhooks Lead Form',
+        path: '/reporting/webhooks_lead_form',
+      },
+      {
         key: 'Reporting/Slack',
         label: 'Slack',
         path: '/reporting/slack',
