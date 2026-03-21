@@ -80,17 +80,18 @@ const NAVBAR_OFFCANVAS_LABEL_ID = 'app-navbar-offcanvas-label';
 const CONTROL_HORARIO_URL = 'https://erpgep.netlify.app/control_horario';
 const DASHBOARD_URL = 'https://erpgep.netlify.app/dashboard';
 
-type NavChild = {
+type NavNode = {
   key: string;
   label: string;
-  path: string;
+  path?: string;
+  children?: NavNode[];
 };
 
 type NavItem = {
   key: string;
   label: string;
   path?: string;
-  children?: NavChild[];
+  children?: NavNode[];
 };
 
 const BASE_NAVIGATION_ITEMS: NavItem[] = [
@@ -138,6 +139,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/ProductsHolded', label: 'Products Holded', path: '/recursos/products_holded' },
       { key: 'Recursos/Stock', label: 'Stock', path: '/recursos/stock' },
       { key: 'Recursos/Mailchimp', label: 'Mailchimp', path: '/recursos/mailchimp' },
+      { key: 'Recursos/Slack', label: 'Slack', path: '/recursos/slack' },
       { key: 'Recursos/CamposPipe', label: 'Campos Pipe', path: '/recursos/campos_pipe' },
       { key: 'Recursos/ImportarSesion', label: 'Importar sesiones', path: '/recursos/importar_sesion' },
       { key: 'Recursos/ImportarEnBucle', label: 'Importar en bucle', path: '/recursos/importar_en_bucle' },
@@ -183,39 +185,40 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     label: 'Reporting',
     children: [
       {
-        key: 'Reporting/Comparativa',
-        label: 'Comparativa Formaciones y Servicios',
-        path: '/reporting/comparativa',
-      },
-      {
-        key: 'Reporting/WebhooksPipedrive',
-        label: 'Webhooks Pipedrive',
-        path: '/reporting/webhooks_pipedrive',
-      },
-      {
-        key: 'Reporting/WoocommerceCompras',
-        label: 'Woocommerce Compras',
-        path: '/reporting/woocommerce_compras',
-      },
-      {
-        key: 'Reporting/WebhooksLeadForm',
-        label: 'Webhooks Lead Form',
-        path: '/reporting/webhooks_lead_form',
-      },
-      {
-        key: 'Reporting/Slack',
-        label: 'Slack',
-        path: '/reporting/slack',
-      },
-      {
-        key: 'Reporting/Logs',
-        label: 'Logs',
-        path: '/reporting/logs',
+        key: 'Reporting/MultiLogs',
+        label: 'Multi Logs',
+        children: [
+          {
+            key: 'Reporting/WebhooksPipedrive',
+            label: 'Webhooks Pipedrive',
+            path: '/reporting/webhooks_pipedrive',
+          },
+          {
+            key: 'Reporting/WoocommerceCompras',
+            label: 'Woocommerce Compras',
+            path: '/reporting/woocommerce_compras',
+          },
+          {
+            key: 'Reporting/WebhooksLeadForm',
+            label: 'Webhooks Lead Form',
+            path: '/reporting/webhooks_lead_form',
+          },
+          {
+            key: 'Reporting/Logs',
+            label: 'Logs',
+            path: '/reporting/logs',
+          },
+        ],
       },
       {
         key: 'Reporting/ReporteNominas',
         label: 'Reporte Nóminas',
         path: '/reporting/reporte_nominas',
+      },
+      {
+        key: 'Reporting/Comparativa',
+        label: 'Comparativa Formaciones y Servicios',
+        path: '/reporting/comparativa',
       },
     ],
   },
@@ -413,6 +416,89 @@ function sanitizeStringArray(values: unknown[]): string[] {
     output.push(normalized);
   });
   return output;
+}
+
+function navNodeMatchesPath(node: NavNode, pathname: string): boolean {
+  if (node.path && pathname.startsWith(node.path)) {
+    return true;
+  }
+  return node.children?.some((child) => navNodeMatchesPath(child, pathname)) ?? false;
+}
+
+function renderNavDropdownNode(
+  node: NavNode,
+  onNavigate: () => void,
+  pathname: string,
+  depth = 0,
+): JSX.Element {
+  if (node.children && node.children.length > 0) {
+    return (
+      <div
+        key={node.key}
+        className={`navbar-submenu-group${depth > 0 ? ' navbar-submenu-group-nested' : ''}`}
+      >
+        <div
+          className={`navbar-submenu-label${navNodeMatchesPath(node, pathname) ? ' active' : ''}`}
+        >
+          {node.label}
+        </div>
+        <div className="navbar-submenu-children">
+          {node.children.map((child) => renderNavDropdownNode(child, onNavigate, pathname, depth + 1))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <NavDropdown.Item key={node.key} as={NavLink} to={node.path ?? '#'} onClick={onNavigate}>
+      {node.label}
+    </NavDropdown.Item>
+  );
+}
+
+function findFirstPermittedPath(nodes: readonly NavNode[], hasPermission: (path: string) => boolean): string | null {
+  for (const node of nodes) {
+    if (node.path && hasPermission(node.path)) {
+      return node.path;
+    }
+    if (node.children?.length) {
+      const childPath = findFirstPermittedPath(node.children, hasPermission);
+      if (childPath) {
+        return childPath;
+      }
+    }
+  }
+  return null;
+}
+
+function filterNavNodes(
+  nodes: readonly NavNode[],
+  hasPermission: (path: string) => boolean,
+): NavNode[] {
+  const filteredNodes: NavNode[] = [];
+  nodes.forEach((node) => {
+      const children = node.children ? filterNavNodes(node.children, hasPermission) : undefined;
+      const hasDirect = node.path ? hasPermission(node.path) : false;
+      if (!hasDirect && (!children || children.length === 0)) {
+        return;
+      }
+      filteredNodes.push({
+        ...node,
+        children,
+      });
+    });
+  return filteredNodes;
+}
+
+function collectPermittedPaths(nodes: readonly NavNode[], hasPermission: (path: string) => boolean, paths: Set<string>): void {
+  nodes.forEach((node) => {
+    if (node.path && hasPermission(node.path)) {
+      paths.add(node.path);
+    }
+    if (node.children?.length) {
+      collectPermittedPaths(node.children, hasPermission, paths);
+    }
+  });
 }
 
 function formatDateKey(date: Date): string {
@@ -729,8 +815,9 @@ export default function AuthenticatedApp() {
     // Prioriza hijos en el orden declarado en navigationCatalog
     for (const item of navigationCatalog) {
       if (item.path && hasPermission(item.path)) return item.path;
-      for (const child of item.children ?? []) {
-        if (hasPermission(child.path)) return child.path;
+      const childPath = findFirstPermittedPath(item.children ?? [], hasPermission);
+      if (childPath) {
+        return childPath;
       }
     }
     if (hasPermission('/perfil')) return '/perfil';
@@ -743,18 +830,17 @@ export default function AuthenticatedApp() {
   const defaultRedirectPath = useMemo(() => computeDefaultPath(), [computeDefaultPath]);
 
   const filteredNavItems = useMemo(() => {
-    return navigationCatalog.map((item) => {
-      const children = (item.children ?? []).filter((child) => hasPermission(child.path));
+    const items: NavItem[] = [];
+    navigationCatalog.forEach((item) => {
+      const children = filterNavNodes(item.children ?? [], hasPermission);
       const hasDirect = item.path ? hasPermission(item.path) : false;
       if (!hasDirect && children.length === 0) {
-        return null;
+        return;
       }
-      return { ...item, children };
-    }).filter(
-  (item): item is { children: NavChild[]; key: string; label: string; path?: string } =>
-    !!item && Array.isArray((item as any).children)
-);
-  }, [hasPermission, navigationCatalog, permissions]);
+      items.push({ ...item, children });
+    });
+    return items;
+  }, [hasPermission, navigationCatalog]);
 
   const allowedPaths = useMemo(() => {
     const paths = new Set<string>();
@@ -762,11 +848,7 @@ export default function AuthenticatedApp() {
       if (item.path && hasPermission(item.path)) {
         paths.add(item.path);
       }
-      for (const child of item.children ?? []) {
-        if (hasPermission(child.path)) {
-          paths.add(child.path);
-        }
-      }
+      collectPermittedPaths(item.children ?? [], hasPermission, paths);
     }
     for (const legacy of LEGACY_APP_PATHS) {
       paths.add(legacy);
@@ -1979,20 +2061,13 @@ export default function AuthenticatedApp() {
                         </span>
                       }
                       id={`nav-${item.key}`}
-                      active={item.children.some((child) => location.pathname.startsWith(child.path))}
+                      active={item.children.some((child) => navNodeMatchesPath(child, location.pathname))}
                       className="w-100 w-xl-auto"
                       menuVariant="light"
                     >
-                      {item.children.map((child) => (
-                        <NavDropdown.Item
-                          key={child.key}
-                          as={NavLink}
-                          to={child.path}
-                          onClick={handleOffcanvasClose}
-                        >
-                          {child.label}
-                        </NavDropdown.Item>
-                      ))}
+                      {item.children.map((child) =>
+                        renderNavDropdownNode(child, handleOffcanvasClose, location.pathname),
+                      )}
                     </NavDropdown>
                   ) : item.path ? (
                     <Nav.Item key={item.key} className="w-100 w-xl-auto">
