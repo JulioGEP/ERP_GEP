@@ -29,6 +29,20 @@ function JsonCell({ value }: { value: unknown }) {
   );
 }
 
+function resolveWebsiteLabel(headers: LeadFormWebhookEvent['requestHeaders']): string {
+  const userAgent = typeof headers?.['user-agent'] === 'string' ? headers['user-agent'] : null;
+
+  if (userAgent?.includes('https://gepcoformacion.es')) {
+    return 'GEPCO';
+  }
+
+  if (userAgent?.includes('https://gepservices.es')) {
+    return 'GEP Services';
+  }
+
+  return '—';
+}
+
 function EventTable({ events, formatter }: { events: LeadFormWebhookEvent[]; formatter: Intl.DateTimeFormat }) {
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
@@ -36,7 +50,7 @@ function EventTable({ events, formatter }: { events: LeadFormWebhookEvent[]; for
     setExpandedEventId((currentId) => (currentId === eventId ? null : eventId));
   };
 
-  const columnCount = 8;
+  const columnCount = 6;
 
   return (
     <div className="table-responsive">
@@ -45,10 +59,8 @@ function EventTable({ events, formatter }: { events: LeadFormWebhookEvent[]; for
           <tr>
             <th style={{ minWidth: 160 }}>Fecha</th>
             <th>Web</th>
-            <th>Formulario</th>
             <th>Lead</th>
             <th>Email</th>
-            <th>Teléfono</th>
             <th>Mensaje</th>
             <th>Evento</th>
           </tr>
@@ -60,14 +72,9 @@ function EventTable({ events, formatter }: { events: LeadFormWebhookEvent[]; for
               <Fragment key={event.id}>
                 <tr role="button" className="table-row-button" onClick={() => handleRowClick(event.id)}>
                   <td className="text-nowrap">{formatTimestamp(event.createdAt, formatter)}</td>
-                  <td>{event.source ?? '—'}</td>
-                  <td>
-                    <div className="fw-semibold">{event.formName ?? '—'}</div>
-                    {event.entryId ? <div className="text-muted small">Entry: {event.entryId}</div> : null}
-                  </td>
+                  <td>{resolveWebsiteLabel(event.requestHeaders)}</td>
                   <td>{event.leadName ?? '—'}</td>
                   <td>{event.leadEmail ?? '—'}</td>
-                  <td>{event.leadPhone ?? '—'}</td>
                   <td style={{ maxWidth: 320 }}>
                     <div className="text-truncate">{event.leadMessage ?? '—'}</div>
                   </td>
@@ -148,8 +155,8 @@ export default function WebhooksLeadFormPage() {
           </p>
           <code className="d-block p-3 bg-light rounded text-break">{webhookUrl}</code>
           <p className="text-muted small mt-2 mb-0">
-            Si queréis distinguir las dos webs, podéis añadir un query param como{' '}
-            <code>?source=web1</code> o <code>?source=web2</code> en cada WordPress.
+            La columna <strong>Web</strong> se rellena automáticamente leyendo el dominio incluido en el header
+            <code className="ms-1">user-agent</code> del WordPress.
           </p>
         </Card.Body>
       </Card>
