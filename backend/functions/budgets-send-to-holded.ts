@@ -29,9 +29,15 @@ const DEAL_PAYMENT_FORM_FIELD_KEY = 'fccd44232ff07afb4014d6d32f8e94709afb24fe';
 const DEAL_TRAINING_SITE_FIELD_KEY = '676d6bd51e52999c582c01f67c99a35ed30bf6ae';
 const DEAL_TRAINING_DATE_FIELD_KEY = '98f072a788090ac2ae52017daaf9618c3a189033';
 const DEAL_INVOICE_EMAIL_FIELD_KEY = '8b0652b56fd17d4547149f1ae26b1b74b527eaf0';
-const DEAL_PIPELINE_ID = '3';
+const DEAL_FUNDAE_FIELD_KEY = '245d60d4d18aec40ba888998ef92e5d00e494583';
+const DEAL_CAES_FIELD_KEY = 'e1971bf3a21d48737b682bf8d864ddc5eb15a351';
+const DEAL_BANK_ACCOUNT_FIELD_KEY = '18a96262c85016d68b9d4dd76c37768341928375';
+const DEAL_EMPRESA_PIPELINE_ID = '1';
+const DEAL_ABIERTA_PIPELINE_ID = '3';
 const DEAL_WON_STATUS = 'won';
-const DEAL_STAGE_NAME = 'Formación Ganada';
+const DEAL_EMPRESA_STAGE_NAME = 'Presupuesto aceptado';
+const DEAL_ABIERTA_STAGE_NAME = 'Formación Ganada';
+const DEAL_EMPRESA_EXCLUDED_TITLE_PREFIX = 'Contabilidad -';
 const INDIVIDUAL_PAYMENT_METHOD_ID = '65845b74c9a83d8ce30d8b72';
 const HOLDED_PAYMENT_METHOD_BY_PIPEDRIVE_FORM = [
   {
@@ -57,15 +63,25 @@ const PAYMENT_METHOD_FALLBACKS = {
   compraWeb: '6759892555d547e2c90aa0ae',
 } as const;
 
-type RouteKey = 'andalucia' | 'madrid' | 'sabadell';
+type AbiertaRouteKey = 'andalucia' | 'madrid' | 'sabadell';
+type EmpresaRouteKey =
+  | 'andalucia'
+  | 'andaluciaInCompany'
+  | 'madrid'
+  | 'madridInCompany'
+  | 'sabadell'
+  | 'sabadellInCompany'
+  | 'nacional';
+type RouteKey = AbiertaRouteKey | EmpresaRouteKey;
 type BudgetKind = 'empresa' | 'individual';
+type PipelineMode = 'abierta' | 'empresa';
 
 type RouteConfig = {
   salesChannelId: string;
   tags: string[];
 };
 
-const COMPANY_ROUTE_CONFIG: Record<RouteKey, RouteConfig> = {
+const COMPANY_ROUTE_CONFIG: Record<AbiertaRouteKey, RouteConfig> = {
   andalucia: {
     salesChannelId: '65ba50c3f957de633000d5a0',
     tags: ['abierta', 'andalucianv', 'formacion'],
@@ -80,7 +96,7 @@ const COMPANY_ROUTE_CONFIG: Record<RouteKey, RouteConfig> = {
   },
 };
 
-const INDIVIDUAL_ROUTE_CONFIG: Record<RouteKey, RouteConfig> = {
+const INDIVIDUAL_ROUTE_CONFIG: Record<AbiertaRouteKey, RouteConfig> = {
   andalucia: {
     salesChannelId: '65ba50c3f957de633000d5a0',
     tags: ['abierta', 'formacion', 'cadiznv'],
@@ -92,6 +108,37 @@ const INDIVIDUAL_ROUTE_CONFIG: Record<RouteKey, RouteConfig> = {
   sabadell: {
     salesChannelId: '65ba4be92a1064ab340301e2',
     tags: ['abierta', 'formacion', 'sabadellnv'],
+  },
+};
+
+const EMPRESA_ROUTE_CONFIG: Record<EmpresaRouteKey, RouteConfig> = {
+  andalucia: {
+    salesChannelId: '65ba50c3f957de633000d5a0',
+    tags: ['grupo', 'andalucianv', 'formacion'],
+  },
+  andaluciaInCompany: {
+    salesChannelId: '65ba5112e25378dc6a050f55',
+    tags: ['grupo', 'andaluciaic', 'formacion'],
+  },
+  madrid: {
+    salesChannelId: '65ba4fb510f428f465015381',
+    tags: ['grupo', 'madridnv', 'formacion'],
+  },
+  madridInCompany: {
+    salesChannelId: '65ba4ffe8efab3d86e091432',
+    tags: ['grupo', 'madridic', 'formacion'],
+  },
+  sabadell: {
+    salesChannelId: '65ba4be92a1064ab340301e2',
+    tags: ['grupo', 'sabadellnv', 'formacion'],
+  },
+  sabadellInCompany: {
+    salesChannelId: '65ba4c3005b3b1b8f60b5980',
+    tags: ['grupo', 'sabadellic', 'formacion'],
+  },
+  nacional: {
+    salesChannelId: '65ba4b65a47aee38e709cab8',
+    tags: ['grupo', 'nacional', 'formacion'],
   },
 };
 
@@ -193,9 +240,22 @@ function resolveAddress(value: unknown): string | null {
   return normalizeText(value);
 }
 
-function resolveRouteKey(routeLabel: string | null): RouteKey | null {
+function resolveAbiertaRouteKey(routeLabel: string | null): AbiertaRouteKey | null {
   const normalized = normalizeComparison(routeLabel);
   if (!normalized) return null;
+  if (normalized.includes('andaluc')) return 'andalucia';
+  if (normalized.includes('madrid')) return 'madrid';
+  if (normalized.includes('sabadell')) return 'sabadell';
+  return null;
+}
+
+function resolveEmpresaRouteKey(routeLabel: string | null): EmpresaRouteKey | null {
+  const normalized = normalizeComparison(routeLabel);
+  if (!normalized) return null;
+  if (normalized === 'nacional') return 'nacional';
+  if (normalized.includes('andaluc') && normalized.includes('in company')) return 'andaluciaInCompany';
+  if (normalized.includes('madrid') && normalized.includes('in company')) return 'madridInCompany';
+  if (normalized.includes('sabadell') && normalized.includes('in company')) return 'sabadellInCompany';
   if (normalized.includes('andaluc')) return 'andalucia';
   if (normalized.includes('madrid')) return 'madrid';
   if (normalized.includes('sabadell')) return 'sabadell';
@@ -210,8 +270,12 @@ function resolveBudgetKind(serviceTypeLabel: string | null): BudgetKind | null {
   return null;
 }
 
-function getRouteConfig(kind: BudgetKind, routeKey: RouteKey): RouteConfig {
+function getAbiertaRouteConfig(kind: BudgetKind, routeKey: AbiertaRouteKey): RouteConfig {
   return kind === 'empresa' ? COMPANY_ROUTE_CONFIG[routeKey] : INDIVIDUAL_ROUTE_CONFIG[routeKey];
+}
+
+function getEmpresaRouteConfig(routeKey: EmpresaRouteKey): RouteConfig {
+  return EMPRESA_ROUTE_CONFIG[routeKey];
 }
 
 function findFieldDefByName(fieldDefs: any[], names: readonly string[]) {
@@ -242,7 +306,24 @@ function resolveHoldedPaymentMethodId(paymentForm: string | null): string | null
   const partialMatch = HOLDED_PAYMENT_METHOD_BY_PIPEDRIVE_FORM.find((entry) =>
     normalizedPaymentForm.includes(normalizeComparison(entry.pipedriveValue)),
   );
-  return partialMatch?.holdedId ?? null;
+  if (partialMatch) return partialMatch.holdedId;
+
+  if (normalizedPaymentForm.includes('sabadell')) return PAYMENT_METHOD_FALLBACKS.sabadell;
+  if (normalizedPaymentForm.includes('madrid') || normalizedPaymentForm.includes('santander')) {
+    return PAYMENT_METHOD_FALLBACKS.madrid;
+  }
+  if (
+    normalizedPaymentForm.includes('tpv')
+    || normalizedPaymentForm.includes('web')
+    || normalizedPaymentForm.includes('compra')
+  ) {
+    return PAYMENT_METHOD_FALLBACKS.compraWeb;
+  }
+  if (normalizedPaymentForm.includes('caixabank') || normalizedPaymentForm.includes('caixa bank')) {
+    return INDIVIDUAL_PAYMENT_METHOD_ID;
+  }
+
+  return null;
 }
 
 function resolveHoldedPaymentMethodFallback(
@@ -267,7 +348,7 @@ function resolveHoldedPaymentMethodFallback(
   return null;
 }
 
-function buildBudgetNotes(params: {
+function buildAbiertaBudgetNotes(params: {
   po: string | null;
   paymentDay: string | null;
   paymentForm: string | null;
@@ -286,6 +367,32 @@ function buildBudgetNotes(params: {
     'Planificación',
     `Sede de la formación: ${params.trainingSite ?? ''}`,
     `Fecha Formación: ${params.trainingDate ?? ''}`,
+    '-----------',
+    `Comercial: ${params.comercial ?? ''}`,
+  ].join('\n');
+}
+
+function buildEmpresaBudgetNotes(params: {
+  po: string | null;
+  paymentDay: string | null;
+  paymentForm: string | null;
+  invoiceEmail: string | null;
+  trainingSite: string | null;
+  fundae: string | null;
+  caes: string | null;
+  comercial: string | null;
+}) {
+  return [
+    'Administración',
+    `Orden de compra: ${params.po ?? ''}`,
+    `Día de pago: ${params.paymentDay ?? ''}`,
+    `Forma de Pago: ${params.paymentForm ?? ''}`,
+    `Correo de Facturación: ${params.invoiceEmail ?? ''}`,
+    '-----------',
+    'Planificación',
+    `Sede de la formación: ${params.trainingSite ?? ''}`,
+    `FUNDAE: ${params.fundae ?? ''}`,
+    `CAES: ${params.caes ?? ''}`,
     '-----------',
     `Comercial: ${params.comercial ?? ''}`,
   ].join('\n');
@@ -314,6 +421,19 @@ function buildItems(products: any[]): Array<Record<string, unknown>> {
       name,
     };
   });
+}
+
+function resolvePipelineMode(deal: Record<string, any>): PipelineMode | null {
+  const pipelineId = normalizeText(deal?.pipeline_id);
+  if (pipelineId === DEAL_EMPRESA_PIPELINE_ID) return 'empresa';
+  if (pipelineId === DEAL_ABIERTA_PIPELINE_ID) return 'abierta';
+
+  const pipelineLabel = normalizeText(deal?.pipeline_name ?? deal?.pipeline_label);
+  const normalizedPipeline = normalizeComparison(pipelineLabel);
+  if (normalizedPipeline.includes('formacion empresa')) return 'empresa';
+  if (normalizedPipeline.includes('formacion abierta')) return 'abierta';
+
+  return null;
 }
 
 async function holdedRequest<T = any>(
@@ -456,37 +576,57 @@ export const handler = createHttpHandler<{ dealId?: string }>(async (request) =>
       return errorResponse('NOT_FOUND', 'No se encontró el deal en Pipedrive.', 404);
     }
 
-    const pipelineId = normalizeText(deal?.pipeline_id);
     const status = normalizeComparison(deal?.status);
     const stageName = normalizeText(deal?.stage_name ?? deal?.stage?.name);
+    const pipelineMode = resolvePipelineMode(deal);
     const existingHoldedId = normalizeText(deal?.[PIPEDRIVE_HOLDED_FIELD_KEY]);
 
     if (existingHoldedId) {
       return errorResponse('ALREADY_SYNCED', 'El presupuesto ya tiene un ID de Holded asociado.', 409);
     }
 
-    if (pipelineId && pipelineId !== DEAL_PIPELINE_ID) {
-      return errorResponse('INVALID_PIPELINE', 'El deal no pertenece al pipeline de formación abierta.', 400);
+    if (!pipelineMode) {
+      return errorResponse(
+        'INVALID_PIPELINE',
+        'El deal no pertenece a un pipeline compatible con el envío a Holded.',
+        400,
+      );
     }
 
     if (status && status !== normalizeComparison(DEAL_WON_STATUS)) {
       return errorResponse('INVALID_STATUS', 'Solo se pueden enviar a Holded deals ganados.', 400);
     }
 
-    if (stageName && normalizeComparison(stageName) !== normalizeComparison(DEAL_STAGE_NAME)) {
-      return errorResponse('INVALID_STAGE', 'El deal debe estar en la fase Formación Ganada.', 400);
+    const expectedStageName = pipelineMode === 'empresa' ? DEAL_EMPRESA_STAGE_NAME : DEAL_ABIERTA_STAGE_NAME;
+    if (stageName && normalizeComparison(stageName) !== normalizeComparison(expectedStageName)) {
+      return errorResponse('INVALID_STAGE', `El deal debe estar en la fase ${expectedStageName}.`, 400);
     }
 
-    const serviceTypeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_SERVICE_TYPE_FIELD_KEYS);
-    const budgetKind = resolveBudgetKind(serviceTypeLabel);
-    if (!budgetKind) {
-      return errorResponse('UNSUPPORTED_SERVICE_TYPE', 'El tipo de servicio no está contemplado en la automatización.', 400);
+    const title = normalizeText(deal?.title);
+    if (
+      pipelineMode === 'empresa'
+      && title
+      && normalizeComparison(title).startsWith(normalizeComparison(DEAL_EMPRESA_EXCLUDED_TITLE_PREFIX))
+    ) {
+      return errorResponse(
+        'UNSUPPORTED_DEAL',
+        'Los presupuestos de contabilidad del embudo Formación Empresa no se envían a Holded desde esta acción.',
+        400,
+      );
     }
 
     const routeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_ROUTE_SITE_FIELD_KEYS);
-    const routeKey = resolveRouteKey(routeLabel);
+    const routeKey = pipelineMode === 'empresa'
+      ? resolveEmpresaRouteKey(routeLabel)
+      : resolveAbiertaRouteKey(routeLabel);
     if (!routeKey) {
       return errorResponse('UNSUPPORTED_SITE', 'La sede del presupuesto no está contemplada en la automatización.', 400);
+    }
+
+    const serviceTypeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_SERVICE_TYPE_FIELD_KEYS);
+    const budgetKind = pipelineMode === 'empresa' ? 'empresa' : resolveBudgetKind(serviceTypeLabel);
+    if (!budgetKind) {
+      return errorResponse('UNSUPPORTED_SERVICE_TYPE', 'El tipo de servicio no está contemplado en la automatización.', 400);
     }
 
     const [organization, person] = await Promise.all([
@@ -500,7 +640,9 @@ export const handler = createHttpHandler<{ dealId?: string }>(async (request) =>
       .join(' ')
       .trim();
     const contactName = organizationName ?? personName ?? `Deal ${dealId}`;
-    const routeConfig = getRouteConfig(budgetKind, routeKey);
+    const routeConfig = pipelineMode === 'empresa'
+      ? getEmpresaRouteConfig(routeKey as EmpresaRouteKey)
+      : getAbiertaRouteConfig(budgetKind, routeKey as AbiertaRouteKey);
 
     const contactCode = normalizeText(deal?.[DEAL_CONTACT_CODE_FIELD_KEY]);
     const contactPhone = pickPrimaryValue(person?.phone ?? (deal.person_id as any)?.phone);
@@ -519,18 +661,34 @@ export const handler = createHttpHandler<{ dealId?: string }>(async (request) =>
 
     const paymentFormLabel = resolveFieldLabel(deal, fieldDefs, [DEAL_PAYMENT_FORM_FIELD_KEY])
       ?? normalizeText(deal?.[DEAL_PAYMENT_FORM_FIELD_KEY]);
-    const holdedPaymentMethodId = resolveHoldedPaymentMethodId(paymentFormLabel)
-      ?? resolveHoldedPaymentMethodFallback(deal, fieldDefs);
+    const bankAccountLabel = resolveFieldLabel(deal, fieldDefs, [DEAL_BANK_ACCOUNT_FIELD_KEY])
+      ?? normalizeText(deal?.[DEAL_BANK_ACCOUNT_FIELD_KEY]);
+    const holdedPaymentMethodId = resolveHoldedPaymentMethodId(
+      pipelineMode === 'empresa' ? bankAccountLabel ?? paymentFormLabel : paymentFormLabel,
+    ) ?? resolveHoldedPaymentMethodFallback(deal, fieldDefs);
 
-    const notes = buildBudgetNotes({
-      po: normalizeText(deal?.[DEAL_PO_FIELD_KEY]),
-      paymentDay: normalizeText(deal?.[DEAL_PAYMENT_DAY_FIELD_KEY]),
-      paymentForm: paymentFormLabel,
-      invoiceEmail: normalizeText(deal?.[DEAL_INVOICE_EMAIL_FIELD_KEY]),
-      trainingSite: resolveFieldLabel(deal, fieldDefs, [DEAL_TRAINING_SITE_FIELD_KEY]),
-      trainingDate: normalizeText(deal?.[DEAL_TRAINING_DATE_FIELD_KEY]),
-      comercial: normalizeText(deal?.owner_name ?? deal?.owner_id?.name),
-    });
+    const notes = pipelineMode === 'empresa'
+      ? buildEmpresaBudgetNotes({
+          po: normalizeText(deal?.[DEAL_PO_FIELD_KEY]),
+          paymentDay: normalizeText(deal?.[DEAL_PAYMENT_DAY_FIELD_KEY]),
+          paymentForm: paymentFormLabel,
+          invoiceEmail: normalizeText(deal?.[DEAL_INVOICE_EMAIL_FIELD_KEY]),
+          trainingSite: resolveFieldLabel(deal, fieldDefs, [DEAL_TRAINING_SITE_FIELD_KEY]),
+          fundae:
+            resolveFieldLabel(deal, fieldDefs, [DEAL_FUNDAE_FIELD_KEY]) ?? normalizeText(deal?.[DEAL_FUNDAE_FIELD_KEY]),
+          caes:
+            resolveFieldLabel(deal, fieldDefs, [DEAL_CAES_FIELD_KEY]) ?? normalizeText(deal?.[DEAL_CAES_FIELD_KEY]),
+          comercial: normalizeText(deal?.owner_name ?? deal?.owner_id?.name),
+        })
+      : buildAbiertaBudgetNotes({
+          po: normalizeText(deal?.[DEAL_PO_FIELD_KEY]),
+          paymentDay: normalizeText(deal?.[DEAL_PAYMENT_DAY_FIELD_KEY]),
+          paymentForm: paymentFormLabel,
+          invoiceEmail: normalizeText(deal?.[DEAL_INVOICE_EMAIL_FIELD_KEY]),
+          trainingSite: resolveFieldLabel(deal, fieldDefs, [DEAL_TRAINING_SITE_FIELD_KEY]),
+          trainingDate: normalizeText(deal?.[DEAL_TRAINING_DATE_FIELD_KEY]),
+          comercial: normalizeText(deal?.owner_name ?? deal?.owner_id?.name),
+        });
 
     const items = buildItems(Array.isArray(products) ? products : []);
     if (!items.length) {
@@ -578,6 +736,7 @@ export const handler = createHttpHandler<{ dealId?: string }>(async (request) =>
       holdedContactCode: holdedContact.code,
       budgetKind,
       routeKey,
+      pipelineMode,
       simulated: true,
     });
   } catch (error) {
