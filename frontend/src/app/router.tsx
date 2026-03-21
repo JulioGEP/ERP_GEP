@@ -112,6 +112,7 @@ const LogsPage = lazy(() => import('../pages/reporting/LogsPage'));
 const ComparativaDashboardPage = lazy(() => import('../pages/reporting/ComparativaDashboardPage'));
 const WebhooksPipedrivePage = lazy(() => import('../pages/reporting/WebhooksPipedrivePage'));
 const WoocommerceComprasPage = lazy(() => import('../pages/reporting/WoocommerceComprasPage'));
+const WebhooksLeadFormPage = lazy(() => import('../pages/reporting/WebhooksLeadFormPage'));
 const NominasFijosPage = lazy(() => import('../pages/reporting/NominasFijosPage'));
 const NominasFijosDiscontinuosPage = lazy(
   () => import('../pages/reporting/NominasFijosDiscontinuosPage'),
@@ -703,6 +704,17 @@ export function AppRouter({
               path="/reporting/woocommerce_compras"
               roles={['Admin']}
               element={<WoocommerceComprasPage />}
+            />
+          }
+        />
+
+        <Route
+          path="/reporting/webhooks_lead_form"
+          element={
+            <GuardedRoute
+              path="/reporting/webhooks_lead_form"
+              roles={['Admin']}
+              element={<WebhooksLeadFormPage />}
             />
           }
         />

@@ -573,6 +573,79 @@ export async function fetchPipedriveWebhookEvents(
 }
 
 
+
+export type LeadFormWebhookEvent = {
+  id: string;
+  createdAt: string | null;
+  source: string | null;
+  eventName: string | null;
+  formName: string | null;
+  entryId: string | null;
+  leadName: string | null;
+  leadEmail: string | null;
+  leadPhone: string | null;
+  leadMessage: string | null;
+  requestHeaders: Record<string, unknown> | null;
+  payload: unknown;
+};
+
+function sanitizeLeadFormWebhookEvent(record: unknown): LeadFormWebhookEvent | null {
+  if (!record || typeof record !== 'object') {
+    return null;
+  }
+
+  const raw = record as Record<string, unknown>;
+  const id = sanitizeText(raw.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    createdAt: sanitizeDate(raw.createdAt ?? raw.created_at),
+    source: sanitizeText(raw.source),
+    eventName: sanitizeText(raw.eventName ?? raw.event_name),
+    formName: sanitizeText(raw.formName ?? raw.form_name),
+    entryId: sanitizeText(raw.entryId ?? raw.entry_id),
+    leadName: sanitizeText(raw.leadName ?? raw.lead_name),
+    leadEmail: sanitizeText(raw.leadEmail ?? raw.lead_email),
+    leadPhone: sanitizeText(raw.leadPhone ?? raw.lead_phone),
+    leadMessage: sanitizeText(raw.leadMessage ?? raw.lead_message),
+    requestHeaders:
+      typeof raw.requestHeaders === 'object' && raw.requestHeaders !== null
+        ? (raw.requestHeaders as Record<string, unknown>)
+        : typeof raw.request_headers === 'object' && raw.request_headers !== null
+          ? (raw.request_headers as Record<string, unknown>)
+          : null,
+    payload: raw.payload ?? null,
+  } satisfies LeadFormWebhookEvent;
+}
+
+export type FetchLeadFormWebhookEventsOptions = {
+  limit?: number;
+};
+
+export async function fetchLeadFormWebhooks(
+  options: FetchLeadFormWebhookEventsOptions = {}
+): Promise<LeadFormWebhookEvent[]> {
+  const params = new URLSearchParams();
+  const limit = options.limit;
+  if (typeof limit === 'number' && Number.isFinite(limit) && limit > 0) {
+    params.set('limit', String(Math.min(Math.trunc(limit), 500)));
+  }
+
+  const query = params.toString();
+  const url = query.length
+    ? `/reporting-lead-form-webhooks?${query}`
+    : '/reporting-lead-form-webhooks';
+
+  const data = await getJson<{ events?: unknown }>(url);
+  const events = Array.isArray(data?.events) ? data.events : [];
+  return events
+    .map(sanitizeLeadFormWebhookEvent)
+    .filter((record): record is LeadFormWebhookEvent => record !== null);
+}
+
 export type WooCommerceComprasWebhookEvent = {
   id: string;
   createdAt: string | null;
