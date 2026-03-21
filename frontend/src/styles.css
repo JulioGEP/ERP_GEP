@@ -173,6 +173,34 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+.navbar-submenu-group {
+  padding: 0.25rem 0.5rem;
+}
+
+.navbar-submenu-group-nested {
+  padding-top: 0;
+}
+
+.navbar-submenu-label {
+  color: var(--color-gray-medium);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.navbar-submenu-label.active {
+  color: #ffffff;
+  background-color: var(--color-red);
+}
+
+.navbar-submenu-children {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-left: 1rem;
+}
+
 .navbar .nav-link.active,
 .navbar .nav-link:hover,
 .navbar .nav-link:focus {

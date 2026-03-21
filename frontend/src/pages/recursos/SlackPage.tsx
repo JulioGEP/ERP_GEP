@@ -30,13 +30,13 @@ export default function SlackPage() {
 
   return (
     <section className="py-3">
-      <Card className="shadow-sm">
+        <Card className="shadow-sm">
         <Card.Header as="h1" className="h4 mb-0">
-          Reporting Slack
+          Recursos Slack
         </Card.Header>
         <Card.Body>
           <p className="text-muted mb-3">
-            Envía manualmente mensajes automáticos de reporting al canal de Slack.
+            Envía manualmente mensajes automáticos al canal de Slack desde Recursos.
           </p>
 
           <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">

@@ -117,7 +117,7 @@ const NominasFijosPage = lazy(() => import('../pages/reporting/NominasFijosPage'
 const NominasFijosDiscontinuosPage = lazy(
   () => import('../pages/reporting/NominasFijosDiscontinuosPage'),
 );
-const SlackPage = lazy(() => import('../pages/reporting/SlackPage'));
+const SlackPage = lazy(() => import('../pages/recursos/SlackPage'));
 const ReporteNominasPage = lazy(() => import('../pages/reporting/ReporteNominasPage'));
 
 type AppRouterProps = {
@@ -734,12 +734,13 @@ export function AppRouter({
 
         <Route path="/reporting/costes_extra" element={<Navigate to="/usuarios/sesiones_y_costes_extra" replace />} />
 
+        <Route path="/reporting/slack" element={<Navigate to="/recursos/slack" replace />} />
 
         <Route
-          path="/reporting/slack"
+          path="/recursos/slack"
           element={
             <GuardedRoute
-              path="/reporting/slack"
+              path="/recursos/slack"
               roles={['Admin']}
               element={<SlackPage />}
             />
