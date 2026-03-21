@@ -1,6 +1,6 @@
 // backend/functions/session_documents.ts
 import { randomUUID } from 'crypto';
-import { validate as isUUID } from 'uuid';
+import { isUuid } from './_shared/uuid';
 import type { PrismaClient } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { getPrisma } from './_shared/prisma';
@@ -224,7 +224,7 @@ export const handler = async (event: any) => {
       if (!dealId || !sessionId) {
         return errorResponse('VALIDATION_ERROR', 'dealId y sessionId son requeridos', 400);
       }
-      if (!isUUID(sessionId)) {
+      if (!isUuid(sessionId)) {
         return errorResponse('VALIDATION_ERROR', 'sessionId inválido (UUID)', 400);
       }
 
@@ -264,7 +264,7 @@ export const handler = async (event: any) => {
       if (!dealId || !sessionId) {
         return errorResponse('VALIDATION_ERROR', 'deal_id y sesion_id son requeridos', 400);
       }
-      if (!isUUID(sessionId)) {
+      if (!isUuid(sessionId)) {
         return errorResponse('VALIDATION_ERROR', 'sesion_id inválido (UUID)', 400);
       }
 
@@ -481,7 +481,7 @@ export const handler = async (event: any) => {
       if (!dealId || !sessionId) {
         return errorResponse('VALIDATION_ERROR', 'dealId y sessionId son requeridos', 400);
       }
-      if (!isUUID(sessionId)) {
+      if (!isUuid(sessionId)) {
         return errorResponse('VALIDATION_ERROR', 'sessionId inválido (UUID)', 400);
       }
 
@@ -534,7 +534,7 @@ export const handler = async (event: any) => {
       if (!dealId || !sessionId) {
         return errorResponse('VALIDATION_ERROR', 'dealId y sessionId son requeridos', 400);
       }
-      if (!isUUID(sessionId)) {
+      if (!isUuid(sessionId)) {
         return errorResponse('VALIDATION_ERROR', 'sessionId inválido (UUID)', 400);
       }
 

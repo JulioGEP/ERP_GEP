@@ -1,5 +1,5 @@
 // backend/functions/variant_comments.ts
-import { validate as isUUID } from 'uuid';
+import { isUuid } from './_shared/uuid';
 import { getPrisma } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
@@ -58,7 +58,7 @@ export const handler = async (event: any) => {
 
     const prisma = getPrisma();
     const variantIdStr = String(variantId).trim();
-    if (!variantIdStr || !isUUID(variantIdStr)) {
+    if (!variantIdStr || !isUuid(variantIdStr)) {
       return errorResponse('VALIDATION_ERROR', 'variant_id inválido (UUID requerido)', 400);
     }
 

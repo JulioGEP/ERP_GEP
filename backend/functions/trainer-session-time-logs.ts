@@ -1,5 +1,5 @@
 // backend/functions/trainer-session-time-logs.ts
-import { validate as isUUID } from 'uuid';
+import { isUuid } from './_shared/uuid';
 import { createHttpHandler } from './_shared/http';
 import { requireAuth } from './_shared/auth';
 import { getPrisma } from './_shared/prisma';
@@ -147,7 +147,7 @@ export const handler = createHttpHandler(async (request) => {
   let variantId: string | null = null;
 
   if (hasSession) {
-    if (!isUUID(sessionIdRaw)) {
+    if (!isUuid(sessionIdRaw)) {
       return errorResponse('VALIDATION_ERROR', 'sessionId no es un UUID válido.', 400);
     }
     sessionId = sessionIdRaw;
@@ -159,7 +159,7 @@ export const handler = createHttpHandler(async (request) => {
       return errorResponse('FORBIDDEN', 'No tienes acceso a esta sesión.', 403);
     }
   } else if (hasVariant) {
-    if (!isUUID(variantIdRaw)) {
+    if (!isUuid(variantIdRaw)) {
       return errorResponse('VALIDATION_ERROR', 'variantId no es un UUID válido.', 400);
     }
     variantId = variantIdRaw;
