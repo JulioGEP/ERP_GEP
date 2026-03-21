@@ -425,26 +425,52 @@ function navNodeMatchesPath(node: NavNode, pathname: string): boolean {
   return node.children?.some((child) => navNodeMatchesPath(child, pathname)) ?? false;
 }
 
-function renderNavDropdownNode(
-  node: NavNode,
-  onNavigate: () => void,
-  pathname: string,
+type NavDropdownNodeProps = {
+  node: NavNode;
+  onNavigate: () => void;
+  pathname: string;
+  depth?: number;
+};
+
+function NavDropdownNode({
+  node,
+  onNavigate,
+  pathname,
   depth = 0,
-): JSX.Element {
+}: NavDropdownNodeProps): JSX.Element {
   if (node.children && node.children.length > 0) {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const isActive = navNodeMatchesPath(node, pathname);
+
     return (
       <div
         key={node.key}
         className={`navbar-submenu-group${depth > 0 ? ' navbar-submenu-group-nested' : ''}`}
       >
-        <div
-          className={`navbar-submenu-label${navNodeMatchesPath(node, pathname) ? ' active' : ''}`}
+        <button
+          type="button"
+          className={`navbar-submenu-label${isActive ? ' active' : ''}`}
+          onClick={() => setIsExpanded((current) => !current)}
+          aria-expanded={isExpanded}
         >
-          {node.label}
-        </div>
-        <div className="navbar-submenu-children">
-          {node.children.map((child) => renderNavDropdownNode(child, onNavigate, pathname, depth + 1))}
-        </div>
+          <span>{node.label}</span>
+          <span className={`navbar-submenu-caret${isExpanded ? ' expanded' : ''}`} aria-hidden="true">
+            ▾
+          </span>
+        </button>
+        {isExpanded ? (
+          <div className="navbar-submenu-children">
+            {node.children.map((child) => (
+              <NavDropdownNode
+                key={child.key}
+                node={child}
+                onNavigate={onNavigate}
+                pathname={pathname}
+                depth={depth + 1}
+              />
+            ))}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -2065,9 +2091,14 @@ export default function AuthenticatedApp() {
                       className="w-100 w-xl-auto"
                       menuVariant="light"
                     >
-                      {item.children.map((child) =>
-                        renderNavDropdownNode(child, handleOffcanvasClose, location.pathname),
-                      )}
+                      {item.children.map((child) => (
+                        <NavDropdownNode
+                          key={child.key}
+                          node={child}
+                          onNavigate={handleOffcanvasClose}
+                          pathname={location.pathname}
+                        />
+                      ))}
                     </NavDropdown>
                   ) : item.path ? (
                     <Nav.Item key={item.key} className="w-100 w-xl-auto">

@@ -182,16 +182,41 @@ body {
 }
 
 .navbar-submenu-label {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   color: var(--color-gray-medium);
   font-size: 0.9375rem;
   font-weight: 500;
   border-radius: 0.5rem;
   padding: 0.25rem 0.5rem;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.navbar-submenu-label:hover,
+.navbar-submenu-label:focus {
+  color: #ffffff;
+  background-color: var(--color-red);
 }
 
 .navbar-submenu-label.active {
   color: #ffffff;
   background-color: var(--color-red);
+}
+
+.navbar-submenu-caret {
+  font-size: 0.875rem;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.navbar-submenu-caret.expanded {
+  transform: rotate(180deg);
 }
 
 .navbar-submenu-children {
