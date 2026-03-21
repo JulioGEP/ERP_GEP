@@ -203,6 +203,31 @@ type HoldedContact = {
   name?: string | null;
 };
 
+type HoldedBudgetSyncOperation = 'created' | 'updated';
+
+export type SyncBudgetToHoldedParams = {
+  dealId: string;
+  mode?: 'create' | 'update';
+  holdedDocumentId?: string | null;
+};
+
+export type SyncBudgetToHoldedResult = {
+  documentId: string;
+  holdedContactId: string;
+  holdedContactCode: string;
+  budgetKind: BudgetKind;
+  routeKey?: string;
+  pipelineMode: PipelineMode;
+  operation: HoldedBudgetSyncOperation;
+};
+
+function buildSyncError(code: string, message: string, statusCode: number): Error {
+  const error = new Error(message);
+  (error as any).code = code;
+  (error as any).statusCode = statusCode;
+  return error;
+}
+
 function normalizeText(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   if (typeof value === 'string') {
@@ -664,6 +689,17 @@ async function findOrCreateHoldedContact(params: {
   };
 }
 
+async function updateHoldedEstimate(
+  apiKey: string,
+  documentId: string,
+  payload: Record<string, unknown>,
+) {
+  return holdedRequest<any>(apiKey, `${HOLDED_ESTIMATES_ENDPOINT}/${encodeURIComponent(documentId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
 async function updatePipedriveHoldedField(dealId: string, holdedDocumentId: string) {
   const token = process.env.PIPEDRIVE_API_TOKEN;
   if (!token) {
@@ -686,6 +722,254 @@ async function updatePipedriveHoldedField(dealId: string, holdedDocumentId: stri
   }
 }
 
+export async function syncBudgetToHolded({
+  dealId,
+  mode = 'create',
+  holdedDocumentId,
+}: SyncBudgetToHoldedParams): Promise<SyncBudgetToHoldedResult> {
+  const normalizedDealId = normalizeText(dealId);
+  if (!normalizedDealId) {
+    throw buildSyncError('VALIDATION_ERROR', 'Falta dealId para sincronizar el presupuesto con Holded.', 400);
+  }
+
+  const holdedApiKey = process.env.API_HOLDED_KEY;
+  if (!holdedApiKey) {
+    throw buildSyncError('CONFIG_ERROR', 'API_HOLDED_KEY no configurada.', 500);
+  }
+
+  const [deal, fieldDefs, products] = await Promise.all([
+    getDeal(normalizedDealId),
+    getDealFields(),
+    getDealProducts(normalizedDealId),
+  ]);
+
+  if (!deal) {
+    throw buildSyncError('NOT_FOUND', 'No se encontró el deal en Pipedrive.', 404);
+  }
+
+  const status = normalizeComparison(deal?.status);
+  const stageName = normalizeText(deal?.stage_name ?? deal?.stage?.name);
+  const pipelineMode = resolvePipelineMode(deal);
+  const currentPipedriveHoldedId = normalizeText(deal?.[PIPEDRIVE_HOLDED_FIELD_KEY]);
+  const existingHoldedId = normalizeText(holdedDocumentId) ?? currentPipedriveHoldedId;
+
+  if (mode === 'create' && existingHoldedId) {
+    throw buildSyncError(
+      'ALREADY_SYNCED',
+      'El presupuesto ya tiene un ID de Holded asociado.',
+      409,
+    );
+  }
+
+  if (mode === 'update' && !existingHoldedId) {
+    throw buildSyncError(
+      'MISSING_HOLDED_ID',
+      'El presupuesto no tiene un ID de Holded asociado para actualizarlo.',
+      409,
+    );
+  }
+
+  if (!pipelineMode) {
+    throw buildSyncError(
+      'INVALID_PIPELINE',
+      'El deal no pertenece a un pipeline compatible con el envío a Holded.',
+      400,
+    );
+  }
+
+  if (status && status !== normalizeComparison(DEAL_WON_STATUS)) {
+    throw buildSyncError('INVALID_STATUS', 'Solo se pueden sincronizar con Holded deals ganados.', 400);
+  }
+
+  const expectedStageName = pipelineMode === 'abierta' ? DEAL_ABIERTA_STAGE_NAME : DEAL_EMPRESA_STAGE_NAME;
+  if (stageName && normalizeComparison(stageName) !== normalizeComparison(expectedStageName)) {
+    throw buildSyncError('INVALID_STAGE', `El deal debe estar en la fase ${expectedStageName}.`, 400);
+  }
+
+  const title = normalizeText(deal?.title);
+  if (
+    (pipelineMode === 'empresa' || pipelineMode === 'services')
+    && title
+    && normalizeComparison(title).startsWith(normalizeComparison(DEAL_EMPRESA_EXCLUDED_TITLE_PREFIX))
+  ) {
+    throw buildSyncError(
+      'UNSUPPORTED_DEAL',
+      'Los presupuestos de contabilidad no se envían a Holded desde esta acción.',
+      400,
+    );
+  }
+
+  const routeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_ROUTE_SITE_FIELD_KEYS);
+  const serviceTypeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_SERVICE_TYPE_FIELD_KEYS);
+  const servicePipelineKey = pipelineMode === 'services' ? resolveServicePipelineKey(deal) : null;
+  const serviceTypeKey = pipelineMode === 'services' ? resolveServiceTypeKey(serviceTypeLabel) : null;
+
+  const routeKey = pipelineMode === 'empresa'
+    ? resolveEmpresaRouteKey(routeLabel)
+    : pipelineMode === 'abierta'
+      ? resolveAbiertaRouteKey(routeLabel)
+      : resolveEmpresaRouteKey(routeLabel);
+
+  if (pipelineMode !== 'services' && !routeKey) {
+    throw buildSyncError(
+      'UNSUPPORTED_SITE',
+      'La sede del presupuesto no está contemplada en la automatización.',
+      400,
+    );
+  }
+
+  const budgetKind = pipelineMode === 'empresa' || pipelineMode === 'services'
+    ? 'empresa'
+    : resolveBudgetKind(serviceTypeLabel);
+  if (!budgetKind) {
+    throw buildSyncError(
+      'UNSUPPORTED_SERVICE_TYPE',
+      'El tipo de servicio no está contemplado en la automatización.',
+      400,
+    );
+  }
+
+  const [organization, person] = await Promise.all([
+    deal?.org_id ? getOrganization((deal.org_id as any)?.value ?? deal.org_id) : null,
+    deal?.person_id ? getPerson((deal.person_id as any)?.value ?? deal.person_id) : null,
+  ]);
+
+  const organizationName = normalizeText(organization?.name) ?? normalizeText((deal.org_id as any)?.name);
+  const personName = [normalizeText(person?.first_name ?? person?.name), normalizeText(person?.last_name)]
+    .filter((value): value is string => Boolean(value))
+    .join(' ')
+    .trim();
+  const contactName = organizationName ?? personName ?? `Deal ${normalizedDealId}`;
+  const routeConfig = pipelineMode === 'empresa'
+    ? getEmpresaRouteConfig(routeKey as EmpresaRouteKey)
+    : pipelineMode === 'abierta'
+      ? getAbiertaRouteConfig(budgetKind, routeKey as AbiertaRouteKey)
+      : resolveServicesRouteConfig({
+          pipelineKey: servicePipelineKey!,
+          serviceTypeKey,
+          routeKey: routeKey as EmpresaRouteKey | null,
+        });
+
+  if (!routeConfig) {
+    const code = routeKey ? 'UNSUPPORTED_SERVICE_TYPE' : 'UNSUPPORTED_SITE';
+    const message = routeKey
+      ? 'La combinación de tipo de servicio y sede no está contemplada en la automatización.'
+      : 'La sede del presupuesto no está contemplada en la automatización.';
+    throw buildSyncError(code, message, 400);
+  }
+
+  const contactCode = normalizeText(deal?.[DEAL_CONTACT_CODE_FIELD_KEY]);
+  const contactPhone = pickPrimaryValue(person?.phone ?? (deal.person_id as any)?.phone);
+  const contactAddress = resolveAddress(organization?.address ?? (deal.org_id as any)?.address);
+  const currency = normalizeText(deal?.currency);
+
+  const holdedContact = await findOrCreateHoldedContact({
+    apiKey: holdedApiKey,
+    code: contactCode,
+    name: contactName,
+    phone: contactPhone,
+    address: contactAddress,
+    currency,
+    individual: budgetKind === 'individual',
+  });
+
+  const paymentFormLabel = resolveFieldLabel(deal, fieldDefs, [DEAL_PAYMENT_FORM_FIELD_KEY])
+    ?? normalizeText(deal?.[DEAL_PAYMENT_FORM_FIELD_KEY]);
+  const bankAccountLabel = resolveFieldLabel(deal, fieldDefs, [DEAL_BANK_ACCOUNT_FIELD_KEY])
+    ?? normalizeText(deal?.[DEAL_BANK_ACCOUNT_FIELD_KEY]);
+  const holdedPaymentMethodId = resolveHoldedPaymentMethodId(
+    pipelineMode === 'empresa' || pipelineMode === 'services' ? bankAccountLabel ?? paymentFormLabel : paymentFormLabel,
+  ) ?? resolveHoldedPaymentMethodFallback(deal, fieldDefs);
+
+  const notes = pipelineMode === 'empresa' || pipelineMode === 'services'
+    ? buildEmpresaBudgetNotes({
+        po: normalizeText(deal?.[DEAL_PO_FIELD_KEY]),
+        paymentDay: normalizeText(deal?.[DEAL_PAYMENT_DAY_FIELD_KEY]),
+        paymentForm: paymentFormLabel,
+        invoiceEmail: normalizeText(deal?.[DEAL_INVOICE_EMAIL_FIELD_KEY]),
+        trainingSite: resolveFieldLabel(deal, fieldDefs, [DEAL_TRAINING_SITE_FIELD_KEY]),
+        fundae:
+          resolveFieldLabel(deal, fieldDefs, [DEAL_FUNDAE_FIELD_KEY]) ?? normalizeText(deal?.[DEAL_FUNDAE_FIELD_KEY]),
+        caes:
+          resolveFieldLabel(deal, fieldDefs, [DEAL_CAES_FIELD_KEY]) ?? normalizeText(deal?.[DEAL_CAES_FIELD_KEY]),
+        comercial: normalizeText(deal?.owner_name ?? deal?.owner_id?.name),
+      })
+    : buildAbiertaBudgetNotes({
+        po: normalizeText(deal?.[DEAL_PO_FIELD_KEY]),
+        paymentDay: normalizeText(deal?.[DEAL_PAYMENT_DAY_FIELD_KEY]),
+        paymentForm: paymentFormLabel,
+        invoiceEmail: normalizeText(deal?.[DEAL_INVOICE_EMAIL_FIELD_KEY]),
+        trainingSite: resolveFieldLabel(deal, fieldDefs, [DEAL_TRAINING_SITE_FIELD_KEY]),
+        trainingDate: normalizeText(deal?.[DEAL_TRAINING_DATE_FIELD_KEY]),
+        comercial: normalizeText(deal?.owner_name ?? deal?.owner_id?.name),
+      });
+
+  const items = buildItems(Array.isArray(products) ? products : []);
+  if (!items.length) {
+    throw buildSyncError('NO_PRODUCTS', 'El deal no tiene líneas de producto para enviar a Holded.', 400);
+  }
+
+  const quotePayload: Record<string, unknown> = {
+    date: normalizeText(deal?.update_time ?? deal?.add_time),
+    contactCode: holdedContact.code || undefined,
+    contactId: holdedContact.id,
+    invoiceNum: `PRVGR25-${normalizedDealId}`,
+    salesChannelId: routeConfig.salesChannelId,
+    tags: routeConfig.tags,
+    notes,
+    items,
+  };
+
+  if (holdedPaymentMethodId) {
+    quotePayload.paymentMethod = holdedPaymentMethodId;
+  } else if (budgetKind === 'individual') {
+    quotePayload.paymentMethod = INDIVIDUAL_PAYMENT_METHOD_ID;
+  }
+
+  let documentId = existingHoldedId;
+  let operation: HoldedBudgetSyncOperation;
+
+  if (existingHoldedId) {
+    await updateHoldedEstimate(holdedApiKey, existingHoldedId, quotePayload);
+    operation = 'updated';
+  } else {
+    const createdQuote = await holdedRequest<any>(holdedApiKey, HOLDED_ESTIMATES_ENDPOINT, {
+      method: 'POST',
+      body: JSON.stringify(quotePayload),
+    });
+
+    documentId = normalizeText(createdQuote?.id);
+    if (!documentId) {
+      throw new Error('Holded no devolvió el identificador del presupuesto creado.');
+    }
+    operation = 'created';
+  }
+
+  if (!documentId) {
+    throw new Error('No se pudo resolver el identificador del presupuesto de Holded.');
+  }
+
+  await Promise.all([
+    getPrisma().deals.updateMany({
+      where: { deal_id: normalizedDealId },
+      data: { presu_holded: documentId },
+    }),
+    currentPipedriveHoldedId === documentId
+      ? Promise.resolve()
+      : updatePipedriveHoldedField(normalizedDealId, documentId),
+  ]);
+
+  return {
+    documentId,
+    holdedContactId: holdedContact.id,
+    holdedContactCode: holdedContact.code,
+    budgetKind,
+    routeKey: routeKey ?? undefined,
+    pipelineMode,
+    operation,
+  };
+}
+
 export const handler = createHttpHandler<{ dealId?: string }>(async (request) => {
   if (request.method !== 'POST') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no soportado', 405);
@@ -702,204 +986,22 @@ export const handler = createHttpHandler<{ dealId?: string }>(async (request) =>
   }
 
   try {
-    const [deal, fieldDefs, products] = await Promise.all([
-      getDeal(dealId),
-      getDealFields(),
-      getDealProducts(dealId),
-    ]);
-
-    if (!deal) {
-      return errorResponse('NOT_FOUND', 'No se encontró el deal en Pipedrive.', 404);
-    }
-
-    const status = normalizeComparison(deal?.status);
-    const stageName = normalizeText(deal?.stage_name ?? deal?.stage?.name);
-    const pipelineMode = resolvePipelineMode(deal);
-    const existingHoldedId = normalizeText(deal?.[PIPEDRIVE_HOLDED_FIELD_KEY]);
-
-    if (existingHoldedId) {
-      return errorResponse('ALREADY_SYNCED', 'El presupuesto ya tiene un ID de Holded asociado.', 409);
-    }
-
-    if (!pipelineMode) {
-      return errorResponse(
-        'INVALID_PIPELINE',
-        'El deal no pertenece a un pipeline compatible con el envío a Holded.',
-        400,
-      );
-    }
-
-    if (status && status !== normalizeComparison(DEAL_WON_STATUS)) {
-      return errorResponse('INVALID_STATUS', 'Solo se pueden enviar a Holded deals ganados.', 400);
-    }
-
-    const expectedStageName = pipelineMode === 'abierta' ? DEAL_ABIERTA_STAGE_NAME : DEAL_EMPRESA_STAGE_NAME;
-    if (stageName && normalizeComparison(stageName) !== normalizeComparison(expectedStageName)) {
-      return errorResponse('INVALID_STAGE', `El deal debe estar en la fase ${expectedStageName}.`, 400);
-    }
-
-    const title = normalizeText(deal?.title);
-    if (
-      (pipelineMode === 'empresa' || pipelineMode === 'services')
-      && title
-      && normalizeComparison(title).startsWith(normalizeComparison(DEAL_EMPRESA_EXCLUDED_TITLE_PREFIX))
-    ) {
-      return errorResponse(
-        'UNSUPPORTED_DEAL',
-        'Los presupuestos de contabilidad no se envían a Holded desde esta acción.',
-        400,
-      );
-    }
-
-    const routeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_ROUTE_SITE_FIELD_KEYS);
-    const serviceTypeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_SERVICE_TYPE_FIELD_KEYS);
-    const servicePipelineKey = pipelineMode === 'services' ? resolveServicePipelineKey(deal) : null;
-    const serviceTypeKey = pipelineMode === 'services' ? resolveServiceTypeKey(serviceTypeLabel) : null;
-
-    const routeKey = pipelineMode === 'empresa'
-      ? resolveEmpresaRouteKey(routeLabel)
-      : pipelineMode === 'abierta'
-        ? resolveAbiertaRouteKey(routeLabel)
-        : resolveEmpresaRouteKey(routeLabel);
-
-    if (pipelineMode !== 'services' && !routeKey) {
-      return errorResponse('UNSUPPORTED_SITE', 'La sede del presupuesto no está contemplada en la automatización.', 400);
-    }
-
-    const budgetKind = pipelineMode === 'empresa' || pipelineMode === 'services'
-      ? 'empresa'
-      : resolveBudgetKind(serviceTypeLabel);
-    if (!budgetKind) {
-      return errorResponse('UNSUPPORTED_SERVICE_TYPE', 'El tipo de servicio no está contemplado en la automatización.', 400);
-    }
-
-    const [organization, person] = await Promise.all([
-      deal?.org_id ? getOrganization((deal.org_id as any)?.value ?? deal.org_id) : null,
-      deal?.person_id ? getPerson((deal.person_id as any)?.value ?? deal.person_id) : null,
-    ]);
-
-    const organizationName = normalizeText(organization?.name) ?? normalizeText((deal.org_id as any)?.name);
-    const personName = [normalizeText(person?.first_name ?? person?.name), normalizeText(person?.last_name)]
-      .filter((value): value is string => Boolean(value))
-      .join(' ')
-      .trim();
-    const contactName = organizationName ?? personName ?? `Deal ${dealId}`;
-    const routeConfig = pipelineMode === 'empresa'
-      ? getEmpresaRouteConfig(routeKey as EmpresaRouteKey)
-      : pipelineMode === 'abierta'
-        ? getAbiertaRouteConfig(budgetKind, routeKey as AbiertaRouteKey)
-        : resolveServicesRouteConfig({
-            pipelineKey: servicePipelineKey!,
-            serviceTypeKey,
-            routeKey: routeKey as EmpresaRouteKey | null,
-          });
-
-    if (!routeConfig) {
-      const code = routeKey ? 'UNSUPPORTED_SERVICE_TYPE' : 'UNSUPPORTED_SITE';
-      const message = routeKey
-        ? 'La combinación de tipo de servicio y sede no está contemplada en la automatización.'
-        : 'La sede del presupuesto no está contemplada en la automatización.';
-      return errorResponse(code, message, 400);
-    }
-
-    const contactCode = normalizeText(deal?.[DEAL_CONTACT_CODE_FIELD_KEY]);
-    const contactPhone = pickPrimaryValue(person?.phone ?? (deal.person_id as any)?.phone);
-    const contactAddress = resolveAddress(organization?.address ?? (deal.org_id as any)?.address);
-    const currency = normalizeText(deal?.currency);
-
-    const holdedContact = await findOrCreateHoldedContact({
-      apiKey: holdedApiKey,
-      code: contactCode,
-      name: contactName,
-      phone: contactPhone,
-      address: contactAddress,
-      currency,
-      individual: budgetKind === 'individual',
-    });
-
-    const paymentFormLabel = resolveFieldLabel(deal, fieldDefs, [DEAL_PAYMENT_FORM_FIELD_KEY])
-      ?? normalizeText(deal?.[DEAL_PAYMENT_FORM_FIELD_KEY]);
-    const bankAccountLabel = resolveFieldLabel(deal, fieldDefs, [DEAL_BANK_ACCOUNT_FIELD_KEY])
-      ?? normalizeText(deal?.[DEAL_BANK_ACCOUNT_FIELD_KEY]);
-    const holdedPaymentMethodId = resolveHoldedPaymentMethodId(
-      pipelineMode === 'empresa' || pipelineMode === 'services' ? bankAccountLabel ?? paymentFormLabel : paymentFormLabel,
-    ) ?? resolveHoldedPaymentMethodFallback(deal, fieldDefs);
-
-    const notes = pipelineMode === 'empresa' || pipelineMode === 'services'
-      ? buildEmpresaBudgetNotes({
-          po: normalizeText(deal?.[DEAL_PO_FIELD_KEY]),
-          paymentDay: normalizeText(deal?.[DEAL_PAYMENT_DAY_FIELD_KEY]),
-          paymentForm: paymentFormLabel,
-          invoiceEmail: normalizeText(deal?.[DEAL_INVOICE_EMAIL_FIELD_KEY]),
-          trainingSite: resolveFieldLabel(deal, fieldDefs, [DEAL_TRAINING_SITE_FIELD_KEY]),
-          fundae:
-            resolveFieldLabel(deal, fieldDefs, [DEAL_FUNDAE_FIELD_KEY]) ?? normalizeText(deal?.[DEAL_FUNDAE_FIELD_KEY]),
-          caes:
-            resolveFieldLabel(deal, fieldDefs, [DEAL_CAES_FIELD_KEY]) ?? normalizeText(deal?.[DEAL_CAES_FIELD_KEY]),
-          comercial: normalizeText(deal?.owner_name ?? deal?.owner_id?.name),
-        })
-      : buildAbiertaBudgetNotes({
-          po: normalizeText(deal?.[DEAL_PO_FIELD_KEY]),
-          paymentDay: normalizeText(deal?.[DEAL_PAYMENT_DAY_FIELD_KEY]),
-          paymentForm: paymentFormLabel,
-          invoiceEmail: normalizeText(deal?.[DEAL_INVOICE_EMAIL_FIELD_KEY]),
-          trainingSite: resolveFieldLabel(deal, fieldDefs, [DEAL_TRAINING_SITE_FIELD_KEY]),
-          trainingDate: normalizeText(deal?.[DEAL_TRAINING_DATE_FIELD_KEY]),
-          comercial: normalizeText(deal?.owner_name ?? deal?.owner_id?.name),
-        });
-
-    const items = buildItems(Array.isArray(products) ? products : []);
-    if (!items.length) {
-      return errorResponse('NO_PRODUCTS', 'El deal no tiene líneas de producto para enviar a Holded.', 400);
-    }
-
-    const quotePayload: Record<string, unknown> = {
-      date: normalizeText(deal?.update_time ?? deal?.add_time),
-      contactCode: holdedContact.code || undefined,
-      contactId: holdedContact.id,
-      invoiceNum: `PRVGR25-${dealId}`,
-      salesChannelId: routeConfig.salesChannelId,
-      tags: routeConfig.tags,
-      notes,
-      items,
-    };
-
-    if (holdedPaymentMethodId) {
-      quotePayload.paymentMethod = holdedPaymentMethodId;
-    } else if (budgetKind === 'individual') {
-      quotePayload.paymentMethod = INDIVIDUAL_PAYMENT_METHOD_ID;
-    }
-
-    const createdQuote = await holdedRequest<any>(holdedApiKey, HOLDED_ESTIMATES_ENDPOINT, {
-      method: 'POST',
-      body: JSON.stringify(quotePayload),
-    });
-
-    const documentId = normalizeText(createdQuote?.id);
-    if (!documentId) {
-      throw new Error('Holded no devolvió el identificador del presupuesto creado.');
-    }
-
-    await Promise.all([
-      updatePipedriveHoldedField(dealId, documentId),
-      getPrisma().deals.updateMany({
-        where: { deal_id: dealId },
-        data: { presu_holded: documentId },
-      }),
-    ]);
-
+    const result = await syncBudgetToHolded({ dealId, mode: 'create' });
     return successResponse({
-      documentId,
-      holdedContactId: holdedContact.id,
-      holdedContactCode: holdedContact.code,
-      budgetKind,
-      routeKey: routeKey ?? undefined,
-      pipelineMode,
+      ...result,
       simulated: true,
     });
   } catch (error) {
     console.error('[budgets-send-to-holded] sync failed', { dealId, error });
     const message = error instanceof Error ? error.message : 'No se pudo enviar el presupuesto a Holded.';
-    return errorResponse('HOLDED_SYNC_ERROR', message, 500);
+    const code =
+      error && typeof error === 'object' && typeof (error as any).code === 'string'
+        ? (error as any).code
+        : 'HOLDED_SYNC_ERROR';
+    const statusCode =
+      error && typeof error === 'object' && typeof (error as any).statusCode === 'number'
+        ? (error as any).statusCode
+        : 500;
+    return errorResponse(code, message, statusCode);
   }
 });

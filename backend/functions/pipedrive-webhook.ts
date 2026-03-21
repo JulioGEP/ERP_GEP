@@ -5,6 +5,7 @@ import { COMMON_HEADERS } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
 import { deleteDealFromDatabase, importDealFromPipedrive } from './deals';
 import { buildMailchimpPersonInput } from './_shared/pipedrive-mailchimp';
+import { syncBudgetToHolded } from './budgets-send-to-holded';
 
 const EXPECTED_TOKEN = process.env.PIPEDRIVE_WEBHOOK_TOKEN;
 
@@ -350,6 +351,30 @@ async function refreshDealAfterWebhook(
   return true;
 }
 
+async function syncHoldedBudgetIfLinked(
+  prisma: ReturnType<typeof getPrisma>,
+  dealId: string,
+): Promise<boolean> {
+  const stored = await prisma.deals.findUnique({
+    where: { deal_id: dealId },
+    select: { presu_holded: true },
+  });
+
+  const holdedDocumentId =
+    typeof stored?.presu_holded === 'string' && stored.presu_holded.trim().length
+      ? stored.presu_holded.trim()
+      : null;
+
+  if (!holdedDocumentId) return false;
+
+  await syncBudgetToHolded({
+    dealId,
+    mode: 'update',
+    holdedDocumentId,
+  });
+  return true;
+}
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
@@ -465,6 +490,7 @@ export const handler: Handler = async (event) => {
       const storedPipeline = storedDeal?.pipeline_label ?? storedDeal?.pipeline_id ?? null;
       if (storedDeal && isFormacionAbiertaPipeline(storedPipeline)) {
         await refreshDealAfterWebhook(prisma, relatedDealId);
+        await syncHoldedBudgetIfLinked(prisma, relatedDealId);
         processedDealId = relatedDealId;
         processedAction = 'updated';
       }
@@ -496,6 +522,7 @@ export const handler: Handler = async (event) => {
 
       await importDealFromPipedrive(dealId);
       await refreshDealAfterWebhook(prisma, dealId);
+      await syncHoldedBudgetIfLinked(prisma, dealId);
 
       processedDealId = dealId;
       processedAction = existedBefore ? 'updated' : 'created';
