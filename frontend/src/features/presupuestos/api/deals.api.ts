@@ -224,7 +224,15 @@ export type SendBudgetToHoldedResult = {
   holdedContactId?: string | null;
   holdedContactCode?: string | null;
   budgetKind?: 'empresa' | 'individual';
-  routeKey?: 'andalucia' | 'madrid' | 'sabadell';
+  routeKey?:
+    | 'andalucia'
+    | 'andaluciaInCompany'
+    | 'madrid'
+    | 'madridInCompany'
+    | 'sabadell'
+    | 'sabadellInCompany'
+    | 'nacional';
+  pipelineMode?: 'abierta' | 'empresa';
   simulated?: boolean;
 };
 
