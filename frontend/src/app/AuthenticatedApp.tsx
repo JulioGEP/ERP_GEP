@@ -1762,6 +1762,7 @@ export default function AuthenticatedApp() {
     onRetry: () => allBudgetsQuery.refetch(),
     onSelect: handleSelectBudget,
     onDelete: handleDeleteBudget,
+    onSendToHolded: handleSendBudgetToHolded,
     onOpenImportModal: handleOpenImportModal,
     isImporting: importMutation.isPending,
     canImport: canImportBudgets,
