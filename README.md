@@ -269,6 +269,9 @@ Crear un archivo `.env` en la raíz.
 ### Integraciones
 
 - `PIPEDRIVE_API_TOKEN`, `PIPEDRIVE_BASE_URL`
+- `API_HOLDED_KEY`
+- `HOLDED_TO_PIPEDRIVE_TOKEN` (protege el endpoint `/.netlify/functions/holded-invoice-to-pipedrive`)
+- `HOLDED_PIPE_DEFAULT_OWNER_ID`, `HOLDED_PIPE_VISIBLE_TO`, `HOLDED_PIPE_PIPELINE_ID`, `HOLDED_PIPE_OPEN_STAGE_ID`, `HOLDED_PIPE_WON_STAGE_ID` (opcionales para ajustar el mapeo contable → Pipedrive)
 - `WOO_API_KEY`, `WOO_API_SECRET`, `WOO_BASE_URL`
 - `OPENAI_API_KEY`, `OPENAI_BASE_URL`
 
