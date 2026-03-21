@@ -26,6 +26,8 @@ const DEAL_CONTACT_CODE_FIELD_KEY = '3f67c7125b2291a31a63dc01a778b6fd1ef41b3d';
 const DEAL_PO_FIELD_KEY = '9cf8ccb7ef293494974f98ddbc72ec726486310e';
 const DEAL_PAYMENT_DAY_FIELD_KEY = '2bbffae2c28ba11855fc1272ad70a31967bdb97c';
 const DEAL_PAYMENT_FORM_FIELD_KEY = 'fccd44232ff07afb4014d6d32f8e94709afb24fe';
+const DEAL_COST_CENTER_FIELD_NAMES = ['Centro de coste'] as const;
+const DEAL_PURCHASE_CHANNEL_FIELD_NAMES = ['Canal Compra Deal'] as const;
 const DEAL_TRAINING_SITE_FIELD_KEY = '676d6bd51e52999c582c01f67c99a35ed30bf6ae';
 const DEAL_TRAINING_DATE_FIELD_KEY = '98f072a788090ac2ae52017daaf9618c3a189033';
 const DEAL_INVOICE_EMAIL_FIELD_KEY = '8b0652b56fd17d4547149f1ae26b1b74b527eaf0';
@@ -180,6 +182,29 @@ function resolveFieldLabel(deal: Record<string, any>, fieldDefs: any[], fieldKey
   return null;
 }
 
+function resolveFieldLabelByName(
+  deal: Record<string, any>,
+  fieldDefs: any[],
+  fieldNames: readonly string[],
+): string | null {
+  const normalizedFieldNames = fieldNames.map((fieldName) => normalizeComparison(fieldName));
+
+  for (const fieldDef of Array.isArray(fieldDefs) ? fieldDefs : []) {
+    const fieldName = normalizeComparison(fieldDef?.name ?? fieldDef?.key ?? fieldDef?.label);
+    if (!fieldName || !normalizedFieldNames.includes(fieldName)) continue;
+
+    const fieldKey = normalizeText(fieldDef?.key);
+    if (!fieldKey) continue;
+
+    const rawValue = deal?.[fieldKey];
+    const labeled = optionLabelOf(fieldDef, rawValue);
+    const normalized = normalizeText(labeled ?? rawValue);
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
 function resolveAddress(value: unknown): string | null {
   if (value && typeof value === 'object') {
     const formatted = normalizeText((value as any).formatted_address);
@@ -221,7 +246,44 @@ function resolveHoldedPaymentMethodId(paymentForm: string | null): string | null
   const partialMatch = HOLDED_PAYMENT_METHOD_BY_PIPEDRIVE_FORM.find((entry) =>
     normalizedPaymentForm.includes(normalizeComparison(entry.pipedriveValue)),
   );
-  return partialMatch?.holdedId ?? null;
+  if (partialMatch) return partialMatch.holdedId;
+
+  if (normalizedPaymentForm.length >= 10) {
+    const reversePartialMatch = HOLDED_PAYMENT_METHOD_BY_PIPEDRIVE_FORM.find((entry) =>
+      normalizeComparison(entry.pipedriveValue).includes(normalizedPaymentForm),
+    );
+    if (reversePartialMatch) return reversePartialMatch.holdedId;
+  }
+
+  return null;
+}
+
+function resolveFallbackHoldedPaymentMethodId(params: {
+  deal: Record<string, any>;
+  fieldDefs: any[];
+}): string | null {
+  const costCenter = resolveFieldLabelByName(params.deal, params.fieldDefs, DEAL_COST_CENTER_FIELD_NAMES);
+  const normalizedCostCenter = normalizeComparison(costCenter);
+
+  if (normalizedCostCenter.includes('sabadell')) {
+    return '65845b74c9a83d8ce30d8b72';
+  }
+
+  if (normalizedCostCenter.includes('madrid')) {
+    return '65a4ea68deb80f770a03a605';
+  }
+
+  const purchaseChannel = resolveFieldLabelByName(
+    params.deal,
+    params.fieldDefs,
+    DEAL_PURCHASE_CHANNEL_FIELD_NAMES,
+  );
+  const normalizedPurchaseChannel = normalizeComparison(purchaseChannel);
+  if (normalizedPurchaseChannel.includes('compra web')) {
+    return '6759892555d547e2c90aa0ae';
+  }
+
+  return null;
 }
 
 function buildBudgetNotes(params: {
@@ -476,7 +538,9 @@ export const handler = createHttpHandler<{ dealId?: string }>(async (request) =>
 
     const paymentFormLabel = resolveFieldLabel(deal, fieldDefs, [DEAL_PAYMENT_FORM_FIELD_KEY])
       ?? normalizeText(deal?.[DEAL_PAYMENT_FORM_FIELD_KEY]);
-    const holdedPaymentMethodId = resolveHoldedPaymentMethodId(paymentFormLabel);
+    const holdedPaymentMethodId =
+      resolveHoldedPaymentMethodId(paymentFormLabel)
+      ?? resolveFallbackHoldedPaymentMethodId({ deal, fieldDefs });
 
     const notes = buildBudgetNotes({
       po: normalizeText(deal?.[DEAL_PO_FIELD_KEY]),
