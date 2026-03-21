@@ -557,6 +557,11 @@ function resolveServicePipelineKey(deal: Record<string, any>): ServicePipelineKe
   return null;
 }
 
+function isMaterialPipeline(value: unknown): boolean {
+  const normalized = normalizeComparison(normalizeText(value));
+  return normalized === 'material' || normalized === 'materiales';
+}
+
 function resolvePipelineMode(deal: Record<string, any>): PipelineMode | null {
   const pipelineId = normalizeText(deal?.pipeline_id);
   if (pipelineId === DEAL_EMPRESA_PIPELINE_ID) return 'empresa';
@@ -568,6 +573,10 @@ function resolvePipelineMode(deal: Record<string, any>): PipelineMode | null {
   const normalizedPipeline = normalizeComparison(pipelineLabel);
   if (normalizedPipeline.includes('formacion empresa')) return 'empresa';
   if (normalizedPipeline.includes('formacion abierta')) return 'abierta';
+  if (isMaterialPipeline(deal?.pipeline_name) || isMaterialPipeline(deal?.pipeline_label) || isMaterialPipeline(pipelineId)) {
+    return null;
+  }
+  if (pipelineLabel || pipelineId) return 'services';
 
   return null;
 }
