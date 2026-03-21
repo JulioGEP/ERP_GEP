@@ -36,6 +36,7 @@ type NormalizedWooOrder = {
   sku: string | null;
   quantity: number;
   subtotal: number;
+  taxPercentage: number | null;
   rawDate: string | null;
   rawLocation: string | null;
   formattedDate: string | null;
@@ -222,6 +223,84 @@ function normalizeCouponCodes(payload: JsonObject): string[] {
     .map((entry) => entry.trim().toLowerCase());
 }
 
+function collectTaxValues(value: unknown): number[] {
+  const numbers: number[] = [];
+
+  for (const entry of readArray(value)) {
+    const record = readObject(entry);
+    if (!record) continue;
+
+    const directKeys = ['rate_percent', 'tax', 'tax_percentage', 'total_tax', 'tax_total', 'subtotal_tax', 'total', 'subtotal'];
+    for (const key of directKeys) {
+      const parsed = readNumber(record[key]);
+      if (parsed !== null) numbers.push(parsed);
+    }
+
+    const nestedTaxes = readArray(record.taxes);
+    for (const nestedTax of nestedTaxes) {
+      const nestedRecord = readObject(nestedTax);
+      if (!nestedRecord) continue;
+      for (const key of ['rate_percent', 'tax', 'tax_percentage', 'total', 'subtotal']) {
+        const parsed = readNumber(nestedRecord[key]);
+        if (parsed !== null) numbers.push(parsed);
+      }
+    }
+  }
+
+  return numbers;
+}
+
+function collectTaxPercentages(value: unknown): number[] {
+  const numbers: number[] = [];
+
+  for (const entry of readArray(value)) {
+    const record = readObject(entry);
+    if (!record) continue;
+
+    for (const key of ['rate_percent', 'tax_percentage', 'tax']) {
+      const parsed = readNumber(record[key]);
+      if (parsed !== null) numbers.push(parsed);
+    }
+
+    for (const nestedTax of readArray(record.taxes)) {
+      const nestedRecord = readObject(nestedTax);
+      if (!nestedRecord) continue;
+      for (const key of ['rate_percent', 'tax_percentage', 'tax']) {
+        const parsed = readNumber(nestedRecord[key]);
+        if (parsed !== null) numbers.push(parsed);
+      }
+    }
+  }
+
+  return numbers;
+}
+
+function resolveWooTaxPercentage(payload: JsonObject, lineItem: JsonObject): number | null {
+  const taxLinePercentages = collectTaxPercentages(payload.tax_lines).filter((value) => value > 0 && value <= 100);
+  if (taxLinePercentages.length) {
+    return taxLinePercentages[0];
+  }
+
+  const lineItemPercentages = collectTaxPercentages(lineItem.taxes).filter((value) => value > 0 && value <= 100);
+  if (lineItemPercentages.length) {
+    return lineItemPercentages[0];
+  }
+
+  const taxAmounts = [
+    ...collectTaxValues(payload.tax_lines),
+    ...collectTaxValues(payload.fee_lines),
+    ...collectTaxValues(payload.line_items),
+    ...collectTaxValues(lineItem.taxes),
+  ];
+
+  const hasOnlyZeroTaxes = taxAmounts.length > 0 && taxAmounts.every((value) => value === 0);
+  if (hasOnlyZeroTaxes) {
+    return 21;
+  }
+
+  return null;
+}
+
 function splitCompositeValue(value: string | null): string | null {
   if (!value) return null;
   const [firstChunk] = value.split('-ca');
@@ -295,6 +374,7 @@ function normalizeWooOrder(payloadRoot: JsonObject): NormalizedWooOrder {
   const rawLocation =
     pickMetaValue(lineMeta, ['pa_localizacion', 'meta_data_pa_localizacion', 'attribute_pa_localizacion']) ??
     readString(lineItem['meta_data_pa_localizacion']);
+  const taxPercentage = resolveWooTaxPercentage(payload, lineItem);
 
   return {
     orderId,
@@ -318,6 +398,7 @@ function normalizeWooOrder(payloadRoot: JsonObject): NormalizedWooOrder {
     sku: readString(lineItem.sku),
     quantity: Math.max(1, Math.trunc(readNumber(lineItem.quantity) ?? 1)),
     subtotal: readNumber(lineItem.subtotal) ?? readNumber(payload.total) ?? 0,
+    taxPercentage,
     rawDate,
     rawLocation,
     formattedDate: formatTrainingDate(rawDate),
@@ -714,12 +795,12 @@ function buildAddProductPayload(order: NormalizedWooOrder, productIdPipe: string
     product_id: normalizedProductId,
     item_price: order.subtotal,
     quantity: 1,
-    discount_percentage: discountPercentage > 0 ? discountPercentage : undefined,
+    discount: discountPercentage > 0 ? discountPercentage : undefined,
     discount_type: 'percentage',
     tax_method: 'exclusive',
-    tax_percentage: 21,
+    tax: order.taxPercentage ?? undefined,
     comments: buildDealProductComment(order),
-    enabled_flag: 1,
+    is_enabled: true,
   };
 }
 
