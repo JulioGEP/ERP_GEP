@@ -99,6 +99,8 @@ const ORG_CIF_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_ORG_CIF_FIELD_KEY || '6d3
 const ORG_PHONE_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_ORG_PHONE_FIELD_KEY || 'b4379db06dfbe0758d84c2c2dd45ef04fa093b6d';
 const ORG_EMAIL_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_ORG_EMAIL_FIELD_KEY || '304ab03c5ac339ef085f0f6cfe4cb1c89ed6aa9f';
 const ORG_TRAFFIC_SOURCE_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_ORG_TRAFFIC_SOURCE_FIELD_KEY || '0fc89035ac2e1b484953c6733a81e6693047d1ec';
+const ORG_COMPANY_TYPE_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_ORG_COMPANY_TYPE_FIELD_KEY || '8a65e9b780cbab3f08ccc8babe92a290fb79f216';
+const ORG_ACQUISITION_CHANNEL_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_ORG_ACQUISITION_CHANNEL_FIELD_KEY || '6eb20e6b912f055c127241c9012f20a8223637f6';
 
 const PERSON_CIF_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_PERSON_CIF_FIELD_KEY || 'b468b281ef6398b05a2348ad529c56267694a543';
 const PERSON_ADDRESS_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_PERSON_ADDRESS_FIELD_KEY || 'cfc59f9181a6a9558a71a9630d5d0088392b1a25';
@@ -708,6 +710,21 @@ function buildDealProductComment(order: NormalizedWooOrder): string {
   ].join('\n');
 }
 
+function resolveOrganizationCompanyTypeOptionId(order: NormalizedWooOrder): number {
+  const hasPartnerCoupon = order.couponCodes.some((coupon) => coupon.includes('partner'));
+  if (hasPartnerCoupon) {
+    return 136;
+  }
+
+  const hasClienteCoupon = order.couponCodes.some((coupon) => coupon.includes('cliente'));
+  if (hasClienteCoupon) {
+    return 59;
+  }
+
+  const normalizedEmail = readString(order.billingEmail)?.toLowerCase() ?? '';
+  return normalizedEmail.includes('@gmail') ? 241 : 59;
+}
+
 function buildOrganizationPayload(order: NormalizedWooOrder) {
   const address = buildAddress(order);
   return {
@@ -719,6 +736,8 @@ function buildOrganizationPayload(order: NormalizedWooOrder) {
     [ORG_PHONE_FIELD_KEY]: order.billingPhone,
     [ORG_EMAIL_FIELD_KEY]: order.billingEmail,
     [ORG_TRAFFIC_SOURCE_FIELD_KEY]: order.trafficSource,
+    [ORG_COMPANY_TYPE_FIELD_KEY]: resolveOrganizationCompanyTypeOptionId(order),
+    [ORG_ACQUISITION_CHANNEL_FIELD_KEY]: 139,
   };
 }
 
