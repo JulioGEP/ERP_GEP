@@ -232,7 +232,7 @@ export type SendBudgetToHoldedResult = {
     | 'sabadell'
     | 'sabadellInCompany'
     | 'nacional';
-  pipelineMode?: 'abierta' | 'empresa' | 'services';
+  pipelineMode?: 'abierta' | 'empresa' | 'services' | 'material';
   simulated?: boolean;
 };
 
