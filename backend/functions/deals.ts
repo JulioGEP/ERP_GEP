@@ -22,6 +22,7 @@ import { studentsFromNotes } from "./_shared/studentsFromNotes";
 import type { StudentIdentifier } from "./_shared/studentsFromNotes";
 import { logAudit, resolveUserIdFromEvent, type JsonValue } from "./_shared/audit-log";
 import { isTrustedClient, logSuspiciousRequest } from "./_shared/security";
+import { deleteBudgetFromHolded } from "./budgets-send-to-holded";
 
 const EDITABLE_FIELDS = new Set([
   "sede_label",
@@ -641,6 +642,11 @@ export async function deleteDealFromDatabase(
   if (!existing) {
     return { deleted: false };
   }
+
+  await deleteBudgetFromHolded({
+    dealId: id,
+    holdedDocumentId: existing.presu_holded,
+  });
 
   const commentsTableExistsResult = await prisma.$queryRaw<
     Array<{ table_ref: string | null }>

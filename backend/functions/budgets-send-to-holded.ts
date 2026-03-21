@@ -233,6 +233,10 @@ function buildSyncError(code: string, message: string, statusCode: number): Erro
   return error;
 }
 
+function buildHoldedError(statusCode: number, message: string): Error {
+  return buildSyncError('HOLDED_API_ERROR', message, statusCode);
+}
+
 function normalizeText(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   if (typeof value === 'string') {
@@ -639,7 +643,7 @@ async function holdedRequest<T = any>(
 
   if (!response.ok) {
     const serialized = typeof json === 'string' ? json : JSON.stringify(json ?? {});
-    throw new Error(`Holded respondió ${response.status}: ${serialized}`);
+    throw buildHoldedError(response.status, `Holded respondió ${response.status}: ${serialized}`);
   }
 
   return json as T;
@@ -715,7 +719,16 @@ async function updateHoldedEstimate(
   });
 }
 
-async function updatePipedriveHoldedField(dealId: string, holdedDocumentId: string) {
+async function deleteHoldedEstimate(
+  apiKey: string,
+  documentId: string,
+) {
+  return holdedRequest<any>(apiKey, `${HOLDED_ESTIMATES_ENDPOINT}/${encodeURIComponent(documentId)}`, {
+    method: 'DELETE',
+  });
+}
+
+async function updatePipedriveHoldedField(dealId: string, holdedDocumentId: string | null) {
   const token = process.env.PIPEDRIVE_API_TOKEN;
   if (!token) {
     throw new Error('Falta PIPEDRIVE_API_TOKEN en variables de entorno');
@@ -735,6 +748,64 @@ async function updatePipedriveHoldedField(dealId: string, holdedDocumentId: stri
     const text = await response.text().catch(() => '');
     throw new Error(`No se pudo actualizar Pipedrive (${response.status}): ${text}`);
   }
+}
+
+export async function deleteBudgetFromHolded({
+  dealId,
+  holdedDocumentId,
+}: {
+  dealId: string;
+  holdedDocumentId?: string | null;
+}): Promise<{ documentId: string | null; deleted: boolean }> {
+  const normalizedDealId = normalizeText(dealId);
+  if (!normalizedDealId) {
+    throw buildSyncError('VALIDATION_ERROR', 'Falta dealId para eliminar el presupuesto de Holded.', 400);
+  }
+
+  const prisma = getPrisma();
+  const storedHoldedId = normalizeText(holdedDocumentId)
+    ?? normalizeText(
+      (
+        await prisma.deals.findUnique({
+          where: { deal_id: normalizedDealId },
+          select: { presu_holded: true },
+        })
+      )?.presu_holded,
+    );
+
+  if (!storedHoldedId) {
+    return { documentId: null, deleted: false };
+  }
+
+  const holdedApiKey = process.env.API_HOLDED_KEY;
+  if (!holdedApiKey) {
+    throw buildSyncError('CONFIG_ERROR', 'API_HOLDED_KEY no configurada.', 500);
+  }
+
+  try {
+    await deleteHoldedEstimate(holdedApiKey, storedHoldedId);
+  } catch (error) {
+    const statusCode =
+      error && typeof error === 'object' && typeof (error as any).statusCode === 'number'
+        ? (error as any).statusCode
+        : null;
+
+    if (statusCode !== 404) {
+      throw error;
+    }
+  }
+
+  try {
+    await updatePipedriveHoldedField(normalizedDealId, null);
+  } catch (error) {
+    console.warn('[budgets-send-to-holded] No se pudo limpiar el ID de Holded en Pipedrive', {
+      dealId: normalizedDealId,
+      holdedDocumentId: storedHoldedId,
+      error,
+    });
+  }
+
+  return { documentId: storedHoldedId, deleted: true };
 }
 
 export async function syncBudgetToHolded({
