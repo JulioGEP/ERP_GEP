@@ -1,5 +1,5 @@
 // backend/functions/alumnos.ts
-import { isUuid } from './_shared/uuid';
+import { validate as isUUID } from 'uuid';
 import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, successResponse } from './_shared/response';
@@ -81,7 +81,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     let sessionId: string | null = null;
     if (sessionIdRaw) {
       sessionId = sessionIdRaw;
-      if (!isUuid(sessionIdRaw)) {
+      if (!isUUID(sessionIdRaw)) {
         // Sesiones antiguas pueden tener identificadores no UUID.
         // Permitimos continuar sin lanzar error para poder leer esos alumnos.
       }
@@ -119,7 +119,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     if (!dealId) {
       return errorResponse('VALIDATION_ERROR', 'deal_id requerido', 400);
     }
-    if (!sessionId || !isUuid(sessionId)) {
+    if (!sessionId || !isUUID(sessionId)) {
       return errorResponse('VALIDATION_ERROR', 'sesion_id inválido (UUID requerido)', 400);
     }
     if (!nombre) {
@@ -173,7 +173,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     }
 
     const studentIdTrimmed = studentId.trim();
-    if (!studentIdTrimmed || !isUuid(studentIdTrimmed)) {
+    if (!studentIdTrimmed || !isUUID(studentIdTrimmed)) {
       return errorResponse('VALIDATION_ERROR', 'id de alumno inválido (UUID requerido)', 400);
     }
 
@@ -264,7 +264,7 @@ export const handler = createHttpHandler<any>(async (request) => {
 
   if (method === 'DELETE' && studentId) {
     const studentIdTrimmed = studentId.trim();
-    if (!studentIdTrimmed || !isUuid(studentIdTrimmed)) {
+    if (!studentIdTrimmed || !isUUID(studentIdTrimmed)) {
       return errorResponse('VALIDATION_ERROR', 'id de alumno inválido (UUID requerido)', 400);
     }
 

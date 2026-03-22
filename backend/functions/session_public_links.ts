@@ -1,6 +1,6 @@
 // backend/functions/session_public_links.ts
 import { randomBytes } from 'crypto';
-import { isUuid } from './_shared/uuid';
+import { validate as isUUID } from 'uuid';
 import { requireAuth } from './_shared/auth';
 import { logAudit } from './_shared/audit-log';
 import { createHttpHandler } from './_shared/http';
@@ -169,7 +169,7 @@ export const handler = createHttpHandler(async (request) => {
     if (!dealId) {
       return errorResponse('VALIDATION_ERROR', 'deal_id requerido', 400);
     }
-    if (!sessionId || !isUuid(sessionId)) {
+    if (!sessionId || !isUUID(sessionId)) {
       return errorResponse('VALIDATION_ERROR', 'session_id inválido (UUID requerido)', 400);
     }
 
@@ -206,7 +206,7 @@ export const handler = createHttpHandler(async (request) => {
     if (!dealId) {
       return errorResponse('VALIDATION_ERROR', 'deal_id requerido', 400);
     }
-    if (!sessionId || !isUuid(sessionId)) {
+    if (!sessionId || !isUUID(sessionId)) {
       return errorResponse('VALIDATION_ERROR', 'session_id inválido (UUID requerido)', 400);
     }
 
@@ -287,7 +287,7 @@ export const handler = createHttpHandler(async (request) => {
     if (!dealId) {
       return errorResponse('VALIDATION_ERROR', 'deal_id requerido', 400);
     }
-    if (!sessionId || !isUuid(sessionId)) {
+    if (!sessionId || !isUUID(sessionId)) {
       return errorResponse('SESSION_ID_INVALID', 'session_id inválido (UUID requerido)', 400);
     }
 
