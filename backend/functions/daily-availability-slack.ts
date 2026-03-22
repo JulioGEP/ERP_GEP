@@ -1,6 +1,6 @@
 import type { Handler } from '@netlify/functions';
 
-import { getPrisma, withDatabaseFallback } from './_shared/prisma';
+import { getPrisma } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
 import { nowInMadridISO } from './_shared/timezone';
 import { isScheduledInvocation, isWithinMadridAutomationWindow } from './_shared/slackSchedule';
@@ -12,7 +12,6 @@ type DailyGroup = {
   off: string[];
   telework: string[];
 };
-type VacationDaysResult = Awaited<ReturnType<ReturnType<typeof getPrisma>['user_vacation_days']['findMany']>>;
 
 function addDaysToDateOnly(dateOnly: string, days: number): string {
   const base = new Date(`${dateOnly}T00:00:00Z`);
@@ -97,6 +96,7 @@ export const handler: Handler = async (event) => {
   }
 
   try {
+    const prisma = getPrisma();
     const nowMadrid = nowInMadridISO();
     const isScheduledEvent = isScheduledInvocation(event);
     const force = String(event.queryStringParameters?.force ?? '').toLowerCase();
@@ -113,34 +113,32 @@ export const handler: Handler = async (event) => {
     const tomorrow = addDaysToDateOnly(today, 1);
     const targetDates = [today, tomorrow];
 
-    const vacationDays: VacationDaysResult = await withDatabaseFallback((client) =>
-      client.user_vacation_days.findMany({
-        where: {
-          date: {
-            in: targetDates.map((date) => new Date(`${date}T00:00:00Z`)),
-          },
-          user: {
-            active: true,
+    const vacationDays = await prisma.user_vacation_days.findMany({
+      where: {
+        date: {
+          in: targetDates.map((date) => new Date(`${date}T00:00:00Z`)),
+        },
+        user: {
+          active: true,
+        },
+      },
+      select: {
+        type: true,
+        date: true,
+        user: {
+          select: {
+            first_name: true,
+            last_name: true,
+            name: true,
           },
         },
-        select: {
-          type: true,
-          date: true,
-          user: {
-            select: {
-              first_name: true,
-              last_name: true,
-              name: true,
-            },
-          },
-        },
-        orderBy: [
-          { date: 'asc' },
-          { user: { first_name: 'asc' } },
-          { user: { last_name: 'asc' } },
-        ],
-      }),
-    );
+      },
+      orderBy: [
+        { date: 'asc' },
+        { user: { first_name: 'asc' } },
+        { user: { last_name: 'asc' } },
+      ],
+    });
 
     const grouped: Record<string, DailyGroup> = {
       [today]: { off: [], telework: [] },
