@@ -1,27 +1,32 @@
 import type { Handler } from '@netlify/functions';
+import type { Prisma } from '@prisma/client';
 
 import { getPrisma, withDatabaseFallback } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
-import { getSlackRetryOptions, postSlackMessageWithRetry } from './_shared/slackPost';
 import { nowInMadridISO } from './_shared/timezone';
 import { isScheduledInvocation, isWithinMadridAutomationWindow } from './_shared/slackSchedule';
 import { getSlackChannelId, getSlackToken } from './_shared/slackConfig';
 
+const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
 const TELEWORK_TYPE = 'T';
 const JOB_NAME = 'daily-availability-slack';
 type DailyGroup = {
   off: string[];
   telework: string[];
 };
-type VacationDayRow = {
-  type: string | null;
-  date: Date;
-  user: {
-    first_name: string | null;
-    last_name: string | null;
-    name: string | null;
+type VacationDayRow = Prisma.user_vacation_daysGetPayload<{
+  select: {
+    type: true;
+    date: true;
+    user: {
+      select: {
+        first_name: true;
+        last_name: true;
+        name: true;
+      };
+    };
   };
-};
+}>;
 type VacationDaysResult = VacationDayRow[];
 
 function addDaysToDateOnly(dateOnly: string, days: number): string {
@@ -71,6 +76,35 @@ function buildSlackMessage(today: string, tomorrow: string, grouped: Record<stri
   ].join('\n');
 }
 
+async function postSlackMessage(token: string, text: string): Promise<void> {
+  const response = await fetch(SLACK_API_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify({
+      channel: getSlackChannelId(),
+      text,
+    }),
+  });
+
+  const rawBody = await response.text();
+  let payload: { ok?: boolean; error?: string } | null = null;
+
+  try {
+    payload = rawBody ? (JSON.parse(rawBody) as { ok?: boolean; error?: string }) : null;
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok || !payload?.ok) {
+    const details = payload?.error ? ` (${payload.error})` : '';
+    const rawDetails = rawBody ? ` | body=${rawBody}` : '';
+    throw new Error(`Slack API chat.postMessage falló${details}${rawDetails}`);
+  }
+}
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
@@ -90,8 +124,6 @@ export const handler: Handler = async (event) => {
     const isScheduledEvent = isScheduledInvocation(event);
     const force = String(event.queryStringParameters?.force ?? '').toLowerCase();
     const shouldForceSend = force === '1' || force === 'true';
-    const slackRetryOptions = getSlackRetryOptions(event.queryStringParameters);
-    const slackChannel = getSlackChannelId();
 
     console.info(`[${JOB_NAME}] Invocation started.`, {
       method: event.httpMethod,
@@ -99,8 +131,6 @@ export const handler: Handler = async (event) => {
       isScheduledEvent,
       shouldForceSend,
       nowMadrid,
-      slackChannel,
-      ...slackRetryOptions,
     });
 
     if (!shouldForceSend && isScheduledEvent && !isWithinMadridAutomationWindow(nowMadrid)) {
@@ -178,32 +208,25 @@ export const handler: Handler = async (event) => {
     const text = buildSlackMessage(today, tomorrow, grouped);
 
     console.info(`[${JOB_NAME}] Posting message to Slack.`, {
-      channel: slackChannel,
+      channel: getSlackChannelId(),
       textLength: text.length,
-      ...slackRetryOptions,
     });
 
-    const slackPostResult = await postSlackMessageWithRetry(token, text, {
-      ...slackRetryOptions,
-      channel: slackChannel,
-      logger: console,
-    });
+    await postSlackMessage(token, text);
 
     console.info(`[${JOB_NAME}] Slack message sent successfully.`, {
-      channel: slackChannel,
+      channel: getSlackChannelId(),
       date: today,
       nextDate: tomorrow,
-      ...slackPostResult,
     });
 
     return successResponse({
       message: 'Mensaje enviado a Slack correctamente.',
       date: today,
       nextDate: tomorrow,
-      channel: slackChannel,
+      channel: getSlackChannelId(),
       text,
       availability: grouped,
-      ...slackPostResult,
     });
   } catch (error) {
     console.error(`[${JOB_NAME}] Handler failed.`, {
