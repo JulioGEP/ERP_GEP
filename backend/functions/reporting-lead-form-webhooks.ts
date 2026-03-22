@@ -3,6 +3,7 @@ import { requireAuth } from './_shared/auth';
 import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, successResponse } from './_shared/response';
+import { sendLeadFormWebhookToPipedrive } from './_shared/lead-form-pipedrive';
 import { toMadridISOString } from './_shared/timezone';
 
 const DEFAULT_LIMIT = 200;
@@ -35,6 +36,32 @@ export const handler = createHttpHandler(async (request) => {
   const auth = await requireAuth(request, prisma, { requireRoles: ['Admin'] });
   if ('error' in auth) {
     return auth.error;
+  }
+
+  if (request.method === 'POST') {
+    const eventId = typeof request.body === 'object' && request.body !== null ? String((request.body as any).eventId ?? '').trim() : '';
+    if (!eventId.length) {
+      return errorResponse('VALIDATION_ERROR', 'El identificador del webhook es obligatorio.', 400);
+    }
+
+    try {
+      const result = await sendLeadFormWebhookToPipedrive({
+        prisma,
+        webhookEventId: eventId,
+      });
+
+      return successResponse({
+        message: 'Lead enviado a Pipedrive correctamente.',
+        result,
+      });
+    } catch (error) {
+      console.error('[reporting-lead-form-webhooks] send to Pipedrive failed', error);
+      return errorResponse(
+        'PIPEDRIVE_SYNC_ERROR',
+        error instanceof Error ? error.message : 'No se pudo enviar el lead a Pipedrive.',
+        500,
+      );
+    }
   }
 
   if (request.method !== 'GET') {
