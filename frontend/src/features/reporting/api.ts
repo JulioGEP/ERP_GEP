@@ -1382,7 +1382,7 @@ export type SlackDailyAvailabilityResponse = {
 };
 
 export async function sendDailyAvailabilitySlackMessage(): Promise<SlackDailyAvailabilityResponse> {
-  return postJson<SlackDailyAvailabilityResponse>('/daily-availability-slack', {});
+  return getJson<SlackDailyAvailabilityResponse>('/daily-availability-slack?force=true');
 }
 
 export type SlackDailyTrainersResponse = {
@@ -1398,5 +1398,5 @@ export type SlackDailyTrainersResponse = {
 };
 
 export async function sendDailyTrainersSlackMessage(): Promise<SlackDailyTrainersResponse> {
-  return postJson<SlackDailyTrainersResponse>('/daily-trainers-slack', {});
+  return getJson<SlackDailyTrainersResponse>('/daily-trainers-slack?force=true');
 }
