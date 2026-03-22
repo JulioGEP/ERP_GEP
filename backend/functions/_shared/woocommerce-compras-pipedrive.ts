@@ -19,6 +19,9 @@ type NormalizedWooOrder = {
   orderId: string;
   orderNumber: string;
   status: string | null;
+  orderTotal: number;
+  currency: string | null;
+  paymentMethodTitle: string | null;
   companyName: string | null;
   billingFirstName: string | null;
   billingLastName: string | null;
@@ -60,6 +63,9 @@ type PipedriveSyncResult = {
   productAdded: boolean;
   notesCreated: string[];
   warnings: string[];
+  holdedDocumentId: string | null;
+  holdedDocumentType: 'invoice' | null;
+  invoiceEmailSent: boolean;
 };
 
 type ProductResolution = {
@@ -124,6 +130,36 @@ const DEAL_WON_SERVICE_VALUE = process.env.WOOCOMMERCE_PIPE_DEAL_WON_SERVICE_VAL
 const DEAL_INITIAL_SOURCE_VALUE = process.env.WOOCOMMERCE_PIPE_DEAL_INITIAL_SOURCE_VALUE || 'reserva web';
 const DEAL_CONSTANT_STATUS_VALUE = process.env.WOOCOMMERCE_PIPE_DEAL_CONSTANT_STATUS_VALUE || '63';
 
+const HOLDED_CONTACTS_ENDPOINT = 'https://api.holded.com/api/invoicing/v1/contacts';
+const HOLDED_INVOICES_ENDPOINT = 'https://api.holded.com/api/invoicing/v1/documents/invoice';
+const HOLDED_PAYMENT_METHOD_TPV_WEB = '6759892555d547e2c90aa0ae';
+const HOLDED_PAYMENT_METHOD_CAIXABANK = '65845b74c9a83d8ce30d8b72';
+const HOLDED_PAYMENT_METHOD_SANTANDER = '65a4ea68deb80f770a03a605';
+const HOLDED_PAYMENT_METHOD_SABADELL = '65aa2fa043e2b80e3401df97';
+const HOLDED_DEFAULT_NUMBERING_SERIE_ID = '65845b74c9a83d8ce30d8b40';
+
+type AbiertaRouteKey = 'andalucia' | 'madrid' | 'sabadell';
+
+type HoldedRouteConfig = {
+  salesChannelId: string;
+  tags: string[];
+};
+
+const HOLDED_ROUTE_CONFIG: Record<AbiertaRouteKey, HoldedRouteConfig> = {
+  andalucia: {
+    salesChannelId: '65ba50c3f957de633000d5a0',
+    tags: ['formacion', 'abierta', 'andalucianv'],
+  },
+  madrid: {
+    salesChannelId: '65ba4fb510f428f465015381',
+    tags: ['formacion', 'abierta', 'madridnv'],
+  },
+  sabadell: {
+    salesChannelId: '65ba4be92a1064ab340301e2',
+    tags: ['formacion', 'abierta', 'sabadellnv'],
+  },
+};
+
 function parseIntegerEnv(rawValue: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(String(rawValue ?? ''), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -153,6 +189,15 @@ function readNumber(value: unknown): number | null {
   }
 
   return null;
+}
+
+function normalizeComparison(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
 function normalizeBooleanText(value: string | null): 'yes' | 'no' | null {
@@ -333,6 +378,15 @@ function formatTrainingDate(value: string | null): string | null {
   return parsed.toISOString().slice(0, 19);
 }
 
+function resolveAbiertaRouteKey(routeLabel: string | null): AbiertaRouteKey | null {
+  const normalized = normalizeComparison(routeLabel);
+  if (!normalized) return null;
+  if (normalized.includes('andaluc') || normalized.includes('cadiz') || normalized.includes('cádiz')) return 'andalucia';
+  if (normalized.includes('madrid')) return 'madrid';
+  if (normalized.includes('sabadell')) return 'sabadell';
+  return null;
+}
+
 function resolvePayload(body: JsonObject): JsonObject {
   const candidates = [body.order, body.data, body.payload];
   for (const candidate of candidates) {
@@ -387,6 +441,9 @@ function normalizeWooOrder(payloadRoot: JsonObject): NormalizedWooOrder {
     orderId,
     orderNumber,
     status: readString(payload.status),
+    orderTotal: readNumber(payload.total) ?? 0,
+    currency: readString(payload.currency),
+    paymentMethodTitle: readString(payload.payment_method_title) ?? readString(payload.payment_method),
     companyName,
     billingFirstName: readString(billing?.first_name),
     billingLastName: readString(billing?.last_name),
@@ -1062,6 +1119,248 @@ async function ensureDealProduct(
   return true;
 }
 
+function isDirectInvoiceOrder(order: NormalizedWooOrder): boolean {
+  return order.orderTotal > 0 && Boolean(readString(order.paymentMethodTitle));
+}
+
+function resolveHoldedPaymentMethodIdFromWoo(order: NormalizedWooOrder): string {
+  const normalizedPayment = normalizeComparison(order.paymentMethodTitle);
+
+  if (
+    normalizedPayment.includes('tpv')
+    || normalizedPayment.includes('web')
+    || normalizedPayment.includes('tarjeta')
+    || normalizedPayment.includes('credito')
+    || normalizedPayment.includes('credito/debito')
+    || normalizedPayment.includes('debito')
+    || normalizedPayment.includes('credit')
+    || normalizedPayment.includes('debit')
+  ) {
+    return HOLDED_PAYMENT_METHOD_TPV_WEB;
+  }
+
+  if (normalizedPayment.includes('sabadell')) {
+    return HOLDED_PAYMENT_METHOD_SABADELL;
+  }
+
+  if (normalizedPayment.includes('santander') || normalizedPayment.includes('madrid')) {
+    return HOLDED_PAYMENT_METHOD_SANTANDER;
+  }
+
+  if (normalizedPayment.includes('caixabank') || normalizedPayment.includes('caixa bank')) {
+    return HOLDED_PAYMENT_METHOD_CAIXABANK;
+  }
+
+  return HOLDED_PAYMENT_METHOD_TPV_WEB;
+}
+
+async function holdedRequest<T = any>(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<T> {
+  const apiKey = process.env.API_HOLDED_KEY;
+  if (!apiKey) {
+    throw new Error('Falta API_HOLDED_KEY en variables de entorno');
+  }
+
+  const response = await fetch(input, {
+    ...init,
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      key: apiKey,
+      ...(init?.headers ?? {}),
+    },
+  });
+
+  const text = await response.text().catch(() => '');
+  let json: any = null;
+  if (text) {
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = text;
+    }
+  }
+
+  if (!response.ok) {
+    const serialized = typeof json === 'string' ? json : JSON.stringify(json ?? {});
+    throw new Error(`Holded respondió ${response.status}: ${serialized}`);
+  }
+
+  return json as T;
+}
+
+async function findOrCreateHoldedContactFromOrder(order: NormalizedWooOrder) {
+  const contactName =
+    order.companyName ??
+    joinNonEmpty([order.billingFirstName, order.billingLastName]) ??
+    `Pedido WC ${order.orderNumber}`;
+  const searchTerms = [order.billingCif, order.companyName, order.billingEmail].filter(
+    (value): value is string => Boolean(readString(value)),
+  );
+
+  for (const searchTerm of searchTerms) {
+    const results = await holdedRequest<any[]>(
+      `${HOLDED_CONTACTS_ENDPOINT}?search=${encodeURIComponent(searchTerm)}`,
+      { method: 'GET' },
+    ).catch(() => []);
+
+    const normalizedSearch = normalizeComparison(searchTerm);
+    const matched = Array.isArray(results)
+      ? results.find((contact) => {
+          const codeMatches = normalizeComparison(contact?.code) === normalizedSearch;
+          const nameMatches = normalizeComparison(contact?.name) === normalizeComparison(contactName);
+          const emailMatches = normalizeComparison(contact?.email) === normalizeComparison(order.billingEmail);
+          return codeMatches || nameMatches || emailMatches;
+        })
+      : null;
+
+    if (matched?.id != null) {
+      return {
+        id: String(matched.id),
+        code: readString(matched.code) ?? order.billingCif ?? '',
+        created: false,
+      };
+    }
+  }
+
+  const payload = {
+    code: order.billingCif ?? undefined,
+    type: 'client',
+    isperson: 'Company',
+    phone: order.billingPhone ?? undefined,
+    mobile: order.billingPhone ?? undefined,
+    address: order.billingAddress ?? undefined,
+    city: order.billingCity ?? undefined,
+    postalCode: order.billingPostcode ?? undefined,
+    country: order.billingCountry ?? undefined,
+    name: contactName,
+    email: order.billingEmail ?? undefined,
+  };
+
+  const created = await holdedRequest<any>(HOLDED_CONTACTS_ENDPOINT, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  const createdId = readString(created?.id ?? created?._id);
+  if (!createdId) {
+    throw new Error('Holded no devolvió el identificador del contacto creado.');
+  }
+
+  return {
+    id: createdId,
+    code: readString(created?.code) ?? order.billingCif ?? '',
+    created: true,
+  };
+}
+
+function buildHoldedInvoiceNotes(order: NormalizedWooOrder): string {
+  const studentsSummary = order.students.length
+    ? order.students
+        .map((student) => `${student.firstName ?? '—'} ,${student.lastName ?? '—'} , ${student.dni ?? '—'}`)
+        .join(' -- ')
+    : 'Sin alumnos informados';
+
+  return [
+    `Pedido Online: ${order.orderNumber}`,
+    `Sede: ${order.rawLocation ?? '—'}`,
+    '',
+    `fecha de formación: ${order.rawDate ?? '—'}`,
+    '',
+    'Alumnos: ',
+    studentsSummary,
+  ].join('\n');
+}
+
+function buildHoldedInvoiceEmailMessage(order: NormalizedWooOrder): string {
+  return [
+    '¡Hola!',
+    'Desde GEPCO agradecemos la confianza depositada en nosotros. ',
+    'Adjuntamos la factura de la compra de la formación que acabas de realizar.',
+    'Recuerda',
+    `Formación: ${order.productName ?? '—'}`,
+    `Dirección de la Sede: ${order.formattedLocation ?? order.rawLocation ?? '—'}`,
+    'Horario: Empieza a las 08:00, pedimos total puntualidad.',
+    '',
+    'Es importante venir con vestimenta adecuada, cómoda y calzado de seguridad, es posible que tengas que hacer maniobras que requieran elasticidad. ',
+    '',
+    'En caso de cancelación de la plaza o cambio de fecha, deberás comunicar con 7 días laborables de antelación, sino perderás tu plaza y no podremos hacer la devolución. ',
+    '',
+    'No se devuelve el dinero si no se supera la evaluación teórico - práctico, pero si te hacemos un descuento para que puedas volver a hacer el examen. ',
+  ].join('\n');
+}
+
+async function createAndSendHoldedInvoiceFromWooOrder(params: {
+  order: NormalizedWooOrder;
+  resolvedProduct: ProductResolution;
+  discountPercentage: number;
+}): Promise<{ documentId: string; emailSent: boolean }> {
+  const routeKey = resolveAbiertaRouteKey(params.order.formattedLocation ?? params.order.rawLocation);
+  if (!routeKey) {
+    throw new Error('No se ha podido determinar la sede para crear la factura en Holded.');
+  }
+
+  const routeConfig = HOLDED_ROUTE_CONFIG[routeKey];
+  const holdedContact = await findOrCreateHoldedContactFromOrder(params.order);
+  const holdedPaymentMethodId = resolveHoldedPaymentMethodIdFromWoo(params.order);
+  const productSkuSource = params.resolvedProduct.idPipe ?? params.order.productIdWoo ?? params.order.variationIdWoo ?? '';
+
+  const invoicePayload = {
+    date: 'today',
+    contactCode: holdedContact.code || undefined,
+    contactId: holdedContact.id,
+    invoiceNum: '',
+    numSerieId: HOLDED_DEFAULT_NUMBERING_SERIE_ID,
+    salesChannelId: routeConfig.salesChannelId,
+    tags: routeConfig.tags,
+    notes: buildHoldedInvoiceNotes(params.order),
+    paymentMethod: holdedPaymentMethodId,
+    items: [
+      {
+        sku: productSkuSource ? `SKU${productSkuSource}` : '',
+        name: params.resolvedProduct.productName ?? params.order.productName ?? 'Reserva de formación',
+        desc: '',
+        units: params.order.quantity,
+        subtotal: params.order.subtotal,
+        discount: params.discountPercentage > 0 ? params.discountPercentage : undefined,
+        tax: params.order.taxPercentage ?? 21,
+      },
+    ],
+  };
+
+  const createdInvoice = await holdedRequest<any>(HOLDED_INVOICES_ENDPOINT, {
+    method: 'POST',
+    body: JSON.stringify(invoicePayload),
+  });
+
+  const documentId = readString(createdInvoice?.id ?? createdInvoice?._id);
+  if (!documentId) {
+    throw new Error('Holded no devolvió el identificador de la factura creada.');
+  }
+
+  await holdedRequest<any>(`${HOLDED_INVOICES_ENDPOINT}/${encodeURIComponent(documentId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ paymentMethod: holdedPaymentMethodId }),
+  });
+
+  let emailSent = false;
+  if (params.order.billingEmail) {
+    await holdedRequest<any>(`${HOLDED_INVOICES_ENDPOINT}/${encodeURIComponent(documentId)}/send`, {
+      method: 'POST',
+      body: JSON.stringify({
+        emails: params.order.billingEmail,
+        subject: 'Factura GEPCO de tu formación reservada',
+        message: buildHoldedInvoiceEmailMessage(params.order),
+      }),
+    });
+    emailSent = true;
+  }
+
+  return { documentId, emailSent };
+}
+
 export async function sendWooOrderToPipedrive(params: {
   prisma: PrismaClient;
   webhookEventId: string;
@@ -1171,6 +1470,25 @@ export async function sendWooOrderToPipedrive(params: {
     body: buildDealUpdatePayload(order, singleOptionValues),
   });
 
+  let holdedDocumentId: string | null = null;
+  let holdedDocumentType: 'invoice' | null = null;
+  let invoiceEmailSent = false;
+
+  if (isDirectInvoiceOrder(order)) {
+    const holdedInvoice = await createAndSendHoldedInvoiceFromWooOrder({
+      order,
+      resolvedProduct,
+      discountPercentage: classification.discountPercentage,
+    });
+    holdedDocumentId = holdedInvoice.documentId;
+    holdedDocumentType = 'invoice';
+    invoiceEmailSent = holdedInvoice.emailSent;
+
+    if (!invoiceEmailSent) {
+      warnings.push('La factura se ha creado en Holded, pero no se ha enviado por email porque el pedido no tiene correo de facturación.');
+    }
+  }
+
   if (classification.requiresFundae) {
     warnings.push('El pedido requiere gestión FUNDAE: revisa la comunicación interna adicional fuera de Pipedrive.');
   }
@@ -1201,5 +1519,8 @@ export async function sendWooOrderToPipedrive(params: {
     productAdded,
     notesCreated,
     warnings,
+    holdedDocumentId,
+    holdedDocumentType,
+    invoiceEmailSent,
   };
 }
