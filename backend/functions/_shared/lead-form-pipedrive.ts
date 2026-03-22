@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 
+import { getDealFields } from './pipedrive';
 import { getSlackToken } from './slackConfig';
 
 type JsonValue =
@@ -37,6 +38,7 @@ type NormalizedLeadForm = {
   trafficSource: string | null;
   formName: string | null;
   source: string | null;
+  serviceName: string | null;
 };
 
 const PIPEDRIVE_BASE_URL = process.env.PIPEDRIVE_BASE_URL || 'https://api.pipedrive.com/v1';
@@ -44,6 +46,31 @@ const DEFAULT_PIPE_OWNER_ID = parseIntegerEnv(process.env.LEAD_FORM_PIPE_DEFAULT
 const DEFAULT_VISIBLE_TO = parseVisibilityEnv(process.env.LEAD_FORM_PIPE_VISIBLE_TO, '7');
 const DEFAULT_SLACK_CHANNEL_ID = String(process.env.LEAD_FORM_SLACK_CHANNEL_ID ?? 'C05PBDREZ54').trim();
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
+const DEFAULT_GEP_SERVICES_LEAD_STATUS_VALUE = String(process.env.LEAD_FORM_PIPE_GS_LEAD_STATUS_VALUE ?? '63').trim();
+const DEFAULT_GEP_SERVICES_LEAD_SERVICE_VALUE = String(process.env.LEAD_FORM_PIPE_GS_LEAD_SERVICE_VALUE ?? '234').trim();
+const DEFAULT_GEP_SERVICES_LEAD_CHANNEL_VALUE = String(process.env.LEAD_FORM_PIPE_GS_LEAD_CHANNEL_VALUE ?? 'Directa').trim();
+const DEFAULT_GEP_SERVICES_LEAD_SOURCE_VALUE = String(process.env.LEAD_FORM_PIPE_GS_LEAD_SOURCE_VALUE ?? 'Web').trim();
+const LEAD_STATUS_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_STATUS_FIELD_KEY ?? 'ce2c299bd19c48d40297cd7b204780585ab2a5f0').trim();
+const LEAD_SERVICE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_SERVICE_FIELD_KEY ?? 'e72120b9e27221b560c8480ff422f3fe28f8dbae').trim();
+const LEAD_TRAFFIC_SOURCE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_TRAFFIC_SOURCE_FIELD_KEY ?? 'abfa216589d01466453514fdcfeb1c6e5b9fdf8d').trim();
+const LEAD_CHANNEL_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_CHANNEL_FIELD_KEY ?? '35d37547db294a690fb087e3d86b30471f057186').trim();
+const LEAD_SOURCE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_SOURCE_FIELD_KEY ?? 'c6eabce7c04f864646aa72c944f875fd71cdf178').trim();
+const LEAD_WEB_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_WEB_FIELD_KEY ?? 'bcc13ba7981730831a71700fcd52488f13c2112f').trim();
+const LEAD_SERVICE_TYPE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_SERVICE_TYPE_FIELD_KEY ?? '1d78d202448ee549a86e0881ec06f3ff7842c5ea').trim();
+
+type GepServicesRoute = 'bomberos_privados' | 'pci' | 'pau' | 'productos' | 'cesion_material' | 'formacion';
+
+const GEP_SERVICES_ROUTE_LABELS: Record<GepServicesRoute, string[]> = {
+  bomberos_privados: ['Bomberos Privados'],
+  pci: ['PCI'],
+  pau: ['PAU'],
+  productos: ['Productos'],
+  cesion_material: ['Cesión de Material', 'Cesion de Material'],
+  formacion: ['Formación', 'Formacion'],
+};
+
+type PipedriveOption = { id?: number | string; label?: string | null; name?: string | null };
+type PipedriveField = { key?: string | null; options?: PipedriveOption[] | null };
 
 function parseIntegerEnv(rawValue: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(String(rawValue ?? ''), 10);
@@ -108,7 +135,92 @@ function sanitizePhone(value: string | null): string | null {
 
 function buildLeadTitle(lead: NormalizedLeadForm): string {
   const primary = lead.companyName ?? lead.leadName ?? lead.leadEmail ?? 'Lead web';
+  if (lead.websiteLabel === 'GEP Services') {
+    return `GS - ${primary}`;
+  }
   return `GEPCO Web - ${primary}`;
+}
+
+function normalizeText(value: string | null): string {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function includesNormalized(value: string | null, search: string): boolean {
+  const normalizedValue = normalizeText(value);
+  const normalizedSearch = normalizeText(search);
+  return normalizedValue.length > 0 && normalizedSearch.length > 0 && normalizedValue.includes(normalizedSearch);
+}
+
+function detectGepServicesRoute(serviceName: string | null): GepServicesRoute | null {
+  if (!serviceName) return null;
+  if (includesNormalized(serviceName, 'Bomberos Privados')) return 'bomberos_privados';
+  if (normalizeText(serviceName) === 'pci') return 'pci';
+  if (normalizeText(serviceName) === 'pau') return 'pau';
+  if (includesNormalized(serviceName, 'Productos')) return 'productos';
+  if (includesNormalized(serviceName, 'Cesión de Material') || includesNormalized(serviceName, 'Cesion de Material')) {
+    return 'cesion_material';
+  }
+  if (includesNormalized(serviceName, 'Formación') || includesNormalized(serviceName, 'Formacion')) return 'formacion';
+  return null;
+}
+
+function findPipedriveFieldOptions(fields: unknown, fieldKey: string): PipedriveOption[] {
+  const collection = readArray<PipedriveField>(fields);
+  const field = collection.find((entry) => readString(entry?.key) === fieldKey);
+  return readArray<PipedriveOption>(field?.options);
+}
+
+function resolvePipedriveOptionId(options: PipedriveOption[], candidateLabels: Array<string | null | undefined>): string | number | null {
+  const normalizedCandidates = candidateLabels.map((label) => normalizeText(label ?? null)).filter((label) => label.length > 0);
+  if (!normalizedCandidates.length) return null;
+
+  for (const option of options) {
+    const optionLabel = normalizeText(readString(option.label) ?? readString(option.name));
+    if (optionLabel && normalizedCandidates.includes(optionLabel) && option.id !== undefined && option.id !== null) {
+      return option.id;
+    }
+  }
+
+  for (const option of options) {
+    const optionLabel = normalizeText(readString(option.label) ?? readString(option.name));
+    if (!optionLabel || option.id === undefined || option.id === null) continue;
+    if (normalizedCandidates.some((candidate) => optionLabel.includes(candidate) || candidate.includes(optionLabel))) {
+      return option.id;
+    }
+  }
+
+  return null;
+}
+
+async function resolveGepServicesServiceTypeOptionId(lead: NormalizedLeadForm, warnings: string[]): Promise<string | number | null> {
+  if (lead.websiteLabel !== 'GEP Services') return null;
+
+  const route = detectGepServicesRoute(lead.serviceName);
+  const routeLabels = route ? GEP_SERVICES_ROUTE_LABELS[route] : [];
+  const candidateLabels = [lead.serviceName, ...routeLabels].filter((label): label is string => Boolean(readString(label)));
+
+  if (!candidateLabels.length) {
+    warnings.push('El lead de GEP Services no incluye un tipo de servicio reconocible.');
+    return null;
+  }
+
+  const dealFields = await getDealFields();
+  const options = findPipedriveFieldOptions(dealFields, LEAD_SERVICE_TYPE_FIELD_KEY);
+  if (!options.length) {
+    warnings.push('No se han encontrado opciones para el campo de tipo de servicio del lead en Pipedrive.');
+    return null;
+  }
+
+  const optionId = resolvePipedriveOptionId(options, candidateLabels);
+  if (optionId === null) {
+    warnings.push(`No se ha encontrado la opción de tipo de servicio para "${lead.serviceName ?? 'sin valor'}".`);
+  }
+
+  return optionId;
 }
 
 function buildSlackMessage(lead: NormalizedLeadForm, result: PipedriveSyncResult): string {
@@ -310,10 +422,10 @@ function resolveWebsiteLabel(source: string | null, headers: JsonValue | null | 
   const headerObject = readObject(headers);
   const userAgent = pickFirstText(headerObject?.['user-agent']);
 
-  if (normalizedSource.includes('gepco') || userAgent?.includes('https://gepcoformacion.es')) {
+  if (normalizedSource.includes('gepco') || userAgent?.includes('https://gepcoformacion.es') || userAgent?.includes('https://www.gepcoformacion.es')) {
     return 'GEPCO';
   }
-  if (normalizedSource.includes('gepservices') || userAgent?.includes('https://gepservices.es')) {
+  if (normalizedSource.includes('gepservices') || userAgent?.includes('https://gepservices.es') || userAgent?.includes('https://www.gepservices.es')) {
     return 'GEP Services';
   }
   return 'Lead web';
@@ -353,6 +465,9 @@ function normalizeLeadForm(payloadJson: JsonValue, source: string | null, formNa
       nestedPayload.company,
       nestedPayload.company_name,
       nestedPayload.organization,
+      nestedPayload['your-empresa'],
+      fields['your-empresa'],
+      payload['your-empresa'],
     ),
     leadName,
     leadEmail: pickFirstText(
@@ -397,6 +512,13 @@ function normalizeLeadForm(payloadJson: JsonValue, source: string | null, formNa
     ),
     formName: pickFirstText(formName, nestedPayload.form_name, payload.form_name),
     source,
+    serviceName: pickFirstText(
+      nestedPayload['menu-541'],
+      fields['menu-541'],
+      payload['menu-541'],
+      nestedPayload.service,
+      nestedPayload.servicio,
+    ),
   };
 }
 
@@ -419,14 +541,37 @@ function buildPersonPayload(lead: NormalizedLeadForm, organizationId: string | n
   };
 }
 
-function buildLeadPayload(lead: NormalizedLeadForm, organizationId: string | null, personId: string | null) {
-  return {
+function buildLeadPayload(
+  lead: NormalizedLeadForm,
+  organizationId: string | null,
+  personId: string | null,
+  options: { serviceTypeOptionId?: string | number | null } = {},
+) {
+  const payload: Record<string, unknown> = {
     title: buildLeadTitle(lead),
     owner_id: DEFAULT_PIPE_OWNER_ID,
     visible_to: DEFAULT_VISIBLE_TO,
     person_id: readInteger(personId) ?? undefined,
     organization_id: readInteger(organizationId) ?? undefined,
   };
+
+  if (lead.websiteLabel !== 'GEP Services') {
+    return payload;
+  }
+
+  payload.note = lead.leadMessage ?? undefined;
+  payload[LEAD_STATUS_FIELD_KEY] = DEFAULT_GEP_SERVICES_LEAD_STATUS_VALUE;
+  payload[LEAD_SERVICE_FIELD_KEY] = DEFAULT_GEP_SERVICES_LEAD_SERVICE_VALUE;
+  payload[LEAD_TRAFFIC_SOURCE_FIELD_KEY] = lead.trafficSource ?? undefined;
+  payload[LEAD_SOURCE_FIELD_KEY] = DEFAULT_GEP_SERVICES_LEAD_SOURCE_VALUE;
+  payload[LEAD_WEB_FIELD_KEY] = DEFAULT_GEP_SERVICES_LEAD_SOURCE_VALUE;
+  payload[LEAD_CHANNEL_FIELD_KEY] = DEFAULT_GEP_SERVICES_LEAD_CHANNEL_VALUE;
+
+  if (options.serviceTypeOptionId !== undefined && options.serviceTypeOptionId !== null) {
+    payload[LEAD_SERVICE_TYPE_FIELD_KEY] = options.serviceTypeOptionId;
+  }
+
+  return payload;
 }
 
 export const __test__ = {
@@ -541,9 +686,10 @@ export async function sendLeadFormToPipedrive(params: {
   let leadId = readString(record.pipedrive_lead_id);
   let leadCreated = false;
   if (!leadId) {
+    const serviceTypeOptionId = await resolveGepServicesServiceTypeOptionId(normalized, warnings);
     const leadResponse = await pdRequest('/leads', {
       method: 'POST',
-      body: buildLeadPayload(normalized, organizationId, personId),
+      body: buildLeadPayload(normalized, organizationId, personId, { serviceTypeOptionId }),
     });
     leadId = extractEntityId(leadResponse?.data ?? leadResponse);
     leadCreated = Boolean(leadId);
