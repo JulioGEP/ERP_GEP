@@ -624,7 +624,18 @@ function sanitizeLeadFormWebhookEvent(record: unknown): LeadFormWebhookEvent | n
 export type SendLeadFormWebhookToPipeResult = {
   webhookEventId: string;
   category: 'open' | 'enterprise';
-  route: 'open' | 'sabadell' | 'in_company' | 'resto_peninsula' | 'madrid';
+  route:
+    | 'open'
+    | 'sabadell'
+    | 'in_company'
+    | 'resto_peninsula'
+    | 'madrid'
+    | 'bomberos_privados'
+    | 'pci'
+    | 'pau'
+    | 'productos'
+    | 'cesion_material'
+    | 'formacion';
   organizationId: string;
   personId: string;
   recordId: string;

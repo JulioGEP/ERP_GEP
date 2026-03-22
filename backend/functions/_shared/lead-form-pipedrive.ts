@@ -7,6 +7,7 @@ type JsonObject = Record<string, unknown>;
 
 type LeadFormCategory = 'open' | 'enterprise';
 type EnterpriseRoute = 'sabadell' | 'in_company' | 'resto_peninsula' | 'madrid';
+type GepServicesRoute = 'bomberos_privados' | 'pci' | 'pau' | 'productos' | 'cesion_material' | 'formacion';
 
 type NormalizedLeadForm = {
   webhookEventId: string;
@@ -21,13 +22,14 @@ type NormalizedLeadForm = {
   category: LeadFormCategory | null;
   categoryLabel: string | null;
   route: EnterpriseRoute | null;
+  serviceName: string | null;
   sourceWebsite: string | null;
 };
 
 type LeadFormSyncResult = {
   webhookEventId: string;
   category: LeadFormCategory;
-  route: EnterpriseRoute | 'open';
+  route: EnterpriseRoute | GepServicesRoute | 'open';
   organizationId: string;
   personId: string;
   recordId: string;
@@ -51,6 +53,13 @@ type RouteConfig = {
   ownerId: number;
   searchExact: boolean;
   siteLabelCandidates: string[];
+  slackChannelId: string;
+};
+
+type GepServicesConfig = {
+  route: GepServicesRoute;
+  ownerId: number;
+  labelCandidates: string[];
   slackChannelId: string;
 };
 
@@ -103,6 +112,9 @@ const LEAD_STATUS_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_STATUS_FIEL
 const LEAD_SERVICE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_SERVICE_FIELD_KEY ?? 'e72120b9e27221b560c8480ff422f3fe28f8dbae').trim();
 const LEAD_TRAFFIC_SOURCE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_TRAFFIC_SOURCE_FIELD_KEY ?? 'abfa216589d01466453514fdcfeb1c6e5b9fdf8d').trim();
 const LEAD_CHANNEL_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_CHANNEL_FIELD_KEY ?? '35d37547db294a690fb087e3d86b30471f057186').trim();
+const LEAD_SOURCE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_SOURCE_FIELD_KEY ?? 'c6eabce7c04f864646aa72c944f875fd71cdf178').trim();
+const LEAD_WEB_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_WEB_FIELD_KEY ?? 'bcc13ba7981730831a71700fcd52488f13c2112f').trim();
+const LEAD_SERVICE_TYPE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_SERVICE_TYPE_FIELD_KEY ?? '1d78d202448ee549a86e0881ec06f3ff7842c5ea').trim();
 
 const OPEN_CATEGORY_MATCHERS = [
   'individual / autónomo / particulares',
@@ -142,6 +154,45 @@ const ENTERPRISE_ROUTES: RouteConfig[] = [
     ownerId: parseIntegerEnv(process.env.LEAD_FORM_PIPE_OWNER_MADRID, 22146585),
     searchExact: true,
     siteLabelCandidates: ['Madrid', 'Arganda', 'GEP Arganda'],
+    slackChannelId: DEFAULT_ENTERPRISE_CHANNEL_ID,
+  },
+];
+
+const GEP_SERVICES_ROUTES: GepServicesConfig[] = [
+  {
+    route: 'bomberos_privados',
+    ownerId: parseIntegerEnv(process.env.LEAD_FORM_PIPE_GS_OWNER_BOMBEROS_PRIVADOS, 13444807),
+    labelCandidates: ['Bomberos Privados'],
+    slackChannelId: DEFAULT_ENTERPRISE_CHANNEL_ID,
+  },
+  {
+    route: 'pci',
+    ownerId: parseIntegerEnv(process.env.LEAD_FORM_PIPE_GS_OWNER_PCI, 14520128),
+    labelCandidates: ['PCI'],
+    slackChannelId: DEFAULT_ENTERPRISE_CHANNEL_ID,
+  },
+  {
+    route: 'pau',
+    ownerId: parseIntegerEnv(process.env.LEAD_FORM_PIPE_GS_OWNER_PAU, 14520128),
+    labelCandidates: ['PAU'],
+    slackChannelId: DEFAULT_ENTERPRISE_CHANNEL_ID,
+  },
+  {
+    route: 'productos',
+    ownerId: parseIntegerEnv(process.env.LEAD_FORM_PIPE_GS_OWNER_PRODUCTOS, 14520128),
+    labelCandidates: ['Productos'],
+    slackChannelId: DEFAULT_ENTERPRISE_CHANNEL_ID,
+  },
+  {
+    route: 'cesion_material',
+    ownerId: parseIntegerEnv(process.env.LEAD_FORM_PIPE_GS_OWNER_CESION_MATERIAL, 14520128),
+    labelCandidates: ['Cesión de Material', 'Cesion de Material'],
+    slackChannelId: DEFAULT_ENTERPRISE_CHANNEL_ID,
+  },
+  {
+    route: 'formacion',
+    ownerId: parseIntegerEnv(process.env.LEAD_FORM_PIPE_GS_OWNER_FORMACION, 13957858),
+    labelCandidates: ['Formación', 'Formacion'],
     slackChannelId: DEFAULT_ENTERPRISE_CHANNEL_ID,
   },
 ];
@@ -225,6 +276,19 @@ function detectEnterpriseRoute(siteName: string | null): EnterpriseRoute | null 
   return null;
 }
 
+function detectGepServicesRoute(serviceName: string | null): GepServicesRoute | null {
+  if (!serviceName) return null;
+  if (includesNormalized(serviceName, 'Bomberos Privados')) return 'bomberos_privados';
+  if (normalizeText(serviceName) === 'pci') return 'pci';
+  if (normalizeText(serviceName) === 'pau') return 'pau';
+  if (includesNormalized(serviceName, 'Productos')) return 'productos';
+  if (includesNormalized(serviceName, 'Cesión de Material') || includesNormalized(serviceName, 'Cesion de Material')) {
+    return 'cesion_material';
+  }
+  if (includesNormalized(serviceName, 'Formación') || includesNormalized(serviceName, 'Formacion')) return 'formacion';
+  return null;
+}
+
 function resolveSourceWebsite(headers: JsonObject | null, source: string | null): string | null {
   const userAgent = readString(headers?.['user-agent']);
   if (userAgent?.includes('https://gepcoformacion.es')) {
@@ -257,14 +321,15 @@ function normalizeLeadFormFromWebhook(record: {
     leadName,
     leadEmail: pickFirstText(root['your-email'], fields?.['your-email'], root.email, contact?.email),
     leadPhone: pickFirstText(root['tel-383'], fields?.['tel-383'], root.telefono, root.phone, contact?.phone),
-    companyName: pickFirstText(root['nombre-empresa'], fields?.['nombre-empresa'], root.company, root.empresa),
-    observations: pickFirstText(root['your-observaciones'], fields?.['your-observaciones'], root.observaciones, root.message),
+    companyName: pickFirstText(root['your-empresa'], fields?.['your-empresa'], root['nombre-empresa'], fields?.['nombre-empresa'], root.company, root.empresa),
+    observations: pickFirstText(root['your-message'], fields?.['your-message'], root['your-observaciones'], fields?.['your-observaciones'], root.observaciones, root.message),
     trafficSource: pickFirstText(root.traffic_source, fields?.traffic_source, root.utm_source),
     courseName: pickFirstText(root['uacf7_dynamic_text-116'], fields?.['uacf7_dynamic_text-116'], root.course, root.curso),
     siteName,
     category: detectCategory(categoryLabel),
     categoryLabel,
     route: detectEnterpriseRoute(siteName),
+    serviceName: pickFirstText(root['menu-541'], fields?.['menu-541'], root.service, root.servicio),
     sourceWebsite: resolveSourceWebsite(headers, record.source),
   };
 }
@@ -322,8 +387,8 @@ async function searchPersonByEmail(email: string): Promise<{ id: string } | null
   return match?.item?.id != null ? { id: String(match.item.id) } : null;
 }
 
-async function searchLeadByTitle(title: string): Promise<{ id: string } | null> {
-  const query = buildSearchParams({ term: title, exact_match: 1, item_types: 'lead', fields: 'title', limit: 10 });
+async function searchLeadByTitle(title: string, exactMatch = true): Promise<{ id: string } | null> {
+  const query = buildSearchParams({ term: title, exact_match: exactMatch ? 1 : 0, item_types: 'lead', fields: 'title', limit: 10 });
   const data = await pdRequest<{ items?: PipedriveSearchResponseItem[] }>(`/itemSearch?${query}`);
   const items = Array.isArray(data?.items) ? data.items : [];
   const match = items.find((entry) => entry?.item?.id != null);
@@ -556,6 +621,20 @@ function buildEnterpriseSlackMessage(input: NormalizedLeadForm, organizationName
   ].join('\n');
 }
 
+function buildGepServicesSlackMessage(input: NormalizedLeadForm, organizationName: string, ownerName: string | null): string {
+  return [
+    'Nuevo Lead -Formacion Empresa para GEP Services',
+    `Empresas: GS - ${organizationName}`,
+    `Canal: ${input.trafficSource ?? '—'}`,
+    `Persona Contacto: ${input.leadName ?? '—'}`,
+    `Mail: ${input.leadEmail ?? '—'}`,
+    `Telf: ${input.leadPhone ?? '—'}`,
+    `Tipo de Servicio: ${input.serviceName ?? '—'}`,
+    `Comercial: ${ownerName ?? '—'}`,
+    `Observaciones: ${input.observations ?? '—'}`,
+  ].join('\n');
+}
+
 async function upsertOrganization(input: NormalizedLeadForm, ownerId: number, exactMatch: boolean, typeValue: string): Promise<{ id: string; created: boolean }> {
   if (!input.companyName) {
     throw new Error('El webhook no incluye nombre de empresa.');
@@ -667,6 +746,88 @@ async function processOpenLead(input: NormalizedLeadForm): Promise<LeadFormSyncR
   };
 }
 
+async function processGepServicesLead(input: NormalizedLeadForm): Promise<LeadFormSyncResult> {
+  const route = detectGepServicesRoute(input.serviceName);
+  if (!route) {
+    throw new Error('No se ha podido identificar el tipo de servicio de GEP Services a partir del webhook.');
+  }
+
+  const routeConfig = GEP_SERVICES_ROUTES.find((entry) => entry.route === route);
+  if (!routeConfig) {
+    throw new Error('No existe configuración para el tipo de servicio detectado en GEP Services.');
+  }
+
+  const warnings: string[] = [];
+  const organization = await upsertOrganization(input, DEFAULT_OWNER_ID, false, '59');
+  const person = await upsertPerson(input, organization.id, DEFAULT_OWNER_ID, 'Web', 'subscribed');
+
+  const serviceTypeOptionId = await resolveOptionId(
+    LEAD_SERVICE_TYPE_FIELD_KEY,
+    [input.serviceName, ...routeConfig.labelCandidates],
+    getDealFields,
+  );
+  if (!serviceTypeOptionId && input.serviceName) {
+    warnings.push(`No se ha encontrado la opción de tipo de servicio para "${input.serviceName}".`);
+  }
+
+  const leadTitle = `GS - ${input.companyName ?? 'Lead Web'}`;
+  const existingLead = await searchLeadByTitle(leadTitle, false);
+  const leadPayload: Record<string, unknown> = {
+    title: leadTitle,
+    person_id: Number(person.id),
+    organization_id: Number(organization.id),
+    owner_id: routeConfig.ownerId,
+    note: input.observations,
+    visible_to: DEFAULT_VISIBLE_TO,
+    [LEAD_STATUS_FIELD_KEY]: '63',
+    [LEAD_SERVICE_FIELD_KEY]: DEFAULT_DEAL_SERVICE_VALUE,
+    [LEAD_TRAFFIC_SOURCE_FIELD_KEY]: input.trafficSource,
+    [LEAD_SOURCE_FIELD_KEY]: 'Web',
+    [LEAD_WEB_FIELD_KEY]: 'Web',
+    [LEAD_CHANNEL_FIELD_KEY]: DEFAULT_LEAD_SOURCE_VALUE,
+  };
+
+  if (serviceTypeOptionId) {
+    leadPayload[LEAD_SERVICE_TYPE_FIELD_KEY] = serviceTypeOptionId;
+  }
+
+  let leadId = existingLead?.id ?? null;
+  let created = false;
+  let ownerName = person.ownerName;
+  if (!leadId) {
+    const createdLead = await createLead(leadPayload);
+    leadId = createdLead.id;
+    created = true;
+    ownerName = createdLead.ownerName ?? ownerName;
+  } else {
+    warnings.push(`Ya existe un lead con el título "${leadTitle}" en Pipedrive. No se crea un duplicado.`);
+  }
+
+  let slackSent = false;
+  try {
+    await postSlackMessage(routeConfig.slackChannelId, buildGepServicesSlackMessage(input, input.companyName ?? '—', ownerName));
+    slackSent = true;
+  } catch (error) {
+    warnings.push(error instanceof Error ? error.message : 'No se pudo enviar la notificación a Slack.');
+  }
+
+  return {
+    webhookEventId: input.webhookEventId,
+    category: 'enterprise',
+    route,
+    organizationId: organization.id,
+    personId: person.id,
+    recordId: leadId ?? '',
+    recordType: 'lead',
+    organizationCreated: organization.created,
+    personCreated: person.created,
+    recordCreated: created,
+    productAdded: false,
+    slackSent,
+    warnings,
+  };
+}
+
 async function processEnterpriseLead(input: NormalizedLeadForm): Promise<LeadFormSyncResult> {
   if (!input.route) {
     throw new Error('No se ha podido identificar la ruta de empresa a partir de la sede del lead.');
@@ -766,15 +927,19 @@ export async function sendLeadFormWebhookToPipedrive(params: { prisma: PrismaCli
   }
 
   const normalized = normalizeLeadFormFromWebhook(record as { id: string; source: string | null; request_headers: unknown; payload_json: unknown });
-  if (!normalized.category) {
-    throw new Error('No se ha podido determinar si el lead es de empresa o de formación abierta.');
-  }
-
   if (!normalized.companyName) {
     throw new Error('El webhook no incluye el campo nombre-empresa.');
   }
   if (!normalized.leadName) {
     throw new Error('El webhook no incluye el nombre del lead.');
+  }
+
+  if (normalized.sourceWebsite === 'GEP Services') {
+    return processGepServicesLead(normalized);
+  }
+
+  if (!normalized.category) {
+    throw new Error('No se ha podido determinar si el lead es de empresa o de formación abierta.');
   }
 
   if (normalized.category === 'open') {
