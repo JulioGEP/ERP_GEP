@@ -1,4 +1,5 @@
 import type { Handler } from '@netlify/functions';
+import type { Prisma } from '@prisma/client';
 
 import { getPrisma, withDatabaseFallback } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
@@ -13,7 +14,32 @@ type SessionSummary = {
   sessionName: string;
   trainers: string[];
 };
-type SessionRowsResult = Awaited<ReturnType<ReturnType<typeof getPrisma>['sesiones']['findMany']>>;
+type SessionRow = Prisma.sesionesGetPayload<{
+  select: {
+    id: true;
+    nombre_cache: true;
+    deals: {
+      select: {
+        title: true;
+        organizations: {
+          select: {
+            name: true;
+          };
+        };
+      };
+    };
+    sesion_trainers: {
+      select: {
+        trainers: {
+          select: {
+            name: true;
+          };
+        };
+      };
+    };
+  };
+}>;
+type SessionRowsResult = SessionRow[];
 
 function getMadridOffsetFromIso(isoValue: string): string {
   const match = isoValue.match(/([+-]\d{2}:\d{2})$/);

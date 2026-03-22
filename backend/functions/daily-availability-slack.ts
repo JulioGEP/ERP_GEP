@@ -1,4 +1,5 @@
 import type { Handler } from '@netlify/functions';
+import type { Prisma } from '@prisma/client';
 
 import { getPrisma, withDatabaseFallback } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
@@ -13,7 +14,20 @@ type DailyGroup = {
   off: string[];
   telework: string[];
 };
-type VacationDaysResult = Awaited<ReturnType<ReturnType<typeof getPrisma>['user_vacation_days']['findMany']>>;
+type VacationDayRow = Prisma.user_vacation_daysGetPayload<{
+  select: {
+    type: true;
+    date: true;
+    user: {
+      select: {
+        first_name: true;
+        last_name: true;
+        name: true;
+      };
+    };
+  };
+}>;
+type VacationDaysResult = VacationDayRow[];
 
 function addDaysToDateOnly(dateOnly: string, days: number): string {
   const base = new Date(`${dateOnly}T00:00:00Z`);
