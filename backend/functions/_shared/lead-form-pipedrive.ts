@@ -340,6 +340,33 @@ function assertPipedriveConfigured(): void {
   }
 }
 
+function parseJsonResponse<T>(text: string): T | null {
+  const trimmed = text.trim();
+  if (!trimmed.length) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(trimmed) as T;
+  } catch {
+    return null;
+  }
+}
+
+function buildResponseDetails(payloadError: string | null, rawText: string): string {
+  if (payloadError) {
+    return ` ${payloadError}`;
+  }
+
+  const trimmed = rawText.trim();
+  if (!trimmed.length) {
+    return '';
+  }
+
+  const shortened = trimmed.length > 400 ? `${trimmed.slice(0, 397)}...` : trimmed;
+  return ` Respuesta no JSON: ${shortened}`;
+}
+
 async function pdRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
   assertPipedriveConfigured();
   const separator = path.includes('?') ? '&' : '?';
@@ -353,9 +380,9 @@ async function pdRequest<T = unknown>(path: string, init?: RequestInit): Promise
   });
 
   const text = await response.text().catch(() => '');
-  const json = text ? (JSON.parse(text) as { data?: T; success?: boolean; error?: string }) : null;
+  const json = parseJsonResponse<{ data?: T; success?: boolean; error?: string }>(text);
   if (!response.ok || json?.success === false) {
-    const details = json?.error ? ` ${json.error}` : text ? ` ${text}` : '';
+    const details = buildResponseDetails(readString(json?.error), text);
     throw new Error(`Pipedrive ${init?.method ?? 'GET'} ${path} falló (${response.status}).${details}`.trim());
   }
 
@@ -467,9 +494,9 @@ async function createLead(payload: Record<string, unknown>): Promise<{ id: strin
   });
 
   const text = await response.text().catch(() => '');
-  const json = text ? (JSON.parse(text) as { data?: { id?: string | number; owner_id?: { name?: string | null } | null }; success?: boolean; error?: string }) : null;
+  const json = parseJsonResponse<{ data?: { id?: string | number; owner_id?: { name?: string | null } | null }; success?: boolean; error?: string }>(text);
   if (!response.ok || json?.success === false) {
-    const details = json?.error ? ` ${json.error}` : text ? ` ${text}` : '';
+    const details = buildResponseDetails(readString(json?.error), text);
     throw new Error(`Pipedrive POST /api/v2/leads falló (${response.status}).${details}`.trim());
   }
 
