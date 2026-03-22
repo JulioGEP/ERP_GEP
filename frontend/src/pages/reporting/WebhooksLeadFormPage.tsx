@@ -1,8 +1,21 @@
 import { Fragment, useMemo, useState } from 'react';
-import { Alert, Card, Spinner, Table } from 'react-bootstrap';
-import { useQuery } from '@tanstack/react-query';
-import { fetchLeadFormWebhooks, type LeadFormWebhookEvent } from '../../features/reporting/api';
+import { Alert, Button, Card, Spinner, Table } from 'react-bootstrap';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  fetchLeadFormWebhooks,
+  sendLeadFormToPipe,
+  type LeadFormWebhookEvent,
+  type SendLeadFormToPipeResult,
+} from '../../features/reporting/api';
 import { isApiError } from '../../api/client';
+
+type PipeFeedback = {
+  eventId: string;
+  kind: 'success' | 'danger';
+  title: string;
+  message?: string;
+  result?: SendLeadFormToPipeResult;
+};
 
 function formatTimestamp(value: string | null, formatter: Intl.DateTimeFormat): string {
   if (!value) {
@@ -43,14 +56,36 @@ function resolveWebsiteLabel(headers: LeadFormWebhookEvent['requestHeaders']): s
   return '—';
 }
 
-function EventTable({ events, formatter }: { events: LeadFormWebhookEvent[]; formatter: Intl.DateTimeFormat }) {
+function buildFeedbackSummary(result: SendLeadFormToPipeResult): string {
+  const parts = [
+    `Prospecto ${result.leadId}`,
+    result.organizationId ? `organización ${result.organizationId}` : null,
+    result.personId ? `persona ${result.personId}` : null,
+    result.alreadySynced ? 'ya sincronizado previamente' : null,
+    result.slackNotified ? 'Slack notificado' : null,
+  ].filter((part): part is string => Boolean(part));
+
+  return parts.join(' · ');
+}
+
+function EventTable({
+  events,
+  formatter,
+  pendingEventId,
+  onSendToPipe,
+}: {
+  events: LeadFormWebhookEvent[];
+  formatter: Intl.DateTimeFormat;
+  pendingEventId: string | null;
+  onSendToPipe: (eventId: string) => void;
+}) {
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
   const handleRowClick = (eventId: string) => {
     setExpandedEventId((currentId) => (currentId === eventId ? null : eventId));
   };
 
-  const columnCount = 6;
+  const columnCount = 7;
 
   return (
     <div className="table-responsive">
@@ -62,12 +97,16 @@ function EventTable({ events, formatter }: { events: LeadFormWebhookEvent[]; for
             <th>Lead</th>
             <th>Email</th>
             <th>Mensaje</th>
-            <th>Evento</th>
+            <th>Estado</th>
+            <th style={{ minWidth: 180 }}>Acciones</th>
           </tr>
         </thead>
         <tbody>
           {events.map((event) => {
             const isExpanded = expandedEventId === event.id;
+            const isSending = pendingEventId === event.id;
+            const isSynced = Boolean(event.pipedriveLeadId);
+
             return (
               <Fragment key={event.id}>
                 <tr role="button" className="table-row-button" onClick={() => handleRowClick(event.id)}>
@@ -78,11 +117,73 @@ function EventTable({ events, formatter }: { events: LeadFormWebhookEvent[]; for
                   <td style={{ maxWidth: 320 }}>
                     <div className="text-truncate">{event.leadMessage ?? '—'}</div>
                   </td>
-                  <td>{event.eventName ?? '—'}</td>
+                  <td>
+                    {isSynced ? (
+                      <div>
+                        <div className="text-success fw-semibold">Enviado</div>
+                        <div className="small text-muted">{formatTimestamp(event.pipedriveSyncedAt, formatter)}</div>
+                      </div>
+                    ) : event.lastSyncError ? (
+                      <div>
+                        <div className="text-danger fw-semibold">Error</div>
+                        <div className="small text-muted text-break">{event.lastSyncError}</div>
+                      </div>
+                    ) : (
+                      <span className="text-muted">Pendiente</span>
+                    )}
+                  </td>
+                  <td onClick={(nativeEvent) => nativeEvent.stopPropagation()}>
+                    <Button
+                      size="sm"
+                      variant={isSynced ? 'outline-success' : 'primary'}
+                      disabled={isSending || isSynced}
+                      onClick={() => onSendToPipe(event.id)}
+                    >
+                      {isSending ? (
+                        <>
+                          <Spinner as="span" animation="border" size="sm" className="me-2" />
+                          Enviando…
+                        </>
+                      ) : isSynced ? (
+                        'Enviado'
+                      ) : (
+                        'Enviar a Pipedrive'
+                      )}
+                    </Button>
+                  </td>
                 </tr>
                 {isExpanded ? (
                   <tr>
                     <td colSpan={columnCount}>
+                      <div className="row g-3 mb-3">
+                        <div className="col-md-4">
+                          <div className="small text-muted">Persona Pipedrive</div>
+                          <div>{event.pipedrivePersonId ?? '—'}</div>
+                        </div>
+                        <div className="col-md-4">
+                          <div className="small text-muted">Organización Pipedrive</div>
+                          <div>{event.pipedriveOrganizationId ?? '—'}</div>
+                        </div>
+                        <div className="col-md-4">
+                          <div className="small text-muted">Prospecto Pipedrive</div>
+                          <div>{event.pipedriveLeadId ?? '—'}</div>
+                        </div>
+                      </div>
+                      <div className="row g-3 mb-3">
+                        <div className="col-md-6">
+                          <div className="small text-muted">Sincronizado en</div>
+                          <div>{formatTimestamp(event.pipedriveSyncedAt, formatter)}</div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="small text-muted">Slack notificado en</div>
+                          <div>{formatTimestamp(event.slackNotifiedAt, formatter)}</div>
+                        </div>
+                      </div>
+                      {event.lastSyncError ? (
+                        <Alert variant="danger" className="py-2">
+                          <strong>Último error:</strong> {event.lastSyncError}
+                        </Alert>
+                      ) : null}
                       <div className="fw-semibold mb-2">Headers del request</div>
                       <JsonCell value={event.requestHeaders} />
                       <div className="fw-semibold mt-3 mb-2">Payload completo del webhook</div>
@@ -100,6 +201,9 @@ function EventTable({ events, formatter }: { events: LeadFormWebhookEvent[]; for
 }
 
 export default function WebhooksLeadFormPage() {
+  const queryClient = useQueryClient();
+  const [feedback, setFeedback] = useState<PipeFeedback | null>(null);
+
   const dateTimeFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat('es-ES', {
@@ -123,6 +227,33 @@ export default function WebhooksLeadFormPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const sendToPipeMutation = useMutation({
+    mutationFn: sendLeadFormToPipe,
+    onSuccess: (result, eventId) => {
+      setFeedback({
+        eventId,
+        kind: 'success',
+        title: result.alreadySynced ? 'Lead ya sincronizado.' : 'Lead enviado a Pipedrive.',
+        result,
+      });
+      queryClient.invalidateQueries({ queryKey: ['reporting', 'lead-form-webhooks'] });
+    },
+    onError: (error, eventId) => {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : 'No se pudo enviar el lead a Pipedrive.';
+      setFeedback({
+        eventId,
+        kind: 'danger',
+        title: 'No se pudo enviar a Pipedrive.',
+        message,
+      });
+      queryClient.invalidateQueries({ queryKey: ['reporting', 'lead-form-webhooks'] });
+    },
+  });
+
   const events = eventsQuery.data ?? [];
 
   let content: JSX.Element;
@@ -140,7 +271,17 @@ export default function WebhooksLeadFormPage() {
   } else if (events.length === 0) {
     content = <Alert variant="info">Todavía no se ha recibido ningún webhook de formularios.</Alert>;
   } else {
-    content = <EventTable events={events} formatter={dateTimeFormatter} />;
+    content = (
+      <EventTable
+        events={events}
+        formatter={dateTimeFormatter}
+        pendingEventId={sendToPipeMutation.isPending ? sendToPipeMutation.variables ?? null : null}
+        onSendToPipe={(eventId) => {
+          setFeedback(null);
+          sendToPipeMutation.mutate(eventId);
+        }}
+      />
+    );
   }
 
   return (
@@ -162,7 +303,23 @@ export default function WebhooksLeadFormPage() {
       </Card>
 
       <Card className="shadow-sm">
-        <Card.Body>{content}</Card.Body>
+        <Card.Body>
+          {feedback ? (
+            <Alert variant={feedback.kind} dismissible onClose={() => setFeedback(null)}>
+              <Alert.Heading className="h6">{feedback.title}</Alert.Heading>
+              {feedback.message ? <p className="mb-2">{feedback.message}</p> : null}
+              {feedback.result ? <p className="mb-2">{buildFeedbackSummary(feedback.result)}</p> : null}
+              {feedback.result?.warnings.length ? (
+                <ul className="mb-0 ps-3">
+                  {feedback.result.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </Alert>
+          ) : null}
+          {content}
+        </Card.Body>
       </Card>
     </section>
   );
