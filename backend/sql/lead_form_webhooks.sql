@@ -10,7 +10,13 @@ CREATE TABLE IF NOT EXISTS public.lead_form_webhooks (
   lead_phone varchar(120),
   lead_message text,
   request_headers jsonb,
-  payload_json jsonb NOT NULL
+  payload_json jsonb NOT NULL,
+  pipedrive_organization_id varchar(80),
+  pipedrive_person_id varchar(80),
+  pipedrive_lead_id varchar(80),
+  pipedrive_synced_at timestamptz,
+  slack_notified_at timestamptz,
+  last_sync_error text
 );
 
 CREATE INDEX IF NOT EXISTS idx_lead_form_webhooks_created_at

@@ -587,6 +587,12 @@ export type LeadFormWebhookEvent = {
   leadMessage: string | null;
   requestHeaders: Record<string, unknown> | null;
   payload: unknown;
+  pipedriveOrganizationId: string | null;
+  pipedrivePersonId: string | null;
+  pipedriveLeadId: string | null;
+  pipedriveSyncedAt: string | null;
+  slackNotifiedAt: string | null;
+  lastSyncError: string | null;
 };
 
 function sanitizeLeadFormWebhookEvent(record: unknown): LeadFormWebhookEvent | null {
@@ -618,6 +624,12 @@ function sanitizeLeadFormWebhookEvent(record: unknown): LeadFormWebhookEvent | n
           ? (raw.request_headers as Record<string, unknown>)
           : null,
     payload: raw.payload ?? null,
+    pipedriveOrganizationId: sanitizeText(raw.pipedriveOrganizationId ?? raw.pipedrive_organization_id),
+    pipedrivePersonId: sanitizeText(raw.pipedrivePersonId ?? raw.pipedrive_person_id),
+    pipedriveLeadId: sanitizeText(raw.pipedriveLeadId ?? raw.pipedrive_lead_id),
+    pipedriveSyncedAt: sanitizeDate(raw.pipedriveSyncedAt ?? raw.pipedrive_synced_at),
+    slackNotifiedAt: sanitizeDate(raw.slackNotifiedAt ?? raw.slack_notified_at),
+    lastSyncError: sanitizeText(raw.lastSyncError ?? raw.last_sync_error),
   } satisfies LeadFormWebhookEvent;
 }
 
@@ -644,6 +656,52 @@ export async function fetchLeadFormWebhooks(
   return events
     .map(sanitizeLeadFormWebhookEvent)
     .filter((record): record is LeadFormWebhookEvent => record !== null);
+}
+
+
+export type SendLeadFormToPipeResult = {
+  organizationId: string | null;
+  personId: string | null;
+  leadId: string;
+  organizationCreated: boolean;
+  personCreated: boolean;
+  leadCreated: boolean;
+  slackNotified: boolean;
+  alreadySynced: boolean;
+  warnings: string[];
+};
+
+export async function sendLeadFormToPipe(eventId: string): Promise<SendLeadFormToPipeResult> {
+  const normalizedEventId = sanitizeText(eventId);
+  if (!normalizedEventId) {
+    throw new Error('El identificador del lead es obligatorio.');
+  }
+
+  const response = await postJson<{ result?: unknown }>('/reporting-lead-form-webhooks', { eventId: normalizedEventId });
+  const result = response?.result;
+  if (!result || typeof result !== 'object') {
+    throw new Error('La respuesta del servidor no incluye el resultado de Pipedrive.');
+  }
+
+  const raw = result as Record<string, unknown>;
+  const leadId = sanitizeText(raw.leadId);
+  if (!leadId) {
+    throw new Error('La respuesta del servidor no incluye el ID del prospecto creado en Pipedrive.');
+  }
+
+  return {
+    organizationId: sanitizeText(raw.organizationId),
+    personId: sanitizeText(raw.personId),
+    leadId,
+    organizationCreated: Boolean(raw.organizationCreated),
+    personCreated: Boolean(raw.personCreated),
+    leadCreated: Boolean(raw.leadCreated),
+    slackNotified: Boolean(raw.slackNotified),
+    alreadySynced: Boolean(raw.alreadySynced),
+    warnings: Array.isArray(raw.warnings)
+      ? raw.warnings.map((value) => sanitizeText(value)).filter((value): value is string => Boolean(value))
+      : [],
+  };
 }
 
 export type WooCommerceComprasWebhookEvent = {
