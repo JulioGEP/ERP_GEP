@@ -1,5 +1,5 @@
 // backend/functions/public-session-students.ts
-import { isUuid } from './_shared/uuid';
+import { validate as isUUID } from 'uuid';
 import { getPrisma } from './_shared/prisma';
 import { normalizeDriveUrl } from './_shared/drive';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
@@ -26,7 +26,7 @@ function normalizeUuid(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   if (!trimmed.length) return null;
-  return isUuid(trimmed) ? trimmed : null;
+  return isUUID(trimmed) ? trimmed : null;
 }
 
 function normalizeDni(value: unknown): string | null {
@@ -330,7 +330,7 @@ export const handler = async (event: any) => {
 
     if (method === 'PATCH' && studentId) {
       const studentIdTrimmed = studentId.trim();
-      if (!studentIdTrimmed || !isUuid(studentIdTrimmed)) {
+      if (!studentIdTrimmed || !isUUID(studentIdTrimmed)) {
         return errorResponse('VALIDATION_ERROR', 'id de alumno inválido (UUID requerido)', 400);
       }
 
@@ -407,7 +407,7 @@ export const handler = async (event: any) => {
 
     if (method === 'DELETE' && studentId) {
       const studentIdTrimmed = studentId.trim();
-      if (!studentIdTrimmed || !isUuid(studentIdTrimmed)) {
+      if (!studentIdTrimmed || !isUUID(studentIdTrimmed)) {
         return errorResponse('VALIDATION_ERROR', 'id de alumno inválido (UUID requerido)', 400);
       }
 

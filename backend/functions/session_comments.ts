@@ -1,5 +1,5 @@
 // backend/functions/session_comments.ts
-import { isUuid } from './_shared/uuid';
+import { validate as isUUID } from 'uuid';
 import { getPrisma } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
@@ -78,7 +78,7 @@ export const handler = async (event: any) => {
 
     const prisma = getPrisma();
     const sessionIdStr = String(sessionId).trim();
-    if (!sessionIdStr || !isUuid(sessionIdStr)) {
+    if (!sessionIdStr || !isUUID(sessionIdStr)) {
       return errorResponse('VALIDATION_ERROR', 'sesion_id inválido (UUID requerido)', 400);
     }
 

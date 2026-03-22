@@ -1,5 +1,5 @@
 // backend/functions/documents.ts
-import { isUuid } from './_shared/uuid';
+import { validate as isUUID } from 'uuid';
 import { getPrisma } from './_shared/prisma';
 import {
   COMMON_HEADERS,
@@ -166,7 +166,7 @@ export const handler = async (event: any) => {
       );
     }
 
-    if (!isUuid(sessionId) || !isUuid(studentId)) {
+    if (!isUUID(sessionId) || !isUUID(studentId)) {
       return errorResponse('VALIDATION_ERROR', 'sessionId o studentId inválidos (UUID)', 400);
     }
 
