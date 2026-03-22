@@ -1,6 +1,6 @@
 import type { Handler } from '@netlify/functions';
 
-import { getPrisma } from './_shared/prisma';
+import { getPrisma, withDatabaseFallback } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
 import { nowInMadridISO } from './_shared/timezone';
 import { isScheduledInvocation, isWithinMadridAutomationWindow } from './_shared/slackSchedule';
@@ -12,6 +12,7 @@ type SessionSummary = {
   sessionName: string;
   trainers: string[];
 };
+type SessionRowsResult = Awaited<ReturnType<ReturnType<typeof getPrisma>['sesiones']['findMany']>>;
 
 function getMadridOffsetFromIso(isoValue: string): string {
   const match = isoValue.match(/([+-]\d{2}:\d{2})$/);
@@ -95,7 +96,6 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const prisma = getPrisma();
     const todayIso = nowInMadridISO();
     const isScheduledEvent = isScheduledInvocation(event);
     const force = String(event.queryStringParameters?.force ?? '').toLowerCase();
@@ -110,38 +110,40 @@ export const handler: Handler = async (event) => {
 
     const { day, startUtc, endUtc } = buildMadridDayRange(todayIso);
 
-    const sessionRows = await prisma.sesiones.findMany({
-      where: {
-        fecha_inicio_utc: {
-          gte: startUtc,
-          lte: endUtc,
+    const sessionRows: SessionRowsResult = await withDatabaseFallback((client) =>
+      client.sesiones.findMany({
+        where: {
+          fecha_inicio_utc: {
+            gte: startUtc,
+            lte: endUtc,
+          },
         },
-      },
-      select: {
-        id: true,
-        nombre_cache: true,
-        deals: {
-          select: {
-            title: true,
-            organizations: {
-              select: {
-                name: true,
+        select: {
+          id: true,
+          nombre_cache: true,
+          deals: {
+            select: {
+              title: true,
+              organizations: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
+          sesion_trainers: {
+            select: {
+              trainers: {
+                select: {
+                  name: true,
+                },
               },
             },
           },
         },
-        sesion_trainers: {
-          select: {
-            trainers: {
-              select: {
-                name: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: [{ fecha_inicio_utc: 'asc' }, { created_at: 'asc' }],
-    });
+        orderBy: [{ fecha_inicio_utc: 'asc' }, { created_at: 'asc' }],
+      }),
+    );
 
     const sessions: SessionSummary[] = sessionRows.map((row) => {
       const trainerNames = Array.from(
