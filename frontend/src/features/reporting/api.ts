@@ -621,6 +621,22 @@ function sanitizeLeadFormWebhookEvent(record: unknown): LeadFormWebhookEvent | n
   } satisfies LeadFormWebhookEvent;
 }
 
+export type SendLeadFormWebhookToPipeResult = {
+  webhookEventId: string;
+  category: 'open' | 'enterprise';
+  route: 'open' | 'sabadell' | 'in_company' | 'resto_peninsula' | 'madrid';
+  organizationId: string;
+  personId: string;
+  recordId: string;
+  recordType: 'deal' | 'lead';
+  organizationCreated: boolean;
+  personCreated: boolean;
+  recordCreated: boolean;
+  productAdded: boolean;
+  slackSent: boolean;
+  warnings: string[];
+};
+
 export type FetchLeadFormWebhookEventsOptions = {
   limit?: number;
 };
@@ -644,6 +660,46 @@ export async function fetchLeadFormWebhooks(
   return events
     .map(sanitizeLeadFormWebhookEvent)
     .filter((record): record is LeadFormWebhookEvent => record !== null);
+}
+
+export async function sendLeadFormWebhookToPipe(eventId: string): Promise<SendLeadFormWebhookToPipeResult> {
+  const normalizedEventId = sanitizeText(eventId);
+  if (!normalizedEventId) {
+    throw new Error('El identificador del webhook es obligatorio.');
+  }
+
+  const response = await postJson<{ result?: unknown }>('/reporting-lead-form-webhooks', { eventId: normalizedEventId });
+  const raw = response?.result;
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('La respuesta del servidor no incluye el resultado del envío.');
+  }
+
+  const result = raw as Record<string, unknown>;
+  const category = sanitizeText(result.category);
+  const route = sanitizeText(result.route);
+  const recordType = sanitizeText(result.recordType ?? result.record_type);
+
+  if ((category !== 'open' && category !== 'enterprise') || !route || (recordType !== 'deal' && recordType !== 'lead')) {
+    throw new Error('La respuesta del servidor para el lead tiene un formato inválido.');
+  }
+
+  return {
+    webhookEventId: sanitizeText(result.webhookEventId ?? result.webhook_event_id) ?? normalizedEventId,
+    category,
+    route: route as SendLeadFormWebhookToPipeResult['route'],
+    organizationId: sanitizeText(result.organizationId ?? result.organization_id) ?? '',
+    personId: sanitizeText(result.personId ?? result.person_id) ?? '',
+    recordId: sanitizeText(result.recordId ?? result.record_id) ?? '',
+    recordType,
+    organizationCreated: Boolean(result.organizationCreated ?? result.organization_created),
+    personCreated: Boolean(result.personCreated ?? result.person_created),
+    recordCreated: Boolean(result.recordCreated ?? result.record_created),
+    productAdded: Boolean(result.productAdded ?? result.product_added),
+    slackSent: Boolean(result.slackSent ?? result.slack_sent),
+    warnings: Array.isArray(result.warnings)
+      ? result.warnings.map((value) => sanitizeText(value)).filter((value): value is string => Boolean(value))
+      : [],
+  };
 }
 
 export type WooCommerceComprasWebhookEvent = {
