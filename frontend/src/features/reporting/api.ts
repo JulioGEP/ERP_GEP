@@ -1028,6 +1028,9 @@ export type SendWooCommerceCompraToPipeResult = {
   productAdded: boolean;
   notesCreated: string[];
   warnings: string[];
+  holdedDocumentId: string | null;
+  holdedDocumentType: 'invoice' | null;
+  invoiceEmailSent: boolean;
 };
 
 export async function sendWooCommerceCompraToPipe(eventId: string): Promise<SendWooCommerceCompraToPipeResult> {
@@ -1058,6 +1061,9 @@ export async function sendWooCommerceCompraToPipe(eventId: string): Promise<Send
     warnings: Array.isArray(raw.warnings)
       ? raw.warnings.map((value) => sanitizeText(value)).filter((value): value is string => Boolean(value))
       : [],
+    holdedDocumentId: sanitizeText(raw.holdedDocumentId),
+    holdedDocumentType: raw.holdedDocumentType === 'invoice' ? 'invoice' : null,
+    invoiceEmailSent: Boolean(raw.invoiceEmailSent),
   };
 }
 

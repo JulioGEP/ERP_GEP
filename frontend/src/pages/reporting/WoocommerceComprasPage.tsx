@@ -44,6 +44,9 @@ function buildFeedbackSummary(result: SendWooCommerceCompraToPipeResult): string
     `deal ${result.dealCreated ? 'creado' : 'actualizado'}`,
     result.presupuesto ? `presupuesto ${result.presupuesto}` : null,
     result.productAdded ? 'producto añadido' : 'producto ya existente o no disponible',
+    result.holdedDocumentType === 'invoice' && result.holdedDocumentId
+      ? `factura Holded ${result.holdedDocumentId}${result.invoiceEmailSent ? ' enviada por email' : ''}`
+      : null,
   ].filter((part): part is string => Boolean(part));
 
   if (result.notesCreated.length) {
