@@ -21,6 +21,20 @@ import {
 
 export type ImportDealResult = { warnings: string[]; deal: DealDetail };
 
+export type DeleteDealStatus = {
+  ok: boolean;
+  message: string;
+};
+
+export type DeleteDealResult = {
+  deleted: boolean;
+  results: {
+    database: DeleteDealStatus;
+    holded: DeleteDealStatus;
+    pipedrive: DeleteDealStatus;
+  };
+};
+
 export type DealEditablePatch = {
   sede_label?: string | null;
   hours?: number | null;
@@ -208,13 +222,13 @@ export async function importDeal(dealId: string): Promise<ImportDealResult> {
   return { warnings, deal };
 }
 
-export async function deleteDeal(dealId: string): Promise<void> {
+export async function deleteDeal(dealId: string): Promise<DeleteDealResult> {
   const normalizedId = String(dealId ?? '').trim();
   if (!normalizedId) {
     throw new ApiError('VALIDATION_ERROR', 'Falta dealId para eliminar el presupuesto');
   }
 
-  await request(`/deals/${encodeURIComponent(normalizedId)}`, {
+  return request<DeleteDealResult>(`/deals/${encodeURIComponent(normalizedId)}`, {
     method: 'DELETE',
   });
 }

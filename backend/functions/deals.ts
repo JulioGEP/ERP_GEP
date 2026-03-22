@@ -5,6 +5,7 @@ import { getPrisma } from "./_shared/prisma";
 import { nowInMadridDate, nowInMadridISO, toMadridISOString } from "./_shared/timezone";
 import {
   getDeal,
+  deleteDeal as deleteDealFromPipedrive,
   getOrganization,
   getPerson,
   getDealProducts,
@@ -22,7 +23,6 @@ import { studentsFromNotes } from "./_shared/studentsFromNotes";
 import type { StudentIdentifier } from "./_shared/studentsFromNotes";
 import { logAudit, resolveUserIdFromEvent, type JsonValue } from "./_shared/audit-log";
 import { isTrustedClient, logSuspiciousRequest } from "./_shared/security";
-import { deleteBudgetFromHolded } from "./budgets-send-to-holded";
 
 const EDITABLE_FIELDS = new Set([
   "sede_label",
@@ -57,6 +57,21 @@ const BOOLEAN_EDITABLE_FIELDS = new Set([
 
 const DEAL_NOT_WON_ERROR_CODE = "DEAL_NOT_WON";
 const DEAL_NOT_WON_ERROR_MESSAGE = "Este negocio no está Ganado, no lo podemos subir";
+const HOLDED_ESTIMATES_ENDPOINT = "https://api.holded.com/api/invoicing/v1/documents/estimate";
+
+type ExternalDeletionStatus = {
+  ok: boolean;
+  message: string;
+};
+
+type DealDeletionResult = {
+  deleted: boolean;
+  results: {
+    database: ExternalDeletionStatus;
+    holded: ExternalDeletionStatus;
+    pipedrive: ExternalDeletionStatus;
+  };
+};
 
 /* -------------------- Helpers -------------------- */
 function parsePathId(path: any): string | null {
@@ -117,6 +132,46 @@ function normalizeLabelForComparison(value: unknown): string | null {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+}
+
+function normalizeText(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim();
+  return normalized.length ? normalized : null;
+}
+
+function buildDeletionStatus(ok: boolean, message: string): ExternalDeletionStatus {
+  return { ok, message };
+}
+
+async function deleteHoldedEstimate(apiKey: string, documentId: string): Promise<void> {
+  const response = await fetch(`${HOLDED_ESTIMATES_ENDPOINT}/${encodeURIComponent(documentId)}`, {
+    method: "DELETE",
+    headers: {
+      accept: "application/json",
+      key: apiKey,
+    },
+  });
+
+  let payloadText = "";
+  let payload: unknown = null;
+
+  try {
+    payloadText = await response.text();
+    payload = payloadText ? JSON.parse(payloadText) : null;
+  } catch {
+    payload = payloadText;
+  }
+
+  if (!response.ok) {
+    const error = new Error(
+      `Holded respondió ${response.status}: ${
+        typeof payload === "string" ? payload : JSON.stringify(payload ?? {})
+      }`,
+    ) as Error & { statusCode?: number };
+    error.statusCode = response.status;
+    throw error;
+  }
 }
 
 function isMaterialPipelineLabel(value: unknown): boolean {
@@ -627,7 +682,7 @@ function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null 
 export async function deleteDealFromDatabase(
   prisma: PrismaClient,
   dealId: string,
-): Promise<{ deleted: boolean }> {
+): Promise<DealDeletionResult> {
   const id = String(dealId);
 
   const existingRaw = await prisma.deals.findUnique({
@@ -640,13 +695,69 @@ export async function deleteDealFromDatabase(
   const existing = normalizeDealRelations(existingRaw);
 
   if (!existing) {
-    return { deleted: false };
+    return {
+      deleted: false,
+      results: {
+        database: buildDeletionStatus(false, "No se encontró en la BD."),
+        holded: buildDeletionStatus(false, "No evaluado porque el presupuesto no existe en la BD."),
+        pipedrive: buildDeletionStatus(false, "No evaluado porque el presupuesto no existe en la BD."),
+      },
+    };
   }
 
-  await deleteBudgetFromHolded({
-    dealId: id,
-    holdedDocumentId: existing.presu_holded,
-  });
+  const results: DealDeletionResult["results"] = {
+    database: buildDeletionStatus(false, "Pendiente."),
+    holded: buildDeletionStatus(false, "Pendiente."),
+    pipedrive: buildDeletionStatus(false, "Pendiente."),
+  };
+
+  const holdedDocumentId = normalizeText(existing.presu_holded);
+  if (holdedDocumentId) {
+    const holdedApiKey = process.env.API_HOLDED_KEY;
+    if (!holdedApiKey) {
+      results.holded = buildDeletionStatus(false, "API_HOLDED_KEY no configurada.");
+    } else {
+      try {
+        await deleteHoldedEstimate(holdedApiKey, holdedDocumentId);
+        results.holded = buildDeletionStatus(true, "Eliminado correctamente.");
+      } catch (error) {
+        const statusCode =
+          error && typeof error === "object" && typeof (error as any).statusCode === "number"
+            ? (error as any).statusCode
+            : null;
+        const message =
+          error instanceof Error ? error.message : "No se pudo eliminar en Holded.";
+        const normalizedMessage = message.toLowerCase();
+        const isNotFound =
+          statusCode === 404
+          || normalizedMessage.includes("document not found")
+          || normalizedMessage.includes("not found");
+        results.holded = buildDeletionStatus(
+          false,
+          isNotFound ? "No encontrado en Holded." : message,
+        );
+      }
+    }
+  } else {
+    results.holded = buildDeletionStatus(false, "Sin identificador de Holded en la BD.");
+  }
+
+  try {
+    await deleteDealFromPipedrive(id);
+    results.pipedrive = buildDeletionStatus(true, "Eliminado correctamente.");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No se pudo eliminar en Pipedrive.";
+    const normalizedMessage = message.toLowerCase();
+    const isNotFound =
+      normalizedMessage.includes(" 404 ")
+      || normalizedMessage.includes("not found")
+      || normalizedMessage.includes("not_found");
+
+    results.pipedrive = buildDeletionStatus(
+      false,
+      isNotFound ? "No encontrado en Pipedrive." : message,
+    );
+  }
 
   const commentsTableExistsResult = await prisma.$queryRaw<
     Array<{ table_ref: string | null }>
@@ -672,7 +783,14 @@ export async function deleteDealFromDatabase(
     );
   }
 
-  await prisma.$transaction(transactionOperations);
+  try {
+    await prisma.$transaction(transactionOperations);
+    results.database = buildDeletionStatus(true, "Eliminado correctamente.");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No se pudo eliminar en la BD.";
+    results.database = buildDeletionStatus(false, message);
+    return { deleted: false, results };
+  }
 
   try {
     await deleteDealFolderFromGoogleDrive({
@@ -686,7 +804,7 @@ export async function deleteDealFromDatabase(
     });
   }
 
-  return { deleted: true };
+  return { deleted: true, results };
 }
 
 type ProductStockLookup = {
@@ -1364,11 +1482,11 @@ export const handler = async (event: any) => {
     if (method === "DELETE" && dealId !== null) {
       const deletionResult = await deleteDealFromDatabase(prisma, String(dealId));
 
-      if (!deletionResult.deleted) {
+      if (!deletionResult.deleted && deletionResult.results.database.message === "No se encontró en la BD.") {
         return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
       }
 
-      return successResponse({ ok: true });
+      return successResponse({ ok: true, deleted: deletionResult.deleted, results: deletionResult.results });
     }
 
     /* ---------------- PATCH (campos editables) ---------------- */
