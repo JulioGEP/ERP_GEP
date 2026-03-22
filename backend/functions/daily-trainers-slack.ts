@@ -1,44 +1,33 @@
 import type { Handler } from '@netlify/functions';
-import type { Prisma } from '@prisma/client';
 
 import { getPrisma, withDatabaseFallback } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
+import { getSlackRetryOptions, postSlackMessageWithRetry } from './_shared/slackPost';
 import { nowInMadridISO } from './_shared/timezone';
 import { isScheduledInvocation, isWithinMadridAutomationWindow } from './_shared/slackSchedule';
 import { getSlackChannelId, getSlackToken } from './_shared/slackConfig';
 
-const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
 const JOB_NAME = 'daily-trainers-slack';
 type SessionSummary = {
   company: string;
   sessionName: string;
   trainers: string[];
 };
-type SessionRow = Prisma.sesionesGetPayload<{
-  select: {
-    id: true;
-    nombre_cache: true;
-    deals: {
-      select: {
-        title: true;
-        organizations: {
-          select: {
-            name: true;
-          };
-        };
-      };
-    };
-    sesion_trainers: {
-      select: {
-        trainers: {
-          select: {
-            name: true;
-          };
-        };
-      };
-    };
-  };
-}>;
+type SessionRow = {
+  id: string | number;
+  nombre_cache: string | null;
+  deals: {
+    title: string | null;
+    organizations: {
+      name: string | null;
+    } | null;
+  } | null;
+  sesion_trainers: Array<{
+    trainers: {
+      name: string | null;
+    } | null;
+  }>;
+};
 type SessionRowsResult = SessionRow[];
 
 function getMadridOffsetFromIso(isoValue: string): string {
@@ -79,35 +68,6 @@ function buildSlackMessage(sessions: SessionSummary[]): string {
   return ['Hoy tenemos a', ...lines, 'De tu querido Bot', '¡Gracias!'].join('\n');
 }
 
-async function postSlackMessage(token: string, text: string): Promise<void> {
-  const response = await fetch(SLACK_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json; charset=utf-8',
-    },
-    body: JSON.stringify({
-      channel: getSlackChannelId(),
-      text,
-    }),
-  });
-
-  const rawBody = await response.text();
-  let payload: { ok?: boolean; error?: string } | null = null;
-
-  try {
-    payload = rawBody ? (JSON.parse(rawBody) as { ok?: boolean; error?: string }) : null;
-  } catch {
-    payload = null;
-  }
-
-  if (!response.ok || !payload?.ok) {
-    const slackError = payload?.error ? ` (${payload.error})` : '';
-    const rawDetails = rawBody ? ` | body=${rawBody}` : '';
-    throw new Error(`Slack API chat.postMessage falló${slackError}${rawDetails}`);
-  }
-}
-
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
@@ -127,6 +87,8 @@ export const handler: Handler = async (event) => {
     const isScheduledEvent = isScheduledInvocation(event);
     const force = String(event.queryStringParameters?.force ?? '').toLowerCase();
     const shouldForceSend = force === '1' || force === 'true';
+    const slackRetryOptions = getSlackRetryOptions(event.queryStringParameters);
+    const slackChannel = getSlackChannelId();
 
     console.info(`[${JOB_NAME}] Invocation started.`, {
       method: event.httpMethod,
@@ -134,6 +96,8 @@ export const handler: Handler = async (event) => {
       isScheduledEvent,
       shouldForceSend,
       nowMadrid: todayIso,
+      slackChannel,
+      ...slackRetryOptions,
     });
 
     if (!shouldForceSend && isScheduledEvent && !isWithinMadridAutomationWindow(todayIso)) {
@@ -206,24 +170,31 @@ export const handler: Handler = async (event) => {
     const text = buildSlackMessage(sessions);
 
     console.info(`[${JOB_NAME}] Posting message to Slack.`, {
-      channel: getSlackChannelId(),
+      channel: slackChannel,
       sessionsCount: sessions.length,
       textLength: text.length,
+      ...slackRetryOptions,
     });
 
-    await postSlackMessage(token, text);
+    const slackPostResult = await postSlackMessageWithRetry(token, text, {
+      ...slackRetryOptions,
+      channel: slackChannel,
+      logger: console,
+    });
 
     console.info(`[${JOB_NAME}] Slack message sent successfully.`, {
-      channel: getSlackChannelId(),
+      channel: slackChannel,
       date: day,
+      ...slackPostResult,
     });
 
     return successResponse({
       message: 'Mensaje de formadores enviado a Slack correctamente.',
       date: day,
-      channel: getSlackChannelId(),
+      channel: slackChannel,
       text,
       sessions,
+      ...slackPostResult,
     });
   } catch (error) {
     console.error(`[${JOB_NAME}] Handler failed.`, {
