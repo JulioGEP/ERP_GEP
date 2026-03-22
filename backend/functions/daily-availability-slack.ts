@@ -1,6 +1,6 @@
 import type { Handler } from '@netlify/functions';
 
-import { getPrisma } from './_shared/prisma';
+import { getPrisma, withDatabaseFallback } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
 import { nowInMadridISO } from './_shared/timezone';
 import { isScheduledInvocation, isWithinMadridAutomationWindow } from './_shared/slackSchedule';
@@ -8,10 +8,12 @@ import { getSlackChannelId, getSlackToken } from './_shared/slackConfig';
 
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
 const TELEWORK_TYPE = 'T';
+const JOB_NAME = 'daily-availability-slack';
 type DailyGroup = {
   off: string[];
   telework: string[];
 };
+type VacationDaysResult = Awaited<ReturnType<ReturnType<typeof getPrisma>['user_vacation_days']['findMany']>>;
 
 function addDaysToDateOnly(dateOnly: string, days: number): string {
   const base = new Date(`${dateOnly}T00:00:00Z`);
@@ -73,11 +75,19 @@ async function postSlackMessage(token: string, text: string): Promise<void> {
     }),
   });
 
-  const payload = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+  const rawBody = await response.text();
+  let payload: { ok?: boolean; error?: string } | null = null;
+
+  try {
+    payload = rawBody ? (JSON.parse(rawBody) as { ok?: boolean; error?: string }) : null;
+  } catch {
+    payload = null;
+  }
 
   if (!response.ok || !payload?.ok) {
     const details = payload?.error ? ` (${payload.error})` : '';
-    throw new Error(`Slack API chat.postMessage falló${details}`);
+    const rawDetails = rawBody ? ` | body=${rawBody}` : '';
+    throw new Error(`Slack API chat.postMessage falló${details}${rawDetails}`);
   }
 }
 
@@ -96,11 +106,18 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const prisma = getPrisma();
     const nowMadrid = nowInMadridISO();
     const isScheduledEvent = isScheduledInvocation(event);
     const force = String(event.queryStringParameters?.force ?? '').toLowerCase();
     const shouldForceSend = force === '1' || force === 'true';
+
+    console.info(`[${JOB_NAME}] Invocation started.`, {
+      method: event.httpMethod,
+      path: event.path,
+      isScheduledEvent,
+      shouldForceSend,
+      nowMadrid,
+    });
 
     if (!shouldForceSend && isScheduledEvent && !isWithinMadridAutomationWindow(nowMadrid)) {
       return successResponse({
@@ -113,31 +130,40 @@ export const handler: Handler = async (event) => {
     const tomorrow = addDaysToDateOnly(today, 1);
     const targetDates = [today, tomorrow];
 
-    const vacationDays = await prisma.user_vacation_days.findMany({
-      where: {
-        date: {
-          in: targetDates.map((date) => new Date(`${date}T00:00:00Z`)),
-        },
-        user: {
-          active: true,
-        },
-      },
-      select: {
-        type: true,
-        date: true,
-        user: {
-          select: {
-            first_name: true,
-            last_name: true,
-            name: true,
+    const vacationDays: VacationDaysResult = await withDatabaseFallback(
+      (client) =>
+        client.user_vacation_days.findMany({
+          where: {
+            date: {
+              in: targetDates.map((date) => new Date(`${date}T00:00:00Z`)),
+            },
+            user: {
+              active: true,
+            },
           },
-        },
-      },
-      orderBy: [
-        { date: 'asc' },
-        { user: { first_name: 'asc' } },
-        { user: { last_name: 'asc' } },
-      ],
+          select: {
+            type: true,
+            date: true,
+            user: {
+              select: {
+                first_name: true,
+                last_name: true,
+                name: true,
+              },
+            },
+          },
+          orderBy: [
+            { date: 'asc' },
+            { user: { first_name: 'asc' } },
+            { user: { last_name: 'asc' } },
+          ],
+        }),
+      { operationName: `${JOB_NAME}:user_vacation_days.findMany` },
+    );
+
+    console.info(`[${JOB_NAME}] Vacation data loaded.`, {
+      targetDates,
+      count: vacationDays.length,
     });
 
     const grouped: Record<string, DailyGroup> = {
@@ -166,7 +192,19 @@ export const handler: Handler = async (event) => {
     grouped[tomorrow].telework.sort((a, b) => a.localeCompare(b, 'es'));
 
     const text = buildSlackMessage(today, tomorrow, grouped);
+
+    console.info(`[${JOB_NAME}] Posting message to Slack.`, {
+      channel: getSlackChannelId(),
+      textLength: text.length,
+    });
+
     await postSlackMessage(token, text);
+
+    console.info(`[${JOB_NAME}] Slack message sent successfully.`, {
+      channel: getSlackChannelId(),
+      date: today,
+      nextDate: tomorrow,
+    });
 
     return successResponse({
       message: 'Mensaje enviado a Slack correctamente.',
@@ -177,6 +215,11 @@ export const handler: Handler = async (event) => {
       availability: grouped,
     });
   } catch (error) {
+    console.error(`[${JOB_NAME}] Handler failed.`, {
+      message: error instanceof Error ? error.message : String(error ?? ''),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
     const errorMessage = error instanceof Error ? error.message : 'Error inesperado al enviar el mensaje a Slack.';
     return errorResponse('SLACK_POST_FAILED', errorMessage, 500);
   }

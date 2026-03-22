@@ -1,17 +1,19 @@
 import type { Handler } from '@netlify/functions';
 
-import { getPrisma } from './_shared/prisma';
+import { getPrisma, withDatabaseFallback } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
 import { nowInMadridISO } from './_shared/timezone';
 import { isScheduledInvocation, isWithinMadridAutomationWindow } from './_shared/slackSchedule';
 import { getSlackChannelId, getSlackToken } from './_shared/slackConfig';
 
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
+const JOB_NAME = 'daily-trainers-slack';
 type SessionSummary = {
   company: string;
   sessionName: string;
   trainers: string[];
 };
+type SessionRowsResult = Awaited<ReturnType<ReturnType<typeof getPrisma>['sesiones']['findMany']>>;
 
 function getMadridOffsetFromIso(isoValue: string): string {
   const match = isoValue.match(/([+-]\d{2}:\d{2})$/);
@@ -95,11 +97,18 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const prisma = getPrisma();
     const todayIso = nowInMadridISO();
     const isScheduledEvent = isScheduledInvocation(event);
     const force = String(event.queryStringParameters?.force ?? '').toLowerCase();
     const shouldForceSend = force === '1' || force === 'true';
+
+    console.info(`[${JOB_NAME}] Invocation started.`, {
+      method: event.httpMethod,
+      path: event.path,
+      isScheduledEvent,
+      shouldForceSend,
+      nowMadrid: todayIso,
+    });
 
     if (!shouldForceSend && isScheduledEvent && !isWithinMadridAutomationWindow(todayIso)) {
       return successResponse({
@@ -110,37 +119,46 @@ export const handler: Handler = async (event) => {
 
     const { day, startUtc, endUtc } = buildMadridDayRange(todayIso);
 
-    const sessionRows = await prisma.sesiones.findMany({
-      where: {
-        fecha_inicio_utc: {
-          gte: startUtc,
-          lte: endUtc,
-        },
-      },
-      select: {
-        id: true,
-        nombre_cache: true,
-        deals: {
+    const sessionRows: SessionRowsResult = await withDatabaseFallback(
+      (client) =>
+        client.sesiones.findMany({
+          where: {
+            fecha_inicio_utc: {
+              gte: startUtc,
+              lte: endUtc,
+            },
+          },
           select: {
-            title: true,
-            organizations: {
+            id: true,
+            nombre_cache: true,
+            deals: {
               select: {
-                name: true,
+                title: true,
+                organizations: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+            sesion_trainers: {
+              select: {
+                trainers: {
+                  select: {
+                    name: true,
+                  },
+                },
               },
             },
           },
-        },
-        sesion_trainers: {
-          select: {
-            trainers: {
-              select: {
-                name: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: [{ fecha_inicio_utc: 'asc' }, { created_at: 'asc' }],
+          orderBy: [{ fecha_inicio_utc: 'asc' }, { created_at: 'asc' }],
+        }),
+      { operationName: `${JOB_NAME}:sesiones.findMany` },
+    );
+
+    console.info(`[${JOB_NAME}] Session data loaded.`, {
+      day,
+      count: sessionRows.length,
     });
 
     const sessions: SessionSummary[] = sessionRows.map((row) => {
@@ -160,7 +178,19 @@ export const handler: Handler = async (event) => {
     });
 
     const text = buildSlackMessage(sessions);
+
+    console.info(`[${JOB_NAME}] Posting message to Slack.`, {
+      channel: getSlackChannelId(),
+      sessionsCount: sessions.length,
+      textLength: text.length,
+    });
+
     await postSlackMessage(token, text);
+
+    console.info(`[${JOB_NAME}] Slack message sent successfully.`, {
+      channel: getSlackChannelId(),
+      date: day,
+    });
 
     return successResponse({
       message: 'Mensaje de formadores enviado a Slack correctamente.',
@@ -170,6 +200,11 @@ export const handler: Handler = async (event) => {
       sessions,
     });
   } catch (error) {
+    console.error(`[${JOB_NAME}] Handler failed.`, {
+      message: error instanceof Error ? error.message : String(error ?? ''),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
     const errorMessage = error instanceof Error ? error.message : 'Error inesperado al enviar el mensaje a Slack.';
     return errorResponse('SLACK_POST_FAILED', errorMessage, 500);
   }
