@@ -47,4 +47,14 @@ test('buildLeadPayload sends numeric person_id and organization_id values to Pip
 
   assert.equal(payload.person_id, 123);
   assert.equal(payload.organization_id, 456);
+  assert.equal(payload.visible_to, '7');
+});
+
+test('parseVisibilityEnv keeps only supported Pipedrive visibility values', () => {
+  assert.equal(__test__.parseVisibilityEnv('1', '7'), '1');
+  assert.equal(__test__.parseVisibilityEnv('3', '7'), '3');
+  assert.equal(__test__.parseVisibilityEnv('5', '7'), '5');
+  assert.equal(__test__.parseVisibilityEnv('7', '1'), '7');
+  assert.equal(__test__.parseVisibilityEnv('9', '7'), '7');
+  assert.equal(__test__.parseVisibilityEnv(undefined, '5'), '5');
 });

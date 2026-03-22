@@ -93,7 +93,7 @@ const DEFAULT_PRESUCLIENTE_STAGE_ID = parseIntegerEnv(
   process.env.WOOCOMMERCE_PIPE_PRESUCLIENTE_STAGE_ID,
   DEFAULT_WON_STAGE_ID,
 );
-const DEFAULT_VISIBLE_TO = parseIntegerEnv(process.env.WOOCOMMERCE_PIPE_VISIBLE_TO, 7);
+const DEFAULT_VISIBLE_TO = parseVisibilityEnv(process.env.WOOCOMMERCE_PIPE_VISIBLE_TO, '7');
 
 const ORG_CIF_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_ORG_CIF_FIELD_KEY || '6d39d015a33921753410c1bab0b067ca93b8cf2c';
 const ORG_PHONE_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_ORG_PHONE_FIELD_KEY || 'b4379db06dfbe0758d84c2c2dd45ef04fa093b6d';
@@ -127,6 +127,11 @@ const DEAL_CONSTANT_STATUS_VALUE = process.env.WOOCOMMERCE_PIPE_DEAL_CONSTANT_ST
 function parseIntegerEnv(rawValue: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(String(rawValue ?? ''), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseVisibilityEnv(rawValue: string | undefined, fallback: '1' | '3' | '5' | '7'): '1' | '3' | '5' | '7' {
+  const normalized = String(rawValue ?? '').trim();
+  return normalized === '1' || normalized === '3' || normalized === '5' || normalized === '7' ? normalized : fallback;
 }
 
 function readString(value: unknown): string | null {

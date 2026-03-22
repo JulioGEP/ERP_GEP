@@ -43,7 +43,7 @@ type SyncResult = {
 };
 
 const DEFAULT_OWNER_ID = parseIntegerEnv(process.env.HOLDED_PIPE_DEFAULT_OWNER_ID, 13444807);
-const DEFAULT_VISIBLE_TO = parseIntegerEnv(process.env.HOLDED_PIPE_VISIBLE_TO, 7);
+const DEFAULT_VISIBLE_TO = parseVisibilityEnv(process.env.HOLDED_PIPE_VISIBLE_TO, '7');
 const DEFAULT_PIPELINE_ID = parseIntegerEnv(process.env.HOLDED_PIPE_PIPELINE_ID, 1);
 const DEFAULT_OPEN_STAGE_ID = parseIntegerEnv(process.env.HOLDED_PIPE_OPEN_STAGE_ID, 12);
 const DEFAULT_WON_STAGE_ID = parseIntegerEnv(process.env.HOLDED_PIPE_WON_STAGE_ID, 12);
@@ -79,6 +79,11 @@ const EXPECTED_TOKEN = process.env.HOLDED_TO_PIPEDRIVE_TOKEN || process.env.HOLD
 function parseIntegerEnv(rawValue: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(String(rawValue ?? ''), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseVisibilityEnv(rawValue: string | undefined, fallback: '1' | '3' | '5' | '7'): '1' | '3' | '5' | '7' {
+  const normalized = String(rawValue ?? '').trim();
+  return normalized === '1' || normalized === '3' || normalized === '5' || normalized === '7' ? normalized : fallback;
 }
 
 function readString(value: unknown): string | null {

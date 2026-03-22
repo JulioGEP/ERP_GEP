@@ -41,13 +41,18 @@ type NormalizedLeadForm = {
 
 const PIPEDRIVE_BASE_URL = process.env.PIPEDRIVE_BASE_URL || 'https://api.pipedrive.com/v1';
 const DEFAULT_PIPE_OWNER_ID = parseIntegerEnv(process.env.LEAD_FORM_PIPE_DEFAULT_OWNER_ID, 13444807);
-const DEFAULT_VISIBLE_TO = parseIntegerEnv(process.env.LEAD_FORM_PIPE_VISIBLE_TO, 7);
+const DEFAULT_VISIBLE_TO = parseVisibilityEnv(process.env.LEAD_FORM_PIPE_VISIBLE_TO, '7');
 const DEFAULT_SLACK_CHANNEL_ID = String(process.env.LEAD_FORM_SLACK_CHANNEL_ID ?? 'C05PBDREZ54').trim();
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
 
 function parseIntegerEnv(rawValue: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(String(rawValue ?? ''), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseVisibilityEnv(rawValue: string | undefined, fallback: '1' | '3' | '5' | '7'): '1' | '3' | '5' | '7' {
+  const normalized = String(rawValue ?? '').trim();
+  return normalized === '1' || normalized === '3' || normalized === '5' || normalized === '7' ? normalized : fallback;
 }
 
 function readString(value: unknown): string | null {
@@ -427,6 +432,7 @@ function buildLeadPayload(lead: NormalizedLeadForm, organizationId: string | nul
 export const __test__ = {
   readInteger,
   buildLeadPayload,
+  parseVisibilityEnv,
 };
 
 export async function sendLeadFormToPipedrive(params: {
