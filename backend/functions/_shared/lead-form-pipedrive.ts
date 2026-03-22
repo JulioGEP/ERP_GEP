@@ -56,6 +56,21 @@ function readString(value: unknown): string | null {
   return text.length ? text : null;
 }
 
+function readInteger(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isInteger(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed.length) return null;
+    const parsed = Number(trimmed);
+    return Number.isInteger(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
 function readObject(value: unknown): JsonObject | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
@@ -404,10 +419,15 @@ function buildLeadPayload(lead: NormalizedLeadForm, organizationId: string | nul
     title: buildLeadTitle(lead),
     owner_id: DEFAULT_PIPE_OWNER_ID,
     visible_to: DEFAULT_VISIBLE_TO,
-    person_id: personId ?? undefined,
-    organization_id: organizationId ?? undefined,
+    person_id: readInteger(personId) ?? undefined,
+    organization_id: readInteger(organizationId) ?? undefined,
   };
 }
+
+export const __test__ = {
+  readInteger,
+  buildLeadPayload,
+};
 
 export async function sendLeadFormToPipedrive(params: {
   prisma: PrismaClient;
