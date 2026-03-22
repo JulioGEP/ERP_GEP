@@ -16,6 +16,7 @@ import { deleteMaterialOrder, fetchMaterialOrders, updateMaterialOrder } from '.
 import { fetchTrainers } from '../features/recursos/api';
 import {
   deleteDeal,
+  type DeleteDealResult,
   sendBudgetToHolded,
   fetchDealDetail,
   fetchDeals,
@@ -78,6 +79,19 @@ const ACTIVE_PATH_STORAGE_KEY = 'erp-gep-active-path';
 const NAVBAR_OFFCANVAS_ID = 'app-navbar-offcanvas';
 const NAVBAR_OFFCANVAS_LABEL_ID = 'app-navbar-offcanvas-label';
 const CONTROL_HORARIO_URL = 'https://erpgep.netlify.app/control_horario';
+
+function formatDeletionStatusLine(label: string, status: DeleteDealResult['results']['database']): string {
+  return `- ${label} -> ${status.ok ? '✅' : `❌ (${status.message})`}`;
+}
+
+function buildDeleteDealAlertMessage(result: DeleteDealResult): string {
+  return [
+    'Presupuesto eliminado de:',
+    formatDeletionStatusLine('BD', result.results.database),
+    formatDeletionStatusLine('Holded', result.results.holded),
+    formatDeletionStatusLine('Pipedrive', result.results.pipedrive),
+  ].join('\n');
+}
 const DASHBOARD_URL = 'https://erpgep.netlify.app/dashboard';
 
 type NavNode = {
@@ -1474,15 +1488,22 @@ export default function AuthenticatedApp() {
 
   const deleteDealMutation = useMutation({
     mutationFn: (dealId: string) => deleteDeal(dealId),
-    onSuccess: (_, dealId) => {
-      setSelectedBudgetId((current) => (current === dealId ? null : current));
-      setSelectedBudgetSummary((current) => {
-        if (!current) return current;
-        const currentId = current.dealId ?? current.deal_id;
-        return currentId === dealId ? null : current;
-      });
-      pushToast({ variant: 'success', message: 'Presupuesto eliminado' });
-      queryClient.invalidateQueries({ queryKey: DEALS_QUERY_KEY });
+    onSuccess: (result, dealId) => {
+      window.alert(buildDeleteDealAlertMessage(result));
+
+      if (result.deleted && result.results.database.ok) {
+        setSelectedBudgetId((current) => (current === dealId ? null : current));
+        setSelectedBudgetSummary((current) => {
+          if (!current) return current;
+          const currentId = current.dealId ?? current.deal_id;
+          return currentId === dealId ? null : current;
+        });
+        pushToast({ variant: 'success', message: 'Presupuesto eliminado de la BD.' });
+        queryClient.invalidateQueries({ queryKey: DEALS_QUERY_KEY });
+        return;
+      }
+
+      pushToast({ variant: 'warning', message: 'No se pudo eliminar el presupuesto de la BD.' });
     },
     onError: (error: unknown) => {
       const message =

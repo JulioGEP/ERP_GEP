@@ -86,6 +86,10 @@ export async function getDeal(id: number | string) {
   return pd(`/deals/${encodeURIComponent(String(id))}`);
 }
 
+export async function deleteDeal(id: number | string) {
+  return pd(`/deals/${encodeURIComponent(String(id))}`, { method: "DELETE" });
+}
+
 export async function getOrganization(id: number | string) {
   return pd(`/organizations/${encodeURIComponent(String(id))}`);
 }
