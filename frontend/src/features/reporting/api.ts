@@ -1436,11 +1436,33 @@ export type SlackDailyAvailabilityResponse = {
   nextDate: string;
   channel: string;
   text: string;
+  attemptsRequested: number;
+  attemptsUsed: number;
   availability: Record<string, { off: string[]; telework: string[] }>;
 };
 
-export async function sendDailyAvailabilitySlackMessage(): Promise<SlackDailyAvailabilityResponse> {
-  return getJson<SlackDailyAvailabilityResponse>('/daily-availability-slack?force=true');
+type SlackSendOptions = {
+  attempts?: number;
+  delayMs?: number;
+};
+
+function buildSlackSendQuery(options?: SlackSendOptions): string {
+  const params = new URLSearchParams();
+  params.set('force', 'true');
+
+  if (typeof options?.attempts === 'number' && Number.isFinite(options.attempts)) {
+    params.set('attempts', String(Math.max(1, Math.floor(options.attempts))));
+  }
+
+  if (typeof options?.delayMs === 'number' && Number.isFinite(options.delayMs)) {
+    params.set('delayMs', String(Math.max(1, Math.floor(options.delayMs))));
+  }
+
+  return params.toString();
+}
+
+export async function sendDailyAvailabilitySlackMessage(options?: SlackSendOptions): Promise<SlackDailyAvailabilityResponse> {
+  return getJson<SlackDailyAvailabilityResponse>(`/daily-availability-slack?${buildSlackSendQuery(options)}`);
 }
 
 export type SlackDailyTrainersResponse = {
@@ -1448,6 +1470,8 @@ export type SlackDailyTrainersResponse = {
   date: string;
   channel: string;
   text: string;
+  attemptsRequested: number;
+  attemptsUsed: number;
   sessions: Array<{
     company: string;
     sessionName: string;
@@ -1455,6 +1479,6 @@ export type SlackDailyTrainersResponse = {
   }>;
 };
 
-export async function sendDailyTrainersSlackMessage(): Promise<SlackDailyTrainersResponse> {
-  return getJson<SlackDailyTrainersResponse>('/daily-trainers-slack?force=true');
+export async function sendDailyTrainersSlackMessage(options?: SlackSendOptions): Promise<SlackDailyTrainersResponse> {
+  return getJson<SlackDailyTrainersResponse>(`/daily-trainers-slack?${buildSlackSendQuery(options)}`);
 }
