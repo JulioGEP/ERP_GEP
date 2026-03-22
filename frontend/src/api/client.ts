@@ -37,6 +37,24 @@ export type RequestJsonOptions = {
   parseJson?: (text: string) => any;
 };
 
+function buildInvalidJsonMessage(response: Response, raw: string, fallbackMessage?: string): string {
+  const baseMessage = fallbackMessage ?? 'Respuesta JSON inválida del servidor.';
+  const collapsedPreview = raw.replace(/\s+/g, ' ').trim().slice(0, 800);
+  const contentType = response.headers.get('content-type');
+  const headerRequestId = response.headers.get('x-nf-request-id') ?? response.headers.get('x-request-id');
+  const bodyRequestIdMatch = raw.match(/\bID:\s*([A-Z0-9_-]+)\b/i);
+  const requestId = headerRequestId ?? bodyRequestIdMatch?.[1];
+  const details = [
+    `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
+    contentType ? `Content-Type: ${contentType}` : null,
+    requestId ? `Request ID: ${requestId}` : null,
+    response.url ? `URL: ${response.url}` : null,
+    collapsedPreview ? `Respuesta recibida: ${collapsedPreview}` : null,
+  ].filter(Boolean);
+
+  return details.length ? `${baseMessage} ${details.join('. ')}` : baseMessage;
+}
+
 function resolveRequestInput(input: RequestInfo | URL): RequestInfo | URL {
   if (typeof input === 'string') {
     if (/^https?:/i.test(input)) return input;
@@ -95,9 +113,7 @@ export async function requestJson<T = any>(
     try {
       json = options?.parseJson ? options.parseJson(raw) : JSON.parse(raw);
     } catch {
-      const preview = raw.trim().slice(0, 500);
-      const details = preview ? ` Detalle: ${preview}` : '';
-      const message = `${options?.invalidResponseMessage ?? 'Respuesta JSON inválida del servidor.'}${details}`;
+      const message = buildInvalidJsonMessage(response, raw, options?.invalidResponseMessage);
       throw new ApiError('INVALID_RESPONSE', message, response.status || undefined);
     }
   }
