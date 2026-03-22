@@ -1,82 +1,65 @@
 import type { Handler } from '@netlify/functions';
-import type { Prisma } from '@prisma/client';
 
-import { getPrisma, withDatabaseFallback } from './_shared/prisma';
+import { withDatabaseFallback } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
 import { nowInMadridISO } from './_shared/timezone';
-import { isScheduledInvocation, isWithinMadridAutomationWindow } from './_shared/slackSchedule';
 import { getSlackChannelId, getSlackToken } from './_shared/slackConfig';
 
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
 const JOB_NAME = 'daily-trainers-slack';
+
 type SessionSummary = {
   company: string;
   sessionName: string;
   trainers: string[];
 };
-type SessionRow = Prisma.sesionesGetPayload<{
-  select: {
-    id: true;
-    nombre_cache: true;
-    deals: {
-      select: {
-        title: true;
-        organizations: {
-          select: {
-            name: true;
-          };
-        };
-      };
-    };
-    sesion_trainers: {
-      select: {
-        trainers: {
-          select: {
-            name: true;
-          };
-        };
-      };
-    };
-  };
-}>;
-type SessionRowsResult = SessionRow[];
 
-function getMadridOffsetFromIso(isoValue: string): string {
-  const match = isoValue.match(/([+-]\d{2}:\d{2})$/);
-  return match?.[1] ?? '+00:00';
-}
+type SessionRow = {
+  nombre_cache: string | null;
+  deals: {
+    title: string | null;
+    organizations: {
+      name: string | null;
+    } | null;
+  } | null;
+  sesion_trainers: Array<{
+    trainers: {
+      name: string | null;
+    } | null;
+  }>;
+};
 
 function buildMadridDayRange(todayIso: string): { day: string; startUtc: Date; endUtc: Date } {
   const day = todayIso.slice(0, 10);
-  const offset = getMadridOffsetFromIso(todayIso);
+  const offset = todayIso.match(/([+-]\d{2}:\d{2})$/)?.[1] ?? '+00:00';
   const startUtc = new Date(`${day}T00:00:00${offset}`);
   const endUtc = new Date(`${day}T23:59:59.999${offset}`);
+
   return { day, startUtc, endUtc };
 }
 
-function normalizeText(value: string | null | undefined, fallback: string): string {
+function cleanText(value: string | null | undefined, fallback: string): string {
   const text = String(value ?? '').trim();
-  return text.length ? text : fallback;
+  return text || fallback;
 }
 
-function formatTrainerList(names: string[]): string {
-  if (names.length === 0) return 'Sin formador asignado';
-  if (names.length === 1) return names[0];
-  if (names.length === 2) return `${names[0]} y ${names[1]}`;
-  return `${names.slice(0, -1).join(', ')} y ${names[names.length - 1]}`;
+function formatTrainerList(trainers: string[]): string {
+  if (trainers.length === 0) return 'Sin formador asignado';
+  return trainers.join(', ');
 }
 
 function buildSlackMessage(sessions: SessionSummary[]): string {
-  if (!sessions.length) {
-    return ['Hoy no hay sesiones con formadores asignados.', 'De tu querido Bot', '¡Gracias!'].join('\n');
+  if (sessions.length === 0) {
+    return 'Hoy no hay sesiones con formadores asignados.';
   }
 
-  const lines = sessions.map(
-    (session) =>
-      `- ${formatTrainerList(session.trainers)} en ${session.company} haciendo ${session.sessionName}`,
-  );
-
-  return ['Hoy tenemos a', ...lines, 'De tu querido Bot', '¡Gracias!'].join('\n');
+  return [
+    'Formadores de hoy:',
+    ...sessions.map(
+      (session) =>
+        `- ${formatTrainerList(session.trainers)} | ${session.company} | ${session.sessionName}`,
+    ),
+  ].join('\n');
 }
 
 async function postSlackMessage(token: string, text: string): Promise<void> {
@@ -92,19 +75,10 @@ async function postSlackMessage(token: string, text: string): Promise<void> {
     }),
   });
 
-  const rawBody = await response.text();
-  let payload: { ok?: boolean; error?: string } | null = null;
-
-  try {
-    payload = rawBody ? (JSON.parse(rawBody) as { ok?: boolean; error?: string }) : null;
-  } catch {
-    payload = null;
-  }
+  const payload = (await response.json()) as { ok?: boolean; error?: string };
 
   if (!response.ok || !payload?.ok) {
-    const slackError = payload?.error ? ` (${payload.error})` : '';
-    const rawDetails = rawBody ? ` | body=${rawBody}` : '';
-    throw new Error(`Slack API chat.postMessage falló${slackError}${rawDetails}`);
+    throw new Error(payload?.error || 'No se pudo enviar el mensaje a Slack.');
   }
 }
 
@@ -118,34 +92,15 @@ export const handler: Handler = async (event) => {
   }
 
   const token = getSlackToken();
-  if (!token.length) {
+  if (!token) {
     return errorResponse('SLACK_TOKEN_MISSING', 'No existe la variable SLACK_TOKEN en Netlify.', 500);
   }
 
   try {
     const todayIso = nowInMadridISO();
-    const isScheduledEvent = isScheduledInvocation(event);
-    const force = String(event.queryStringParameters?.force ?? '').toLowerCase();
-    const shouldForceSend = force === '1' || force === 'true';
-
-    console.info(`[${JOB_NAME}] Invocation started.`, {
-      method: event.httpMethod,
-      path: event.path,
-      isScheduledEvent,
-      shouldForceSend,
-      nowMadrid: todayIso,
-    });
-
-    if (!shouldForceSend && isScheduledEvent && !isWithinMadridAutomationWindow(todayIso)) {
-      return successResponse({
-        message: 'Fuera de la ventana de envío de las 07:00 en Madrid. Se omite.',
-        nowMadrid: todayIso,
-      });
-    }
-
     const { day, startUtc, endUtc } = buildMadridDayRange(todayIso);
 
-    const sessionRows: SessionRowsResult = await withDatabaseFallback(
+    const sessionRows = await withDatabaseFallback<SessionRow[]>(
       (client) =>
         client.sesiones.findMany({
           where: {
@@ -155,7 +110,6 @@ export const handler: Handler = async (event) => {
             },
           },
           select: {
-            id: true,
             nombre_cache: true,
             deals: {
               select: {
@@ -177,46 +131,27 @@ export const handler: Handler = async (event) => {
               },
             },
           },
-          orderBy: [{ fecha_inicio_utc: 'asc' }, { created_at: 'asc' }],
+          orderBy: {
+            fecha_inicio_utc: 'asc',
+          },
         }),
       { operationName: `${JOB_NAME}:sesiones.findMany` },
     );
 
-    console.info(`[${JOB_NAME}] Session data loaded.`, {
-      day,
-      count: sessionRows.length,
-    });
-
-    const sessions: SessionSummary[] = sessionRows.map((row) => {
-      const trainerNames = Array.from(
-        new Set<string>(
+    const sessions: SessionSummary[] = sessionRows.map((row) => ({
+      company: cleanText(row.deals?.organizations?.name, cleanText(row.deals?.title, 'Empresa sin nombre')),
+      sessionName: cleanText(row.nombre_cache, 'Sesión sin nombre'),
+      trainers: Array.from(
+        new Set(
           (row.sesion_trainers ?? [])
-            .map((entry) => normalizeText(entry.trainers?.name, ''))
-            .filter((name) => name.length),
+            .map((entry) => cleanText(entry.trainers?.name, ''))
+            .filter(Boolean),
         ),
-      ).sort((a, b) => a.localeCompare(b, 'es'));
-
-      return {
-        company: normalizeText(row.deals?.organizations?.name, normalizeText(row.deals?.title, 'Empresa sin nombre')),
-        sessionName: normalizeText(row.nombre_cache, 'Sesión sin nombre'),
-        trainers: trainerNames,
-      };
-    });
+      ),
+    }));
 
     const text = buildSlackMessage(sessions);
-
-    console.info(`[${JOB_NAME}] Posting message to Slack.`, {
-      channel: getSlackChannelId(),
-      sessionsCount: sessions.length,
-      textLength: text.length,
-    });
-
     await postSlackMessage(token, text);
-
-    console.info(`[${JOB_NAME}] Slack message sent successfully.`, {
-      channel: getSlackChannelId(),
-      date: day,
-    });
 
     return successResponse({
       message: 'Mensaje de formadores enviado a Slack correctamente.',
@@ -226,12 +161,8 @@ export const handler: Handler = async (event) => {
       sessions,
     });
   } catch (error) {
-    console.error(`[${JOB_NAME}] Handler failed.`, {
-      message: error instanceof Error ? error.message : String(error ?? ''),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
-
-    const errorMessage = error instanceof Error ? error.message : 'Error inesperado al enviar el mensaje a Slack.';
-    return errorResponse('SLACK_POST_FAILED', errorMessage, 500);
+    console.error(`[${JOB_NAME}] Error`, error);
+    const message = error instanceof Error ? error.message : 'Error inesperado al enviar el mensaje a Slack.';
+    return errorResponse('SLACK_POST_FAILED', message, 500);
   }
 };

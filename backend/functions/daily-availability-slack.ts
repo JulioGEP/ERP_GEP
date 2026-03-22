@@ -1,78 +1,51 @@
 import type { Handler } from '@netlify/functions';
-import type { Prisma } from '@prisma/client';
 
-import { getPrisma, withDatabaseFallback } from './_shared/prisma';
+import { withDatabaseFallback } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
 import { nowInMadridISO } from './_shared/timezone';
-import { isScheduledInvocation, isWithinMadridAutomationWindow } from './_shared/slackSchedule';
 import { getSlackChannelId, getSlackToken } from './_shared/slackConfig';
 
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
 const TELEWORK_TYPE = 'T';
 const JOB_NAME = 'daily-availability-slack';
+
 type DailyGroup = {
   off: string[];
   telework: string[];
 };
-type VacationDayRow = Prisma.user_vacation_daysGetPayload<{
-  select: {
-    type: true;
-    date: true;
-    user: {
-      select: {
-        first_name: true;
-        last_name: true;
-        name: true;
-      };
-    };
+
+type VacationDayRow = {
+  type: string | null;
+  date: Date;
+  user: {
+    first_name: string;
+    last_name: string;
+    name: string | null;
   };
-}>;
-type VacationDaysResult = VacationDayRow[];
+};
 
-function addDaysToDateOnly(dateOnly: string, days: number): string {
-  const base = new Date(`${dateOnly}T00:00:00Z`);
-  base.setUTCDate(base.getUTCDate() + days);
-  return base.toISOString().slice(0, 10);
+function addDays(dateOnly: string, days: number): string {
+  const date = new Date(`${dateOnly}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
-function getWeekdayNameEs(dateOnly: string): string {
-  return new Intl.DateTimeFormat('es-ES', {
-    weekday: 'long',
-    timeZone: 'Europe/Madrid',
-  }).format(new Date(`${dateOnly}T12:00:00Z`));
+function cleanName(value: { first_name: string; last_name: string; name: string | null }): string {
+  return String(value.name ?? '').trim() || `${value.first_name ?? ''} ${value.last_name ?? ''}`.trim() || 'Sin nombre';
 }
 
-function toTitleCase(text: string): string {
-  if (!text.length) return text;
-  return text.charAt(0).toUpperCase() + text.slice(1);
+function listNames(names: string[]): string {
+  return names.length ? names.join(', ') : 'Nadie';
 }
 
-function formatNames(names: string[]): string {
-  return names.length ? names.join(' / ') : 'Nadie';
-}
-
-function normalizePersonName(entry: { first_name: string; last_name: string; name: string | null }): string {
-  const nameField = String(entry.name ?? '').trim();
-  if (nameField.length) return nameField;
-
-  const firstName = String(entry.first_name ?? '').trim();
-  const lastName = String(entry.last_name ?? '').trim();
-  return `${firstName} ${lastName}`.trim() || 'Sin nombre';
-}
-
-function buildSlackMessage(today: string, tomorrow: string, grouped: Record<string, DailyGroup>): string {
-  const todayName = toTitleCase(getWeekdayNameEs(today));
-  const tomorrowName = toTitleCase(getWeekdayNameEs(tomorrow));
-  const todayGroup = grouped[today] ?? { off: [], telework: [] };
-  const tomorrowGroup = grouped[tomorrow] ?? { off: [], telework: [] };
-
+function buildMessage(today: string, tomorrow: string, grouped: Record<string, DailyGroup>): string {
   return [
-    `${todayName}:`,
-    `Hoy ${todayName} no estarán disponibles por días libres: ${formatNames(todayGroup.off)}.`,
-    `Además hoy teletrabaja: ${formatNames(todayGroup.telework)}.`,
-    `Mañana ${tomorrowName} no estarán disponibles por días libres: ${formatNames(tomorrowGroup.off)}.`,
-    `Además mañana teletrabajarán: ${formatNames(tomorrowGroup.telework)}.`,
-    'Tu chat bot preferido :)',
+    `Disponibilidad ${today}:`,
+    `- No disponibles: ${listNames(grouped[today]?.off ?? [])}`,
+    `- Teletrabajo: ${listNames(grouped[today]?.telework ?? [])}`,
+    `Disponibilidad ${tomorrow}:`,
+    `- No disponibles: ${listNames(grouped[tomorrow]?.off ?? [])}`,
+    `- Teletrabajo: ${listNames(grouped[tomorrow]?.telework ?? [])}`,
   ].join('\n');
 }
 
@@ -89,19 +62,10 @@ async function postSlackMessage(token: string, text: string): Promise<void> {
     }),
   });
 
-  const rawBody = await response.text();
-  let payload: { ok?: boolean; error?: string } | null = null;
-
-  try {
-    payload = rawBody ? (JSON.parse(rawBody) as { ok?: boolean; error?: string }) : null;
-  } catch {
-    payload = null;
-  }
+  const payload = (await response.json()) as { ok?: boolean; error?: string };
 
   if (!response.ok || !payload?.ok) {
-    const details = payload?.error ? ` (${payload.error})` : '';
-    const rawDetails = rawBody ? ` | body=${rawBody}` : '';
-    throw new Error(`Slack API chat.postMessage falló${details}${rawDetails}`);
+    throw new Error(payload?.error || 'No se pudo enviar el mensaje a Slack.');
   }
 }
 
@@ -115,36 +79,16 @@ export const handler: Handler = async (event) => {
   }
 
   const token = getSlackToken();
-  if (!token.length) {
+  if (!token) {
     return errorResponse('SLACK_TOKEN_MISSING', 'No existe la variable SLACK_TOKEN en Netlify.', 500);
   }
 
   try {
-    const nowMadrid = nowInMadridISO();
-    const isScheduledEvent = isScheduledInvocation(event);
-    const force = String(event.queryStringParameters?.force ?? '').toLowerCase();
-    const shouldForceSend = force === '1' || force === 'true';
-
-    console.info(`[${JOB_NAME}] Invocation started.`, {
-      method: event.httpMethod,
-      path: event.path,
-      isScheduledEvent,
-      shouldForceSend,
-      nowMadrid,
-    });
-
-    if (!shouldForceSend && isScheduledEvent && !isWithinMadridAutomationWindow(nowMadrid)) {
-      return successResponse({
-        message: 'Fuera de la ventana de envío de las 07:00 en Madrid. Se omite.',
-        nowMadrid,
-      });
-    }
-
-    const today = nowMadrid.slice(0, 10);
-    const tomorrow = addDaysToDateOnly(today, 1);
+    const today = nowInMadridISO().slice(0, 10);
+    const tomorrow = addDays(today, 1);
     const targetDates = [today, tomorrow];
 
-    const vacationDays: VacationDaysResult = await withDatabaseFallback(
+    const vacationDays = await withDatabaseFallback<VacationDayRow[]>(
       (client) =>
         client.user_vacation_days.findMany({
           where: {
@@ -166,19 +110,12 @@ export const handler: Handler = async (event) => {
               },
             },
           },
-          orderBy: [
-            { date: 'asc' },
-            { user: { first_name: 'asc' } },
-            { user: { last_name: 'asc' } },
-          ],
+          orderBy: {
+            date: 'asc',
+          },
         }),
       { operationName: `${JOB_NAME}:user_vacation_days.findMany` },
     );
-
-    console.info(`[${JOB_NAME}] Vacation data loaded.`, {
-      targetDates,
-      count: vacationDays.length,
-    });
 
     const grouped: Record<string, DailyGroup> = {
       [today]: { off: [], telework: [] },
@@ -186,39 +123,20 @@ export const handler: Handler = async (event) => {
     };
 
     for (const entry of vacationDays) {
-      const dateKey = entry.date.toISOString().slice(0, 10);
-      const bucket = grouped[dateKey];
+      const date = entry.date.toISOString().slice(0, 10);
+      const bucket = grouped[date];
       if (!bucket) continue;
 
-      const personName = normalizePersonName(entry.user);
+      const name = cleanName(entry.user);
       if (entry.type === TELEWORK_TYPE) {
-        if (!bucket.telework.includes(personName)) {
-          bucket.telework.push(personName);
-        }
-      } else if (!bucket.off.includes(personName)) {
-        bucket.off.push(personName);
+        if (!bucket.telework.includes(name)) bucket.telework.push(name);
+      } else {
+        if (!bucket.off.includes(name)) bucket.off.push(name);
       }
     }
 
-    grouped[today].off.sort((a, b) => a.localeCompare(b, 'es'));
-    grouped[today].telework.sort((a, b) => a.localeCompare(b, 'es'));
-    grouped[tomorrow].off.sort((a, b) => a.localeCompare(b, 'es'));
-    grouped[tomorrow].telework.sort((a, b) => a.localeCompare(b, 'es'));
-
-    const text = buildSlackMessage(today, tomorrow, grouped);
-
-    console.info(`[${JOB_NAME}] Posting message to Slack.`, {
-      channel: getSlackChannelId(),
-      textLength: text.length,
-    });
-
+    const text = buildMessage(today, tomorrow, grouped);
     await postSlackMessage(token, text);
-
-    console.info(`[${JOB_NAME}] Slack message sent successfully.`, {
-      channel: getSlackChannelId(),
-      date: today,
-      nextDate: tomorrow,
-    });
 
     return successResponse({
       message: 'Mensaje enviado a Slack correctamente.',
@@ -229,12 +147,8 @@ export const handler: Handler = async (event) => {
       availability: grouped,
     });
   } catch (error) {
-    console.error(`[${JOB_NAME}] Handler failed.`, {
-      message: error instanceof Error ? error.message : String(error ?? ''),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
-
-    const errorMessage = error instanceof Error ? error.message : 'Error inesperado al enviar el mensaje a Slack.';
-    return errorResponse('SLACK_POST_FAILED', errorMessage, 500);
+    console.error(`[${JOB_NAME}] Error`, error);
+    const message = error instanceof Error ? error.message : 'Error inesperado al enviar el mensaje a Slack.';
+    return errorResponse('SLACK_POST_FAILED', message, 500);
   }
 };
