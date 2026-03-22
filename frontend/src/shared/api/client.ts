@@ -8,6 +8,24 @@ export type RequestJsonOptions = {
   parseJson?: (text: string) => any;
 };
 
+function buildInvalidJsonMessage(response: Response, raw: string, fallbackMessage?: string): string {
+  const baseMessage = fallbackMessage ?? 'Respuesta JSON inválida del servidor.';
+  const collapsedPreview = raw.replace(/\s+/g, ' ').trim().slice(0, 800);
+  const contentType = response.headers.get('content-type');
+  const headerRequestId = response.headers.get('x-nf-request-id') ?? response.headers.get('x-request-id');
+  const bodyRequestIdMatch = raw.match(/\bID:\s*([A-Z0-9_-]+)\b/i);
+  const requestId = headerRequestId ?? bodyRequestIdMatch?.[1];
+  const details = [
+    `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
+    contentType ? `Content-Type: ${contentType}` : null,
+    requestId ? `Request ID: ${requestId}` : null,
+    response.url ? `URL: ${response.url}` : null,
+    collapsedPreview ? `Respuesta recibida: ${collapsedPreview}` : null,
+  ].filter(Boolean);
+
+  return details.length ? `${baseMessage} ${details.join('. ')}` : baseMessage;
+}
+
 export async function requestJson<T = any>(
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -43,8 +61,8 @@ export async function requestJson<T = any>(
   if (text) {
     try {
       json = options?.parseJson ? options.parseJson(text) : JSON.parse(text);
-    } catch (error) {
-      const message = options?.invalidResponseMessage ?? 'Respuesta JSON inválida del servidor.';
+    } catch {
+      const message = buildInvalidJsonMessage(response, text, options?.invalidResponseMessage);
       throw new ApiError('INVALID_RESPONSE', message, response.status || undefined);
     }
   }
