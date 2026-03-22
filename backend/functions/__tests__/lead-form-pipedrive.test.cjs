@@ -83,7 +83,7 @@ test('buildLeadPayload applies GEP Services custom lead fields', () => {
   );
 
   assert.equal(payload.title, 'GS - Empresa servicios');
-  assert.equal(payload.note, 'Necesito información del servicio');
+  assert.equal(payload.note, undefined);
   assert.equal(payload.person_id, 123);
   assert.equal(payload.organization_id, 456);
   assert.equal(payload['ce2c299bd19c48d40297cd7b204780585ab2a5f0'], '63');
@@ -93,4 +93,37 @@ test('buildLeadPayload applies GEP Services custom lead fields', () => {
   assert.equal(payload['bcc13ba7981730831a71700fcd52488f13c2112f'], 'Web');
   assert.equal(payload['35d37547db294a690fb087e3d86b30471f057186'], 'Directa');
   assert.equal(payload['1d78d202448ee549a86e0881ec06f3ff7842c5ea'], 999);
+});
+
+test('buildLeadNotePayload prepares the note for the Notes API instead of the lead payload', () => {
+  const payload = __test__.buildLeadNotePayload(
+    'lead-123',
+    {
+      websiteLabel: 'GEP Services',
+      companyType: null,
+      companyName: 'Empresa servicios',
+      leadName: 'Laura Pérez',
+      leadEmail: 'laura@empresa.es',
+      leadPhone: '600111222',
+      leadMessage: 'Necesito información del servicio',
+      courseName: null,
+      siteName: null,
+      trafficSource: 'google',
+      formName: 'Contacto servicios',
+      source: 'wordpress',
+      serviceName: 'PCI',
+    },
+    '123',
+    '456',
+  );
+
+  assert.deepEqual(payload, {
+    content: 'Necesito información del servicio',
+    lead_id: 'lead-123',
+    person_id: 123,
+    org_id: 456,
+    pinned_to_lead_flag: 1,
+    pinned_to_person_flag: 1,
+    pinned_to_organization_flag: 1,
+  });
 });

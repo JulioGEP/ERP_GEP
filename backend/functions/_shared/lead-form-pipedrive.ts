@@ -559,7 +559,6 @@ function buildLeadPayload(
     return payload;
   }
 
-  payload.note = lead.leadMessage ?? undefined;
   payload[LEAD_STATUS_FIELD_KEY] = DEFAULT_GEP_SERVICES_LEAD_STATUS_VALUE;
   payload[LEAD_SERVICE_FIELD_KEY] = DEFAULT_GEP_SERVICES_LEAD_SERVICE_VALUE;
   payload[LEAD_TRAFFIC_SOURCE_FIELD_KEY] = lead.trafficSource ?? undefined;
@@ -574,9 +573,52 @@ function buildLeadPayload(
   return payload;
 }
 
+async function createLeadNote(
+  leadId: string,
+  lead: NormalizedLeadForm,
+  personId: string | null,
+  organizationId: string | null,
+): Promise<void> {
+  const body = buildLeadNotePayload(leadId, lead, personId, organizationId);
+  if (!body) {
+    return;
+  }
+
+  await pdRequest('/notes', {
+    method: 'POST',
+    body,
+  });
+}
+
+function buildLeadNotePayload(
+  leadId: string,
+  lead: NormalizedLeadForm,
+  personId: string | null,
+  organizationId: string | null,
+): Record<string, unknown> | null {
+  const content = readString(lead.leadMessage);
+  if (!content) {
+    return null;
+  }
+
+  const personNumericId = readInteger(personId);
+  const organizationNumericId = readInteger(organizationId);
+
+  return {
+    content,
+    lead_id: leadId,
+    person_id: personNumericId ?? undefined,
+    org_id: organizationNumericId ?? undefined,
+    pinned_to_lead_flag: 1,
+    pinned_to_person_flag: personNumericId ? 1 : undefined,
+    pinned_to_organization_flag: organizationNumericId ? 1 : undefined,
+  };
+}
+
 export const __test__ = {
   readInteger,
   buildLeadPayload,
+  buildLeadNotePayload,
   parseVisibilityEnv,
 };
 
@@ -693,6 +735,10 @@ export async function sendLeadFormToPipedrive(params: {
     });
     leadId = extractEntityId(leadResponse?.data ?? leadResponse);
     leadCreated = Boolean(leadId);
+
+    if (leadId && normalized.websiteLabel === 'GEP Services') {
+      await createLeadNote(leadId, normalized, personId, organizationId);
+    }
   }
 
   if (!leadId) {
