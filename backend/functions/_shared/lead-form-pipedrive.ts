@@ -275,6 +275,32 @@ function assertPipedriveConfigured(): void {
   }
 }
 
+function buildResponsePreview(text: string): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  return normalized.slice(0, 240);
+}
+
+async function readJsonResponse<T>(
+  response: Response,
+  serviceName: string,
+  operationDescription: string,
+): Promise<{ text: string; json: T | null }> {
+  const text = await response.text().catch(() => '');
+  if (!text.trim().length) {
+    return { text, json: null };
+  }
+
+  try {
+    return { text, json: JSON.parse(text) as T };
+  } catch (error) {
+    const preview = buildResponsePreview(text);
+    const detail = preview.length ? ` Respuesta recibida: ${preview}` : '';
+    throw new Error(
+      `${serviceName} devolvió una respuesta no JSON durante ${operationDescription} (${response.status}).${detail}`.trim(),
+    );
+  }
+}
+
 async function pdRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
   assertPipedriveConfigured();
   const separator = path.includes('?') ? '&' : '?';
@@ -287,10 +313,13 @@ async function pdRequest<T = unknown>(path: string, init?: RequestInit): Promise
     },
   });
 
-  const text = await response.text().catch(() => '');
-  const json = text ? (JSON.parse(text) as { data?: T; success?: boolean; error?: string }) : null;
+  const { text, json } = await readJsonResponse<{ data?: T; success?: boolean; error?: string }>(
+    response,
+    'Pipedrive',
+    `${init?.method ?? 'GET'} ${path}`,
+  );
   if (!response.ok || json?.success === false) {
-    const details = json?.error ? ` ${json.error}` : text ? ` ${text}` : '';
+    const details = json?.error ? ` ${json.error}` : text ? ` ${buildResponsePreview(text)}` : '';
     throw new Error(`Pipedrive ${init?.method ?? 'GET'} ${path} falló (${response.status}).${details}`.trim());
   }
 
@@ -401,10 +430,13 @@ async function createLead(payload: Record<string, unknown>): Promise<{ id: strin
     body: JSON.stringify(payload),
   });
 
-  const text = await response.text().catch(() => '');
-  const json = text ? (JSON.parse(text) as { data?: { id?: string | number; owner_id?: { name?: string | null } | null }; success?: boolean; error?: string }) : null;
+  const { text, json } = await readJsonResponse<{
+    data?: { id?: string | number; owner_id?: { name?: string | null } | null };
+    success?: boolean;
+    error?: string;
+  }>(response, 'Pipedrive', 'POST /api/v2/leads');
   if (!response.ok || json?.success === false) {
-    const details = json?.error ? ` ${json.error}` : text ? ` ${text}` : '';
+    const details = json?.error ? ` ${json.error}` : text ? ` ${buildResponsePreview(text)}` : '';
     throw new Error(`Pipedrive POST /api/v2/leads falló (${response.status}).${details}`.trim());
   }
 
@@ -465,7 +497,7 @@ async function resolveProductByCourseName(courseName: string): Promise<ProductMa
   return partial ?? null;
 }
 
-async function postSlackMessage(channel: string, text: string): Promise<void> {
+async function postSlackMessage(channel: string, messageText: string): Promise<void> {
   const token = getSlackToken();
   if (!token.length) {
     throw new Error('Falta la variable SLACK_TOKEN/SLACK_BOT_TOKEN para notificar el lead.');
@@ -479,15 +511,23 @@ async function postSlackMessage(channel: string, text: string): Promise<void> {
     },
     body: JSON.stringify({
       channel,
-      text,
+      text: messageText,
       unfurl_links: true,
       unfurl_media: true,
     }),
   });
 
-  const payload = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+  const { text, json: payload } = await readJsonResponse<{ ok?: boolean; error?: string }>(
+    response,
+    'Slack',
+    'chat.postMessage',
+  );
   if (!response.ok || !payload?.ok) {
-    const details = payload?.error ? ` (${payload.error})` : '';
+    const details = payload?.error
+      ? ` (${payload.error})`
+      : text.trim().length
+        ? ` Respuesta recibida: ${buildResponsePreview(text)}`
+        : '';
     throw new Error(`Slack API chat.postMessage falló${details}`);
   }
 }
