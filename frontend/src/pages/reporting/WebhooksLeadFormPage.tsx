@@ -42,6 +42,30 @@ function JsonCell({ value }: { value: unknown }) {
   );
 }
 
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function readText(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function pickFirstText(...values: unknown[]): string | null {
+  for (const value of values) {
+    const text = readText(value);
+    if (text) {
+      return text;
+    }
+  }
+
+  return null;
+}
+
 function resolveWebsiteLabel(headers: LeadFormWebhookEvent['requestHeaders']): string {
   const userAgent = typeof headers?.['user-agent'] === 'string' ? headers['user-agent'] : null;
 
@@ -54,6 +78,35 @@ function resolveWebsiteLabel(headers: LeadFormWebhookEvent['requestHeaders']): s
   }
 
   return '—';
+}
+
+function resolveServiceName(event: LeadFormWebhookEvent): string | null {
+  const payload = readRecord(event.payload) ?? {};
+  const nestedPayload =
+    readRecord(payload.payload) ?? readRecord(payload.data) ?? readRecord(payload.entry) ?? readRecord(payload.submission) ?? payload;
+  const fields = readRecord(nestedPayload.fields) ?? {};
+  const websiteLabel = resolveWebsiteLabel(event.requestHeaders);
+
+  if (websiteLabel === 'GEPCO') {
+    return pickFirstText(
+      nestedPayload['menu-659'],
+      fields['menu-659'],
+      payload['menu-659'],
+      nestedPayload.company_type,
+    );
+  }
+
+  if (websiteLabel === 'GEP Services') {
+    return pickFirstText(
+      nestedPayload['menu-541'],
+      fields['menu-541'],
+      payload['menu-541'],
+      nestedPayload.service,
+      nestedPayload.servicio,
+    );
+  }
+
+  return null;
 }
 
 function buildFeedbackSummary(result: SendLeadFormToPipeResult): string {
@@ -85,7 +138,7 @@ function EventTable({
     setExpandedEventId((currentId) => (currentId === eventId ? null : eventId));
   };
 
-  const columnCount = 7;
+  const columnCount = 8;
 
   return (
     <div className="table-responsive">
@@ -96,6 +149,7 @@ function EventTable({
             <th>Web</th>
             <th>Lead</th>
             <th>Email</th>
+            <th>Servicio</th>
             <th>Mensaje</th>
             <th>Estado</th>
             <th style={{ minWidth: 180 }}>Acciones</th>
@@ -106,6 +160,7 @@ function EventTable({
             const isExpanded = expandedEventId === event.id;
             const isSending = pendingEventId === event.id;
             const isSynced = Boolean(event.pipedriveLeadId);
+            const serviceName = resolveServiceName(event);
 
             return (
               <Fragment key={event.id}>
@@ -114,6 +169,7 @@ function EventTable({
                   <td>{resolveWebsiteLabel(event.requestHeaders)}</td>
                   <td>{event.leadName ?? '—'}</td>
                   <td>{event.leadEmail ?? '—'}</td>
+                  <td>{serviceName ?? '—'}</td>
                   <td style={{ maxWidth: 320 }}>
                     <div className="text-truncate">{event.leadMessage ?? '—'}</div>
                   </td>
