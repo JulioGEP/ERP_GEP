@@ -41,6 +41,19 @@ type NormalizedLeadForm = {
   serviceName: string | null;
 };
 
+type ProductResolution = {
+  idPipe: string | null;
+  productName: string | null;
+  price: number | null;
+};
+
+type DealSingleOptionValues = {
+  trainingOptionId: string | number | null;
+  siteOptionId: string | number | null;
+  trainingLookupLabel: string | null;
+  siteLookupLabel: string | null;
+};
+
 const PIPEDRIVE_BASE_URL = process.env.PIPEDRIVE_BASE_URL || 'https://api.pipedrive.com/v1';
 const DEFAULT_PIPE_OWNER_ID = parseIntegerEnv(process.env.LEAD_FORM_PIPE_DEFAULT_OWNER_ID, 13444807);
 const DEFAULT_VISIBLE_TO = parseVisibilityEnv(process.env.LEAD_FORM_PIPE_VISIBLE_TO, '7');
@@ -57,6 +70,21 @@ const LEAD_CHANNEL_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_CHANNEL_FI
 const LEAD_SOURCE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_SOURCE_FIELD_KEY ?? 'c6eabce7c04f864646aa72c944f875fd71cdf178').trim();
 const LEAD_WEB_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_WEB_FIELD_KEY ?? 'bcc13ba7981730831a71700fcd52488f13c2112f').trim();
 const LEAD_SERVICE_TYPE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_LEAD_SERVICE_TYPE_FIELD_KEY ?? '1d78d202448ee549a86e0881ec06f3ff7842c5ea').trim();
+const DEFAULT_OPEN_TRAINING_PIPELINE_ID = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_PIPELINE_ID ?? '3').trim();
+const DEFAULT_OPEN_TRAINING_STAGE_ID = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_STAGE_ID ?? '13').trim();
+const DEAL_SERVICE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_SERVICE_FIELD_KEY ?? 'e72120b9e27221b560c8480ff422f3fe28f8dbae').trim();
+const DEAL_TRAINING_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_TRAINING_FIELD_KEY ?? 'c99554c188c3f63ad9bc8b2cf7b50cbd145455ab').trim();
+const DEAL_SITE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_SITE_FIELD_KEY ?? '676d6bd51e52999c582c01f67c99a35ed30bf6ae').trim();
+const DEAL_STATUS_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_STATUS_FIELD_KEY ?? 'ce2c299bd19c48d40297cd7b204780585ab2a5f0').trim();
+const DEAL_FUNDAE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_FUNDAE_FIELD_KEY ?? '245d60d4d18aec40ba888998ef92e5d00e494583').trim();
+const DEAL_CAES_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_CAES_FIELD_KEY ?? 'e1971bf3a21d48737b682bf8d864ddc5eb15a351').trim();
+const DEAL_TRAFFIC_SOURCE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_TRAFFIC_SOURCE_FIELD_KEY ?? 'abfa216589d01466453514fdcfeb1c6e5b9fdf8d').trim();
+const DEAL_SOURCE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_SOURCE_FIELD_KEY ?? 'c6eabce7c04f864646aa72c944f875fd71cdf178').trim();
+const DEFAULT_OPEN_TRAINING_SERVICE_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_SERVICE_VALUE ?? '234').trim();
+const DEFAULT_OPEN_TRAINING_STATUS_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_STATUS_VALUE ?? '64').trim();
+const DEFAULT_OPEN_TRAINING_FUNDAE_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_FUNDAE_VALUE ?? '85').trim();
+const DEFAULT_OPEN_TRAINING_CAES_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_CAES_VALUE ?? '25').trim();
+const DEFAULT_OPEN_TRAINING_SOURCE_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_SOURCE_VALUE ?? 'Lead Web').trim();
 
 type GepServicesRoute = 'bomberos_privados' | 'pci' | 'pau' | 'productos' | 'cesion_material' | 'formacion';
 
@@ -141,6 +169,11 @@ function buildLeadTitle(lead: NormalizedLeadForm): string {
   return `GEPCO Web - ${primary}`;
 }
 
+function buildOpenTrainingDealTitle(lead: NormalizedLeadForm): string {
+  const primary = lead.leadName ?? lead.leadEmail ?? lead.leadPhone ?? 'Lead web';
+  return `GC- ${primary}`;
+}
+
 function normalizeText(value: string | null): string {
   return (value ?? '')
     .normalize('NFD')
@@ -153,6 +186,10 @@ function includesNormalized(value: string | null, search: string): boolean {
   const normalizedValue = normalizeText(value);
   const normalizedSearch = normalizeText(search);
   return normalizedValue.length > 0 && normalizedSearch.length > 0 && normalizedValue.includes(normalizedSearch);
+}
+
+function isOpenTrainingBudgetLead(lead: NormalizedLeadForm): boolean {
+  return lead.websiteLabel === 'GEPCO' && includesNormalized(lead.companyType, 'Individual / Autónomo / Particulares');
 }
 
 function detectGepServicesRoute(serviceName: string | null): GepServicesRoute | null {
@@ -172,6 +209,102 @@ function findPipedriveFieldOptions(fields: unknown, fieldKey: string): Pipedrive
   const collection = readArray<PipedriveField>(fields);
   const field = collection.find((entry) => readString(entry?.key) === fieldKey);
   return readArray<PipedriveOption>(field?.options);
+}
+
+function normalizeLookupLabel(value: string | null): string | null {
+  if (!value) return null;
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function buildTrainingLookupCandidates(values: Array<string | null | undefined>): string[] {
+  const candidates = new Set<string>();
+
+  for (const value of values) {
+    const normalizedValue = readString(value);
+    if (!normalizedValue) continue;
+
+    candidates.add(normalizedValue);
+
+    const withoutCursoPrefix = normalizedValue.replace(/^curso\s+/i, '').trim();
+    if (withoutCursoPrefix.length) {
+      candidates.add(withoutCursoPrefix);
+    }
+
+    const withoutCourseTypeSuffix = withoutCursoPrefix
+      .replace(/\s+-\s+(empresa|in company|abierta|preventivo)$/i, '')
+      .trim();
+    if (withoutCourseTypeSuffix.length) {
+      candidates.add(withoutCourseTypeSuffix);
+    }
+  }
+
+  return Array.from(candidates);
+}
+
+function toIntegerIdOrNull(value: string | null): number | null {
+  if (!value) return null;
+  if (!/^\d+$/.test(value)) return null;
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function toPipedriveOptionValue(value: string | null): string | number | null {
+  const integerId = toIntegerIdOrNull(value);
+  return integerId ?? value;
+}
+
+async function resolveSingleOptionId(
+  prisma: PrismaClient,
+  params: {
+    fieldKey: string;
+    fieldName: string;
+    candidateLabels: Array<string | null | undefined>;
+    fallbackLabels?: Array<string | null | undefined>;
+  },
+): Promise<{ optionId: string | null; matchedLabel: string | null }> {
+  const normalizedCandidates = params.candidateLabels
+    .map((candidate) => readString(candidate))
+    .map((candidate) => normalizeLookupLabel(candidate))
+    .filter((candidate): candidate is string => Boolean(candidate));
+
+  const normalizedFallbackCandidates = (params.fallbackLabels ?? [])
+    .map((candidate) => readString(candidate))
+    .map((candidate) => normalizeLookupLabel(candidate))
+    .filter((candidate): candidate is string => Boolean(candidate));
+
+  if (!normalizedCandidates.length && !normalizedFallbackCandidates.length) {
+    return { optionId: null, matchedLabel: null };
+  }
+
+  const options = await prisma.pipedrive_custom_field_options.findMany({
+    where: {
+      OR: [
+        { field_key: params.fieldKey },
+        { field_name: { equals: params.fieldName, mode: 'insensitive' } },
+      ],
+    },
+    select: { option_id: true, option_label: true },
+    orderBy: [{ option_order: 'asc' }, { option_label: 'asc' }],
+  });
+
+  const matchFromCandidates = (candidates: string[]) =>
+    options.find((option) => {
+      const normalizedOptionLabel = normalizeLookupLabel(option.option_label);
+      return normalizedOptionLabel ? candidates.includes(normalizedOptionLabel) : false;
+    });
+
+  const match = matchFromCandidates(normalizedCandidates) ?? matchFromCandidates(normalizedFallbackCandidates);
+
+  return {
+    optionId: match?.option_id ?? null,
+    matchedLabel: match?.option_label ?? null,
+  };
 }
 
 function resolvePipedriveOptionId(options: PipedriveOption[], candidateLabels: Array<string | null | undefined>): string | number | null {
@@ -224,6 +357,31 @@ async function resolveGepServicesServiceTypeOptionId(lead: NormalizedLeadForm, w
 }
 
 function buildSlackMessage(lead: NormalizedLeadForm, result: PipedriveSyncResult): string {
+  if (isOpenTrainingBudgetLead(lead)) {
+    const lines = [
+      `Nuevo presupuesto de formación abierta sincronizado desde ${lead.websiteLabel}.`,
+      `Empresa: ${lead.companyName ?? '—'}`,
+      `Contacto: ${lead.leadName ?? '—'}`,
+      `Email: ${lead.leadEmail ?? '—'}`,
+      `Teléfono: ${lead.leadPhone ?? '—'}`,
+      `Tipo: ${lead.companyType ?? '—'}`,
+      `Curso: ${lead.courseName ?? '—'}`,
+      `Sede: ${lead.siteName ?? '—'}`,
+      `Canal: ${lead.trafficSource ?? '—'}`,
+      `Mensaje: ${lead.leadMessage ?? '—'}`,
+      `Presupuesto Pipedrive: ${result.leadId}`,
+    ];
+
+    if (result.organizationId) {
+      lines.push(`Organización Pipedrive: ${result.organizationId}`);
+    }
+    if (result.personId) {
+      lines.push(`Persona Pipedrive: ${result.personId}`);
+    }
+
+    return lines.join('\n');
+  }
+
   const lines = [
     `Nuevo lead sincronizado desde ${lead.websiteLabel}.`,
     `Empresa: ${lead.companyName ?? '—'}`,
@@ -573,6 +731,136 @@ function buildLeadPayload(
   return payload;
 }
 
+function buildOpenTrainingDealPayload(
+  lead: NormalizedLeadForm,
+  organizationId: string | null,
+  personId: string,
+  options: DealSingleOptionValues,
+) {
+  return {
+    title: buildOpenTrainingDealTitle(lead),
+    status: 'open',
+    stage_id: DEFAULT_OPEN_TRAINING_STAGE_ID,
+    pipeline_id: DEFAULT_OPEN_TRAINING_PIPELINE_ID,
+    user_id: DEFAULT_PIPE_OWNER_ID,
+    org_id: readInteger(organizationId) ?? undefined,
+    person_id: readInteger(personId) ?? undefined,
+    visible_to: DEFAULT_VISIBLE_TO,
+    [DEAL_SERVICE_FIELD_KEY]: DEFAULT_OPEN_TRAINING_SERVICE_VALUE,
+    [DEAL_SITE_FIELD_KEY]: options.siteOptionId ?? undefined,
+    [DEAL_STATUS_FIELD_KEY]: DEFAULT_OPEN_TRAINING_STATUS_VALUE,
+    [DEAL_FUNDAE_FIELD_KEY]: DEFAULT_OPEN_TRAINING_FUNDAE_VALUE,
+    [DEAL_CAES_FIELD_KEY]: DEFAULT_OPEN_TRAINING_CAES_VALUE,
+    [DEAL_TRAFFIC_SOURCE_FIELD_KEY]: lead.trafficSource ?? undefined,
+    [DEAL_SOURCE_FIELD_KEY]: DEFAULT_OPEN_TRAINING_SOURCE_VALUE,
+    [DEAL_TRAINING_FIELD_KEY]: options.trainingOptionId ?? undefined,
+  };
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'bigint') {
+    return Number(value);
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed.length) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (typeof value === 'object' && value !== null && 'toString' in value && typeof (value as { toString: () => string }).toString === 'function') {
+    const parsed = Number((value as { toString: () => string }).toString());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+async function resolveOpenTrainingProduct(prisma: PrismaClient, lead: NormalizedLeadForm): Promise<ProductResolution> {
+  const courseCandidates = buildTrainingLookupCandidates([lead.courseName]);
+
+  for (const candidate of courseCandidates) {
+    const product = await prisma.products.findFirst({
+      where: { name: { equals: candidate, mode: 'insensitive' } },
+      select: { id_pipe: true, name: true, price: true, variant_price: true },
+    });
+
+    if (product?.id_pipe) {
+      return {
+        idPipe: product.id_pipe,
+        productName: product.name ?? lead.courseName,
+        price: toNumberOrNull(product.variant_price) ?? toNumberOrNull(product.price),
+      };
+    }
+  }
+
+  return { idPipe: null, productName: lead.courseName, price: null };
+}
+
+async function resolveOpenTrainingDealSingleOptionValues(
+  prisma: PrismaClient,
+  lead: NormalizedLeadForm,
+  resolvedProduct: ProductResolution,
+): Promise<DealSingleOptionValues> {
+  const trainingPrimaryLabel = readString(lead.courseName);
+  const trainingLookupCandidates = trainingPrimaryLabel
+    ? [trainingPrimaryLabel]
+    : buildTrainingLookupCandidates([lead.courseName, resolvedProduct.productName]);
+  const trainingFallbackCandidates = trainingPrimaryLabel
+    ? buildTrainingLookupCandidates([resolvedProduct.productName, lead.courseName]).filter((candidate) => candidate !== trainingPrimaryLabel)
+    : [];
+  const trainingLookupLabel = trainingPrimaryLabel ?? trainingLookupCandidates[0] ?? null;
+  const siteLookupLabel = readString(lead.siteName);
+
+  const [trainingOption, siteOption] = await Promise.all([
+    resolveSingleOptionId(prisma, {
+      fieldKey: DEAL_TRAINING_FIELD_KEY,
+      fieldName: 'Formación',
+      candidateLabels: trainingLookupCandidates,
+      fallbackLabels: trainingFallbackCandidates,
+    }),
+    resolveSingleOptionId(prisma, {
+      fieldKey: DEAL_SITE_FIELD_KEY,
+      fieldName: 'Sede de la Formación',
+      candidateLabels: [siteLookupLabel],
+    }),
+  ]);
+
+  return {
+    trainingOptionId: toPipedriveOptionValue(trainingOption.optionId),
+    siteOptionId: toPipedriveOptionValue(siteOption.optionId),
+    trainingLookupLabel,
+    siteLookupLabel,
+  };
+}
+
+function buildOpenTrainingDealProductPayload(resolvedProduct: ProductResolution): Record<string, unknown> {
+  const normalizedProductId = toIntegerIdOrNull(resolvedProduct.idPipe);
+  if (normalizedProductId === null) {
+    throw new Error(`El product_id de Pipedrive no es un entero válido: ${resolvedProduct.idPipe ?? 'sin valor'}`);
+  }
+
+  return {
+    product_id: normalizedProductId,
+    item_price: resolvedProduct.price ?? undefined,
+    quantity: 1,
+    tax_method: 'exclusive',
+    is_enabled: true,
+  };
+}
+
+async function addProductToDeal(dealId: string, payload: Record<string, unknown>): Promise<void> {
+  await pdRequest(`/deals/${encodeURIComponent(dealId)}/products`, {
+    method: 'POST',
+    body: payload,
+  });
+}
+
 async function createLeadNote(
   leadId: string,
   lead: NormalizedLeadForm,
@@ -618,7 +906,10 @@ function buildLeadNotePayload(
 export const __test__ = {
   readInteger,
   buildLeadPayload,
+  buildOpenTrainingDealPayload,
+  buildOpenTrainingDealProductPayload,
   buildLeadNotePayload,
+  isOpenTrainingBudgetLead,
   parseVisibilityEnv,
 };
 
@@ -728,16 +1019,46 @@ export async function sendLeadFormToPipedrive(params: {
   let leadId = readString(record.pipedrive_lead_id);
   let leadCreated = false;
   if (!leadId) {
-    const serviceTypeOptionId = await resolveGepServicesServiceTypeOptionId(normalized, warnings);
-    const leadResponse = await pdRequest('/leads', {
-      method: 'POST',
-      body: buildLeadPayload(normalized, organizationId, personId, { serviceTypeOptionId }),
-    });
-    leadId = extractEntityId(leadResponse?.data ?? leadResponse);
-    leadCreated = Boolean(leadId);
+    if (isOpenTrainingBudgetLead(normalized)) {
+      const resolvedProduct = await resolveOpenTrainingProduct(params.prisma, normalized);
+      const singleOptionValues = await resolveOpenTrainingDealSingleOptionValues(params.prisma, normalized, resolvedProduct);
 
-    if (leadId && normalized.websiteLabel === 'GEP Services') {
-      await createLeadNote(leadId, normalized, personId, organizationId);
+      if (!resolvedProduct.idPipe) {
+        warnings.push('No se ha encontrado el producto de Pipedrive vinculado al curso del lead.');
+      }
+      if (singleOptionValues.trainingLookupLabel && !singleOptionValues.trainingOptionId) {
+        warnings.push(
+          `No se ha encontrado la opción de Pipedrive para Formación con el valor "${singleOptionValues.trainingLookupLabel}".`,
+        );
+      }
+      if (singleOptionValues.siteLookupLabel && !singleOptionValues.siteOptionId) {
+        warnings.push(
+          `No se ha encontrado la opción de Pipedrive para Sede de la Formación con el valor "${singleOptionValues.siteLookupLabel}".`,
+        );
+      }
+
+      const dealResponse = await pdRequest('/deals', {
+        method: 'POST',
+        body: buildOpenTrainingDealPayload(normalized, organizationId, personId, singleOptionValues),
+      });
+      leadId = extractEntityId(dealResponse?.data ?? dealResponse);
+      leadCreated = Boolean(leadId);
+
+      if (leadId && resolvedProduct.idPipe) {
+        await addProductToDeal(leadId, buildOpenTrainingDealProductPayload(resolvedProduct));
+      }
+    } else {
+      const serviceTypeOptionId = await resolveGepServicesServiceTypeOptionId(normalized, warnings);
+      const leadResponse = await pdRequest('/leads', {
+        method: 'POST',
+        body: buildLeadPayload(normalized, organizationId, personId, { serviceTypeOptionId }),
+      });
+      leadId = extractEntityId(leadResponse?.data ?? leadResponse);
+      leadCreated = Boolean(leadId);
+
+      if (leadId && normalized.websiteLabel === 'GEP Services') {
+        await createLeadNote(leadId, normalized, personId, organizationId);
+      }
     }
   }
 

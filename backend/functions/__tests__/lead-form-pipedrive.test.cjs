@@ -127,3 +127,102 @@ test('buildLeadNotePayload prepares the note for the Notes API instead of the le
     pinned_to_organization_flag: 1,
   });
 });
+
+test('isOpenTrainingBudgetLead detects GEPCO individuals for open training budgets', () => {
+  assert.equal(
+    __test__.isOpenTrainingBudgetLead({
+      websiteLabel: 'GEPCO',
+      companyType: 'Individual / Autónomo / Particulares',
+      companyName: null,
+      leadName: 'Álvaro',
+      leadEmail: 'alvaro@example.com',
+      leadPhone: '600000000',
+      leadMessage: null,
+      courseName: 'Curso PAUX',
+      siteName: 'Madrid',
+      trafficSource: 'google',
+      formName: 'Lead',
+      source: 'wordpress',
+      serviceName: null,
+    }),
+    true,
+  );
+
+  assert.equal(
+    __test__.isOpenTrainingBudgetLead({
+      websiteLabel: 'GEPCO',
+      companyType: 'Empresa que quiere formar a menos de 5 personas',
+      companyName: null,
+      leadName: 'Álvaro',
+      leadEmail: 'alvaro@example.com',
+      leadPhone: '600000000',
+      leadMessage: null,
+      courseName: 'Curso PAUX',
+      siteName: 'Madrid',
+      trafficSource: 'google',
+      formName: 'Lead',
+      source: 'wordpress',
+      serviceName: null,
+    }),
+    false,
+  );
+});
+
+test('buildOpenTrainingDealPayload creates a formación abierta deal instead of a lead', () => {
+  const payload = __test__.buildOpenTrainingDealPayload(
+    {
+      websiteLabel: 'GEPCO',
+      companyType: 'Individual / Autónomo / Particulares',
+      companyName: 'Empresa demo',
+      leadName: 'Julio Garcia',
+      leadEmail: 'julio@gepgroup.es',
+      leadPhone: '600000000',
+      leadMessage: 'Hola',
+      courseName: 'Curso PAUX',
+      siteName: 'Madrid',
+      trafficSource: 'google',
+      formName: 'Contacto',
+      source: 'wordpress',
+      serviceName: null,
+    },
+    '456',
+    '123',
+    {
+      trainingOptionId: 901,
+      siteOptionId: 902,
+      trainingLookupLabel: 'Curso PAUX',
+      siteLookupLabel: 'Madrid',
+    },
+  );
+
+  assert.equal(payload.title, 'GC- Julio Garcia');
+  assert.equal(payload.status, 'open');
+  assert.equal(payload.pipeline_id, '3');
+  assert.equal(payload.stage_id, '13');
+  assert.equal(payload.org_id, 456);
+  assert.equal(payload.person_id, 123);
+  assert.equal(payload['e72120b9e27221b560c8480ff422f3fe28f8dbae'], '234');
+  assert.equal(payload['676d6bd51e52999c582c01f67c99a35ed30bf6ae'], 902);
+  assert.equal(payload['c99554c188c3f63ad9bc8b2cf7b50cbd145455ab'], 901);
+  assert.equal(payload['ce2c299bd19c48d40297cd7b204780585ab2a5f0'], '64');
+  assert.equal(payload['245d60d4d18aec40ba888998ef92e5d00e494583'], '85');
+  assert.equal(payload['e1971bf3a21d48737b682bf8d864ddc5eb15a351'], '25');
+  assert.equal(payload['abfa216589d01466453514fdcfeb1c6e5b9fdf8d'], 'google');
+  assert.equal(payload['c6eabce7c04f864646aa72c944f875fd71cdf178'], 'Lead Web');
+});
+
+test('buildOpenTrainingDealProductPayload prepares the deal product line with quantity 1', () => {
+  const payload = __test__.buildOpenTrainingDealProductPayload({
+    idPipe: '203',
+    productName: 'Curso PAUX',
+    price: 185,
+  });
+
+  assert.deepEqual(payload, {
+    product_id: 203,
+    item_price: 185,
+    quantity: 1,
+    tax_method: 'exclusive',
+    is_enabled: true,
+  });
+});
