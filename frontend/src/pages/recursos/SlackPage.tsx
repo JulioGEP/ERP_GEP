@@ -106,39 +106,65 @@ export default function SlackPage() {
         </Card.Header>
         <Card.Body>
           <p className="text-muted mb-3">
-            Envía manualmente mensajes automáticos al canal de Slack desde Recursos.
+            Desde esta pantalla puedes reenviar manualmente los mensajes de disponibilidad y de formadores/bomberos
+            a cualquier hora, tantas veces como necesites.
           </p>
 
-          <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
-            <Button
-              variant="primary"
-              onClick={() => sendAvailabilityMutation.mutate()}
-              disabled={sendAvailabilityMutation.isPending}
-            >
-              {sendAvailabilityMutation.isPending ? (
-                <>
-                  <Spinner animation="border" size="sm" className="me-2" />
-                  Enviando...
-                </>
-              ) : (
-                'Mensaje Asistencia'
-              )}
-            </Button>
+          <Alert variant="info" className="mb-3">
+            Úsalo cuando haya cambios después del envío automático y necesites publicar una actualización adicional
+            en Slack sin esperar al día siguiente.
+          </Alert>
 
-            <Button
-              variant="secondary"
-              onClick={() => sendTrainersMutation.mutate()}
-              disabled={sendTrainersMutation.isPending}
-            >
-              {sendTrainersMutation.isPending ? (
-                <>
-                  <Spinner animation="border" size="sm" className="me-2" />
-                  Enviando...
-                </>
-              ) : (
-                'Mensaje Formadores'
-              )}
-            </Button>
+          <div className="d-grid gap-3 mb-4">
+            <Card className="border">
+              <Card.Body className="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+                <div>
+                  <h2 className="h5 mb-1">Disponibilidad de usuarios</h2>
+                  <p className="text-muted mb-0">
+                    Reenvía el mensaje de disponibilidad del día actual y del siguiente día laborable cuando quieras.
+                  </p>
+                </div>
+                <Button
+                  variant="primary"
+                  onClick={() => sendAvailabilityMutation.mutate()}
+                  disabled={sendAvailabilityMutation.isPending}
+                >
+                  {sendAvailabilityMutation.isPending ? (
+                    <>
+                      <Spinner animation="border" size="sm" className="me-2" />
+                      Enviando...
+                    </>
+                  ) : (
+                    'Enviar disponibilidad ahora'
+                  )}
+                </Button>
+              </Card.Body>
+            </Card>
+
+            <Card className="border">
+              <Card.Body className="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+                <div>
+                  <h2 className="h5 mb-1">Formadores y bomberos del día</h2>
+                  <p className="text-muted mb-0">
+                    Reenvía manualmente la ubicación o asignación actual de formadores y bomberos cuando haya cambios.
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  onClick={() => sendTrainersMutation.mutate()}
+                  disabled={sendTrainersMutation.isPending}
+                >
+                  {sendTrainersMutation.isPending ? (
+                    <>
+                      <Spinner animation="border" size="sm" className="me-2" />
+                      Enviando...
+                    </>
+                  ) : (
+                    'Enviar formadores/bomberos ahora'
+                  )}
+                </Button>
+              </Card.Body>
+            </Card>
           </div>
 
           <div className="mb-4">
