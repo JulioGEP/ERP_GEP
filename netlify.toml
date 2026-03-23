@@ -32,12 +32,12 @@
     "node_modules/.prisma/client/libquery_engine-rhel-openssl-3.0.x.so.node"
   ]
 
-# Programación simple de las funciones Slack a las 07:00 UTC.
+# Programación simple de las funciones Slack a las 06:00 UTC.
 [functions."daily-trainers-slack"]
-  schedule = "0 7 * * *"
+  schedule = "0 6 * * *"
 
 [functions."daily-availability-slack"]
-  schedule = "0 7 * * 1-5"
+  schedule = "0 6 * * 1-5"
 
 [functions."control-horario-reminders"]
   schedule = "*/15 * * * *"
