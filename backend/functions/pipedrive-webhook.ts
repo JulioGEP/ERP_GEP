@@ -351,10 +351,10 @@ async function refreshDealAfterWebhook(
   return true;
 }
 
-async function syncHoldedBudgetIfLinked(
+async function autoSyncBudgetToHolded(
   prisma: ReturnType<typeof getPrisma>,
   dealId: string,
-): Promise<boolean> {
+): Promise<{ attempted: boolean; synced: boolean; mode: 'create' | 'update' }> {
   const stored = await prisma.deals.findUnique({
     where: { deal_id: dealId },
     select: { presu_holded: true },
@@ -365,14 +365,26 @@ async function syncHoldedBudgetIfLinked(
       ? stored.presu_holded.trim()
       : null;
 
-  if (!holdedDocumentId) return false;
+  const mode: 'create' | 'update' = holdedDocumentId ? 'update' : 'create';
 
-  await syncBudgetToHolded({
-    dealId,
-    mode: 'update',
-    holdedDocumentId,
-  });
-  return true;
+  try {
+    await syncBudgetToHolded({
+      dealId,
+      mode,
+      holdedDocumentId,
+    });
+    return { attempted: true, synced: true, mode };
+  } catch (error) {
+    console.warn('[pipedrive-webhook] Holded auto-sync failed', {
+      dealId,
+      mode,
+      error:
+        error instanceof Error
+          ? { message: error.message, stack: error.stack }
+          : error,
+    });
+    return { attempted: true, synced: false, mode };
+  }
 }
 
 export const handler: Handler = async (event) => {
@@ -490,7 +502,7 @@ export const handler: Handler = async (event) => {
       const storedPipeline = storedDeal?.pipeline_label ?? storedDeal?.pipeline_id ?? null;
       if (storedDeal && isFormacionAbiertaPipeline(storedPipeline)) {
         await refreshDealAfterWebhook(prisma, relatedDealId);
-        await syncHoldedBudgetIfLinked(prisma, relatedDealId);
+        await autoSyncBudgetToHolded(prisma, relatedDealId);
         processedDealId = relatedDealId;
         processedAction = 'updated';
       }
@@ -522,7 +534,7 @@ export const handler: Handler = async (event) => {
 
       await importDealFromPipedrive(dealId);
       await refreshDealAfterWebhook(prisma, dealId);
-      await syncHoldedBudgetIfLinked(prisma, dealId);
+      await autoSyncBudgetToHolded(prisma, dealId);
 
       processedDealId = dealId;
       processedAction = existedBefore ? 'updated' : 'created';
