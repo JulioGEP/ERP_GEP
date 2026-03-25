@@ -280,7 +280,32 @@ export default function WoocommerceComprasPage() {
     },
   });
 
-  const events = eventsQuery.data ?? [];
+  const events = useMemo(() => {
+    const records = [...(eventsQuery.data ?? [])];
+    return records.sort((first, second) => {
+      const firstOrder = Number(first.orderNumber ?? first.orderId);
+      const secondOrder = Number(second.orderNumber ?? second.orderId);
+      const firstHasNumericOrder = Number.isFinite(firstOrder);
+      const secondHasNumericOrder = Number.isFinite(secondOrder);
+
+      if (firstHasNumericOrder && secondHasNumericOrder) {
+        if (secondOrder !== firstOrder) {
+          return secondOrder - firstOrder;
+        }
+      } else if (firstHasNumericOrder !== secondHasNumericOrder) {
+        return firstHasNumericOrder ? -1 : 1;
+      }
+
+      const firstTimestamp = Date.parse(first.createdAt ?? '');
+      const secondTimestamp = Date.parse(second.createdAt ?? '');
+      const firstHasTimestamp = Number.isFinite(firstTimestamp);
+      const secondHasTimestamp = Number.isFinite(secondTimestamp);
+      if (firstHasTimestamp && secondHasTimestamp && secondTimestamp !== firstTimestamp) {
+        return secondTimestamp - firstTimestamp;
+      }
+      return second.id.localeCompare(first.id);
+    });
+  }, [eventsQuery.data]);
 
   let content: JSX.Element;
   if (eventsQuery.isLoading) {
