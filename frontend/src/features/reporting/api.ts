@@ -1003,6 +1003,36 @@ export async function saveTrainerExtraCost(
   return sanitized;
 }
 
+
+export type SyncWooCommerceComprasResult = {
+  importedCount: number;
+  latestOrderNumber: string | null;
+  latestOrderId: string | null;
+  inspectedCount: number;
+};
+
+export async function syncWooCommerceCompras(): Promise<SyncWooCommerceComprasResult> {
+  const response = await putJson<{ result?: unknown }>(`/reporting-woocommerce-compras`, {});
+  const result = response?.result;
+  if (!result || typeof result !== 'object') {
+    throw new Error('La respuesta del servidor no incluye el resultado de la sincronización.');
+  }
+
+  const raw = result as Record<string, unknown>;
+  return {
+    importedCount:
+      typeof raw.importedCount === 'number' && Number.isFinite(raw.importedCount)
+        ? Math.max(0, Math.trunc(raw.importedCount))
+        : 0,
+    latestOrderNumber: sanitizeText(raw.latestOrderNumber),
+    latestOrderId: sanitizeText(raw.latestOrderId),
+    inspectedCount:
+      typeof raw.inspectedCount === 'number' && Number.isFinite(raw.inspectedCount)
+        ? Math.max(0, Math.trunc(raw.inspectedCount))
+        : 0,
+  };
+}
+
 export async function deleteWooCommerceComprasWebhook(eventId: string): Promise<void> {
   const normalizedEventId = sanitizeText(eventId);
   if (!normalizedEventId) {
