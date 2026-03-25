@@ -259,6 +259,39 @@ test('buildSlackMessage omits Pipedrive IDs and updates text for GEPCO leads', (
   assert.doesNotMatch(message, /Persona Pipedrive:/);
 });
 
+
+test('buildSlackMessage for GEPCO open training keeps budget id but omits organization/person ids', () => {
+  const message = __test__.buildSlackMessage(
+    {
+      websiteLabel: 'GEPCO',
+      companyType: 'Individual / Autónomo / Particulares',
+      companyName: 'Empresa demo',
+      leadName: 'Julio Garcia',
+      leadEmail: 'julio@gepgroup.es',
+      leadPhone: '600000000',
+      leadMessage: 'Hola',
+      courseName: 'Curso PAUX',
+      siteName: 'Madrid',
+      trafficSource: 'google',
+      formName: 'Contacto',
+      source: 'wordpress',
+      serviceName: null,
+    },
+    {
+      leadId: 'lead-1',
+      personId: '123',
+      organizationId: '456',
+      warnings: [],
+      normalizedPayload: {},
+    },
+  );
+
+  assert.match(message, /Nuevo lead de GEPCO\./);
+  assert.match(message, /Presupuesto Pipedrive: lead-1/);
+  assert.doesNotMatch(message, /Organización Pipedrive:/);
+  assert.doesNotMatch(message, /Persona Pipedrive:/);
+});
+
 test('buildSlackMessage for GEP Services includes Servicio and omits training and Pipedrive fields', () => {
   const message = __test__.buildSlackMessage(
     {

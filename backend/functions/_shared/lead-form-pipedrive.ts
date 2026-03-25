@@ -358,8 +358,8 @@ async function resolveGepServicesServiceTypeOptionId(lead: NormalizedLeadForm, w
 
 function buildSlackMessage(lead: NormalizedLeadForm, result: PipedriveSyncResult): string {
   if (isOpenTrainingBudgetLead(lead)) {
-    const lines = [
-      `Nuevo presupuesto de formación abierta sincronizado desde ${lead.websiteLabel}.`,
+    return [
+      'Nuevo lead de GEPCO.',
       `Empresa: ${lead.companyName ?? '—'}`,
       `Contacto: ${lead.leadName ?? '—'}`,
       `Email: ${lead.leadEmail ?? '—'}`,
@@ -370,16 +370,7 @@ function buildSlackMessage(lead: NormalizedLeadForm, result: PipedriveSyncResult
       `Canal: ${lead.trafficSource ?? '—'}`,
       `Mensaje: ${lead.leadMessage ?? '—'}`,
       `Presupuesto Pipedrive: ${result.leadId}`,
-    ];
-
-    if (result.organizationId) {
-      lines.push(`Organización Pipedrive: ${result.organizationId}`);
-    }
-    if (result.personId) {
-      lines.push(`Persona Pipedrive: ${result.personId}`);
-    }
-
-    return lines.join('\n');
+    ].join('\n');
   }
 
   if (lead.websiteLabel === 'GEPCO') {
