@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import type { Handler } from '@netlify/functions';
 import { COMMON_HEADERS } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
+import { sendLeadFormToPipedrive } from './_shared/lead-form-pipedrive';
 
 const WEBHOOK_HEADERS = {
   ...COMMON_HEADERS,
@@ -273,6 +274,21 @@ export const handler: Handler = async (event) => {
         payload_json: summary.payloadJson as Prisma.InputJsonValue,
       },
     });
+
+    try {
+      await sendLeadFormToPipedrive({
+        prisma,
+        webhookEventId: record.id,
+      });
+    } catch (syncError) {
+      console.error('[lead-form-webhook] Automatic Pipedrive/Slack sync failed', syncError);
+      await prisma.lead_form_webhooks.update({
+        where: { id: record.id },
+        data: {
+          last_sync_error: syncError instanceof Error ? syncError.message : 'No se pudo enviar automáticamente a Pipedrive/Slack.',
+        },
+      });
+    }
 
     return jsonResponse(200, {
       ok: true,
