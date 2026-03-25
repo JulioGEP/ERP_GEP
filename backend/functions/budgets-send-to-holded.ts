@@ -280,6 +280,10 @@ function normalizeComparison(value: unknown): string {
     .toLowerCase();
 }
 
+function normalizeCompact(value: unknown): string {
+  return normalizeComparison(value).replace(/[^a-z0-9]/g, '');
+}
+
 function htmlToPlainText(value: unknown): string {
   const text = normalizeText(value) ?? '';
   return text
@@ -387,9 +391,10 @@ function getEmpresaRouteConfig(routeKey: EmpresaRouteKey): RouteConfig {
 
 function resolveServiceTypeKey(serviceTypeLabel: string | null): ServiceTypeKey | null {
   const normalized = normalizeComparison(serviceTypeLabel);
+  const compact = normalizeCompact(serviceTypeLabel);
   if (!normalized) return null;
   if (normalized.includes('bomberos privados')) return 'bomberosPrivados';
-  if (/\bpci\b/.test(normalized)) return 'pci';
+  if (/\bpci\b/.test(normalized) || compact.includes('pci')) return 'pci';
   if (normalized.includes('pau')) return 'pau';
   if (normalized.includes('productos')) return 'productos';
   if (normalized.includes('cesion de material') || normalized.includes('cesion material')) return 'cesion';
@@ -579,13 +584,18 @@ function buildItems(products: any[]): Array<Record<string, unknown>> {
 
 function resolveServicePipelineKey(deal: Record<string, any>): ServicePipelineKey | null {
   const candidates = [deal?.pipeline_name, deal?.pipeline_label, deal?.pipeline_id]
-    .map((value) => normalizeComparison(normalizeText(value)))
+    .map((value) => normalizeText(value))
     .filter(Boolean);
+  const gepServicesLabel = normalizeComparison(SERVICE_PIPELINE_LABELS.gepServices);
+  const preventivosLabel = normalizeComparison(SERVICE_PIPELINE_LABELS.preventivos);
+  const pciLabel = normalizeComparison(SERVICE_PIPELINE_LABELS.pci);
 
-  for (const candidate of candidates) {
-    if (candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.gepServices)) return 'gepServices';
-    if (candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.preventivos)) return 'preventivos';
-    if (candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.pci) || candidate.includes('pci')) return 'pci';
+  for (const candidateRaw of candidates) {
+    const candidate = normalizeComparison(candidateRaw);
+    const candidateCompact = normalizeCompact(candidateRaw);
+    if (candidate === gepServicesLabel) return 'gepServices';
+    if (candidate === preventivosLabel) return 'preventivos';
+    if (candidate === pciLabel || candidate.includes('pci') || candidateCompact.includes('pci')) return 'pci';
   }
 
   return null;
