@@ -411,7 +411,7 @@ function getPreventivosRouteConfig(routeKey: EmpresaRouteKey | null): RouteConfi
 }
 
 function resolveServicesRouteConfig(params: {
-  pipelineKey: ServicePipelineKey;
+  pipelineKey: ServicePipelineKey | null;
   serviceTypeKey: ServiceTypeKey | null;
   routeKey: EmpresaRouteKey | null;
 }): RouteConfig | null {
@@ -435,6 +435,22 @@ function resolveServicesRouteConfig(params: {
   }
 
   return config;
+}
+
+function inferServicePipelineKey(params: {
+  deal: Record<string, any>;
+  serviceTypeKey: ServiceTypeKey | null;
+  title: string | null;
+}): ServicePipelineKey | null {
+  const explicitPipelineKey = resolveServicePipelineKey(params.deal);
+  if (explicitPipelineKey) return explicitPipelineKey;
+  if (params.serviceTypeKey === 'pci') return 'pci';
+
+  const normalizedTitle = normalizeComparison(params.title);
+  const compactTitle = normalizeCompact(params.title);
+  if (/\bpci\b/.test(normalizedTitle) || compactTitle.includes('pci')) return 'pci';
+
+  return null;
 }
 
 function findFieldDefByName(fieldDefs: any[], names: readonly string[]) {
@@ -903,8 +919,14 @@ export async function syncBudgetToHolded({
     ?? resolveFieldLabelByNames(deal, fieldDefs, ['Sede de la formación', 'Sede de formacion', 'Sede']);
   const serviceTypeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_SERVICE_TYPE_FIELD_KEYS)
     ?? resolveFieldLabelByNames(deal, fieldDefs, ['Tipo de Servicio', 'Tipo de servicio']);
-  const servicePipelineKey = pipelineMode === 'services' ? resolveServicePipelineKey(deal) : null;
   const serviceTypeKey = pipelineMode === 'services' ? resolveServiceTypeKey(serviceTypeLabel) : null;
+  const servicePipelineKey = pipelineMode === 'services'
+    ? inferServicePipelineKey({
+        deal,
+        serviceTypeKey,
+        title,
+      })
+    : null;
 
   const routeKey = pipelineMode === 'empresa'
     ? resolveEmpresaRouteKey(routeLabel)
@@ -948,10 +970,10 @@ export async function syncBudgetToHolded({
     ? getEmpresaRouteConfig(routeKey as EmpresaRouteKey)
     : pipelineMode === 'abierta'
       ? getAbiertaRouteConfig(budgetKind, routeKey as AbiertaRouteKey)
-      : pipelineMode === 'material'
+        : pipelineMode === 'material'
         ? MATERIAL_ROUTE_CONFIG
         : resolveServicesRouteConfig({
-            pipelineKey: servicePipelineKey!,
+            pipelineKey: servicePipelineKey,
             serviceTypeKey,
             routeKey: routeKey as EmpresaRouteKey | null,
           });
