@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import type { Handler } from '@netlify/functions';
 import { COMMON_HEADERS } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
+import { sendWooOrderToPipedrive } from './_shared/woocommerce-compras-pipedrive';
 
 const WOOCOMMERCE_COMPRAS_WEBHOOK_TOKEN = 'wc_compras_2026_ERP_GEP_4wJ8nK7pQ2xL9vR6tM1sH5dF3bY0cZ';
 const ACCEPTED_STATUSES = new Set(['completed', 'completado']);
@@ -238,7 +239,7 @@ export const handler: Handler = async (event) => {
 
   try {
     const prisma = getPrisma();
-    await prisma.woocommerce_compras_webhooks.create({
+    const createdEvent = await prisma.woocommerce_compras_webhooks.create({
       data: {
         source: summary.source,
         event_name: summary.eventName,
@@ -252,13 +253,39 @@ export const handler: Handler = async (event) => {
         payment_method: summary.paymentMethod,
         payload_json: summary.payloadJson as Prisma.InputJsonValue,
       },
+      select: {
+        id: true,
+      },
     });
+
+    let autoSendResult: Awaited<ReturnType<typeof sendWooOrderToPipedrive>> | null = null;
+    try {
+      autoSendResult = await sendWooOrderToPipedrive({
+        prisma,
+        webhookEventId: createdEvent.id,
+      });
+    } catch (error) {
+      console.error('[woocommerce-compras-webhook] Failed to auto-send order to Pipedrive', error);
+    }
 
     return jsonResponse(200, {
       ok: true,
-      message: 'Webhook procesado correctamente.',
+      message: autoSendResult
+        ? 'Webhook procesado y pedido enviado a Pipedrive correctamente.'
+        : 'Webhook procesado, pero no se pudo enviar automáticamente a Pipedrive.',
       orderId: summary.orderId,
       orderNumber: summary.orderNumber,
+      presupuesto: autoSendResult?.presupuesto ?? null,
+      pipedriveSync: autoSendResult
+        ? {
+            ok: true,
+            dealId: autoSendResult.dealId,
+            warnings: autoSendResult.warnings,
+          }
+        : {
+            ok: false,
+            message: 'Puedes reenviar manualmente desde Reporting > WooCommerce Compras.',
+          },
     });
   } catch (error) {
     console.error('[woocommerce-compras-webhook] Failed to persist webhook', error);
