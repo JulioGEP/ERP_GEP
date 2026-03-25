@@ -577,6 +577,20 @@ function buildItems(products: any[]): Array<Record<string, unknown>> {
   });
 }
 
+function hasPciDealProducts(products: unknown): boolean {
+  if (!Array.isArray(products)) return false;
+
+  return products.some((product) => {
+    const rawCode = normalizeComparison(
+      normalizeText((product as any)?.code ?? (product as any)?.product?.code ?? (product as any)?.sku),
+    );
+    if (rawCode && rawCode.startsWith('pci-')) return true;
+
+    const rawName = normalizeComparison(normalizeText((product as any)?.name ?? (product as any)?.product?.name));
+    return rawName === 'pci' || (rawName ? rawName.startsWith('pci ') : false);
+  });
+}
+
 function resolveServicePipelineKey(deal: Record<string, any>): ServicePipelineKey | null {
   const candidates = [deal?.pipeline_name, deal?.pipeline_label, deal?.pipeline_id]
     .map((value) => normalizeComparison(normalizeText(value)))
@@ -907,7 +921,8 @@ export async function syncBudgetToHolded({
   const routeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_ROUTE_SITE_FIELD_KEYS);
   const serviceTypeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_SERVICE_TYPE_FIELD_KEYS);
   const servicePipelineKey = pipelineMode === 'services' ? resolveServicePipelineKey(deal) : null;
-  const isPciServicesPipeline = pipelineMode === 'services' && servicePipelineKey === 'pci';
+  const isPciServicesPipeline = pipelineMode === 'services'
+    && (servicePipelineKey === 'pci' || hasPciDealProducts(products));
   const serviceTypeKey = pipelineMode === 'services'
     ? resolveServiceTypeKey(serviceTypeLabel ?? (isPciServicesPipeline ? SERVICE_PIPELINE_LABELS.pci : null))
     : null;
