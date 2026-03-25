@@ -389,7 +389,7 @@ function resolveServiceTypeKey(serviceTypeLabel: string | null): ServiceTypeKey 
   const normalized = normalizeComparison(serviceTypeLabel);
   if (!normalized) return null;
   if (normalized.includes('bomberos privados')) return 'bomberosPrivados';
-  if (normalized === 'pci' || normalized.includes(' pci')) return 'pci';
+  if (/\bpci\b/.test(normalized)) return 'pci';
   if (normalized.includes('pau')) return 'pau';
   if (normalized.includes('productos')) return 'productos';
   if (normalized.includes('cesion de material') || normalized.includes('cesion material')) return 'cesion';
@@ -597,12 +597,12 @@ function isMaterialPipeline(value: unknown): boolean {
 }
 
 function resolvePipelineMode(deal: Record<string, any>): PipelineMode | null {
+  if (resolveServicePipelineKey(deal)) return 'services';
+
   const pipelineId = normalizeText(deal?.pipeline_id);
   if (pipelineId === DEAL_EMPRESA_PIPELINE_ID) return 'empresa';
   if (pipelineId === DEAL_ABIERTA_PIPELINE_ID) return 'abierta';
   if (pipelineId === DEAL_MATERIAL_PIPELINE_ID) return 'material';
-
-  if (resolveServicePipelineKey(deal)) return 'services';
 
   const pipelineLabel = normalizeText(deal?.pipeline_name ?? deal?.pipeline_label);
   const normalizedPipeline = normalizeComparison(pipelineLabel);
