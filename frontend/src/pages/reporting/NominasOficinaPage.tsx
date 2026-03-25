@@ -1334,10 +1334,8 @@ export default function NominasOficinaPage({
         'categoria',
         'antiguedad',
         'horas semana',
-        'base retencion',
         'salario bruto',
         'salario bruto total',
-        'base retencion detalle',
         'retencion',
         'salario limpio',
         'contingencias comunes',
@@ -1358,10 +1356,8 @@ export default function NominasOficinaPage({
         entry.categoria ?? entry.defaultCategoria,
         entry.antiguedad ?? entry.defaultAntiguedad,
         entry.horasSemana ?? entry.defaultHorasSemana,
-        entry.baseRetencion ?? entry.defaultBaseRetencion,
         entry.salarioBruto ?? entry.defaultSalarioBruto,
         entry.salarioBrutoTotal ?? entry.defaultSalarioBrutoTotal,
-        entry.baseRetencionDetalle ?? entry.defaultBaseRetencionDetalle,
         entry.retencion ?? entry.defaultRetencion,
         entry.salarioLimpio ?? entry.defaultSalarioLimpio,
         entry.contingenciasComunes ?? entry.defaultContingenciasComunes,
@@ -1382,6 +1378,20 @@ export default function NominasOficinaPage({
       rows,
       fileName: `nominas_${selectedExportPeriod}.xlsx`,
       sheetName: 'Nóminas',
+      formatting: {
+        currencyColumns: [5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
+        percentColumns: [7],
+        sumColumns: [5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
+        headerStyle: {
+          font: { bold: true, color: { rgb: 'FFFFFF' } },
+          fill: { patternType: 'solid', fgColor: { rgb: '800000' } },
+        },
+        alternateRowStyles: [
+          { fill: { patternType: 'solid', fgColor: { rgb: 'FFE8E8' } } },
+          { fill: { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } } },
+        ],
+        sumRowStyle: { font: { bold: true } },
+      },
       auditEvent: {
         action: 'usuarios.nominas.export',
         details: {
