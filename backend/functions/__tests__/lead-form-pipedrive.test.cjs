@@ -226,3 +226,95 @@ test('buildOpenTrainingDealProductPayload prepares the deal product line with qu
     is_enabled: true,
   });
 });
+
+test('buildSlackMessage formats GEPCO lead notifications without Pipedrive ids', () => {
+  const message = __test__.buildSlackMessage(
+    {
+      websiteLabel: 'GEPCO',
+      companyType: 'Empresa / Grupos / Formación adaptada',
+      companyName: 'Filmax',
+      leadName: 'Zaira',
+      leadEmail: 'z.espinosa@filmax.com',
+      leadPhone: '933368555',
+      leadMessage: 'Curso de primeros auxilios',
+      courseName: 'Curso interno',
+      siteName: 'Sabadell',
+      trafficSource: 'direct',
+      formName: 'Contacto',
+      source: 'https://gepcoformacion.es',
+      serviceName: null,
+    },
+    {
+      organizationId: '7548',
+      personId: '6441',
+      leadId: 'lead-123',
+      organizationCreated: false,
+      personCreated: false,
+      leadCreated: false,
+      slackNotified: false,
+      alreadySynced: false,
+      warnings: [],
+    },
+  );
+
+  assert.equal(
+    message,
+    [
+      'Nuevo lead de GEPCO.',
+      'Empresa: Filmax',
+      'Contacto: Zaira',
+      'Email: z.espinosa@filmax.com',
+      'Teléfono: 933368555',
+      'Tipo: Empresa / Grupos / Formación adaptada',
+      'Página de la petición: Contacto',
+      'Sede: Sabadell',
+      'Canal: direct',
+      'Mensaje: Curso de primeros auxilios',
+    ].join('\n'),
+  );
+});
+
+test('buildSlackMessage formats GEP Services lead notifications using service field', () => {
+  const message = __test__.buildSlackMessage(
+    {
+      websiteLabel: 'GEP Services',
+      companyType: null,
+      companyName: 'MTZ',
+      leadName: 'Michelle',
+      leadEmail: 'michelle.sayago@mtz.es',
+      leadPhone: '685195710',
+      leadMessage: 'Consulta sobre evento',
+      courseName: null,
+      siteName: null,
+      trafficSource: 'direct',
+      formName: 'Contacto',
+      source: 'https://gepservices.es',
+      serviceName: 'menu-541 value',
+    },
+    {
+      organizationId: '7543',
+      personId: '6436',
+      leadId: 'lead-456',
+      organizationCreated: false,
+      personCreated: false,
+      leadCreated: false,
+      slackNotified: false,
+      alreadySynced: false,
+      warnings: [],
+    },
+  );
+
+  assert.equal(
+    message,
+    [
+      'Nuevo lead sincronizado desde GEP Services.',
+      'Empresa: MTZ',
+      'Contacto: Michelle',
+      'Email: michelle.sayago@mtz.es',
+      'Teléfono: 685195710',
+      'Servicio: menu-541 value',
+      'Canal: direct',
+      'Mensaje: Consulta sobre evento',
+    ].join('\n'),
+  );
+});
