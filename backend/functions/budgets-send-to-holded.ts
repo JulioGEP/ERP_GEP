@@ -361,15 +361,38 @@ function resolveAbiertaRouteKey(routeLabel: string | null): AbiertaRouteKey | nu
 
 function resolveEmpresaRouteKey(routeLabel: string | null): EmpresaRouteKey | null {
   const normalized = normalizeComparison(routeLabel);
+  const compact = normalizeCompact(routeLabel);
   if (!normalized) return null;
   if (normalized === 'nacional') return 'nacional';
-  if (normalized.includes('andaluc') && normalized.includes('in company')) return 'andaluciaInCompany';
-  if (normalized.includes('madrid') && normalized.includes('in company')) return 'madridInCompany';
-  if (normalized.includes('sabadell') && normalized.includes('in company')) return 'sabadellInCompany';
+  const hasInCompanyMarker =
+    normalized.includes('in company')
+    || normalized.includes('in-company')
+    || compact.includes('incompany');
+  if (normalized.includes('andaluc') && hasInCompanyMarker) return 'andaluciaInCompany';
+  if (normalized.includes('madrid') && hasInCompanyMarker) return 'madridInCompany';
+  if (normalized.includes('sabadell') && hasInCompanyMarker) return 'sabadellInCompany';
   if (normalized.includes('andaluc')) return 'andalucia';
   if (normalized.includes('madrid')) return 'madrid';
   if (normalized.includes('sabadell')) return 'sabadell';
   return null;
+}
+
+function coerceServiceRouteKey(params: {
+  routeKey: EmpresaRouteKey | null;
+  pipelineKey: ServicePipelineKey | null;
+  serviceTypeKey: ServiceTypeKey | null;
+}): EmpresaRouteKey | null {
+  const { routeKey, pipelineKey, serviceTypeKey } = params;
+  if (!routeKey) return null;
+  if (routeKey === 'nacional') return routeKey;
+
+  const shouldForceInCompany = pipelineKey === 'preventivos' || serviceTypeKey === 'bomberosPrivados';
+  if (!shouldForceInCompany) return routeKey;
+
+  if (routeKey === 'andalucia') return 'andaluciaInCompany';
+  if (routeKey === 'madrid') return 'madridInCompany';
+  if (routeKey === 'sabadell') return 'sabadellInCompany';
+  return routeKey;
 }
 
 function resolveBudgetKind(serviceTypeLabel: string | null): BudgetKind | null {
@@ -914,7 +937,11 @@ export async function syncBudgetToHolded({
     : pipelineMode === 'abierta'
       ? resolveAbiertaRouteKey(routeLabel)
       : pipelineMode === 'services'
-        ? resolveEmpresaRouteKey(routeLabel)
+        ? coerceServiceRouteKey({
+            routeKey: resolveEmpresaRouteKey(routeLabel),
+            pipelineKey: servicePipelineKey,
+            serviceTypeKey,
+          })
         : null;
 
   if (pipelineMode !== 'services' && pipelineMode !== 'material' && !routeKey) {
