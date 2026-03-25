@@ -577,44 +577,15 @@ function buildItems(products: any[]): Array<Record<string, unknown>> {
   });
 }
 
-function hasPciDealProducts(products: unknown): boolean {
-  if (!Array.isArray(products)) return false;
-
-  return products.some((product) => {
-    const rawCode = normalizeComparison(
-      normalizeText((product as any)?.code ?? (product as any)?.product?.code ?? (product as any)?.sku),
-    );
-    if (rawCode && rawCode.startsWith('pci-')) return true;
-
-    const rawName = normalizeComparison(normalizeText((product as any)?.name ?? (product as any)?.product?.name));
-    return rawName === 'pci' || (rawName ? rawName.startsWith('pci ') : false);
-  });
-}
-
 function resolveServicePipelineKey(deal: Record<string, any>): ServicePipelineKey | null {
   const candidates = [deal?.pipeline_name, deal?.pipeline_label, deal?.pipeline_id]
     .map((value) => normalizeComparison(normalizeText(value)))
     .filter(Boolean);
 
   for (const candidate of candidates) {
-    if (
-      candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.gepServices)
-      || candidate.includes(normalizeComparison(SERVICE_PIPELINE_LABELS.gepServices))
-    ) {
-      return 'gepServices';
-    }
-    if (
-      candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.preventivos)
-      || candidate.includes(normalizeComparison(SERVICE_PIPELINE_LABELS.preventivos))
-    ) {
-      return 'preventivos';
-    }
-    if (
-      candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.pci)
-      || candidate.includes(normalizeComparison(SERVICE_PIPELINE_LABELS.pci))
-    ) {
-      return 'pci';
-    }
+    if (candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.gepServices)) return 'gepServices';
+    if (candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.preventivos)) return 'preventivos';
+    if (candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.pci)) return 'pci';
   }
 
   return null;
@@ -921,18 +892,14 @@ export async function syncBudgetToHolded({
   const routeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_ROUTE_SITE_FIELD_KEYS);
   const serviceTypeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_SERVICE_TYPE_FIELD_KEYS);
   const servicePipelineKey = pipelineMode === 'services' ? resolveServicePipelineKey(deal) : null;
-  const isPciServicesPipeline = pipelineMode === 'services'
-    && (servicePipelineKey === 'pci' || hasPciDealProducts(products));
-  const serviceTypeKey = pipelineMode === 'services'
-    ? resolveServiceTypeKey(serviceTypeLabel ?? (isPciServicesPipeline ? SERVICE_PIPELINE_LABELS.pci : null))
-    : null;
+  const serviceTypeKey = pipelineMode === 'services' ? resolveServiceTypeKey(serviceTypeLabel) : null;
 
   const routeKey = pipelineMode === 'empresa'
     ? resolveEmpresaRouteKey(routeLabel)
     : pipelineMode === 'abierta'
       ? resolveAbiertaRouteKey(routeLabel)
       : pipelineMode === 'services'
-        ? resolveEmpresaRouteKey(routeLabel) ?? (isPciServicesPipeline ? 'sabadell' : null)
+        ? resolveEmpresaRouteKey(routeLabel)
         : null;
 
   if (pipelineMode !== 'services' && pipelineMode !== 'material' && !routeKey) {
