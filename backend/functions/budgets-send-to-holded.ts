@@ -38,7 +38,6 @@ const DEAL_MATERIAL_PIPELINE_ID = '4';
 const SERVICE_PIPELINE_LABELS = {
   gepServices: 'GEP Services',
   preventivos: 'Preventivos',
-  pci: 'PCI',
 } as const;
 const DEAL_WON_STATUS = 'won';
 const DEAL_EMPRESA_STAGE_NAME = 'Presupuesto aceptado';
@@ -415,10 +414,6 @@ function resolveServicesRouteConfig(params: {
   serviceTypeKey: ServiceTypeKey | null;
   routeKey: EmpresaRouteKey | null;
 }): RouteConfig | null {
-  if (params.pipelineKey === 'pci') {
-    return SERVICES_TYPE_CONFIG.pci;
-  }
-
   if (params.pipelineKey === 'preventivos') {
     return getPreventivosRouteConfig(params.routeKey);
   }
@@ -437,18 +432,9 @@ function resolveServicesRouteConfig(params: {
   return config;
 }
 
-function inferServicePipelineKey(params: {
-  deal: Record<string, any>;
-  serviceTypeKey: ServiceTypeKey | null;
-  title: string | null;
-}): ServicePipelineKey | null {
+function inferServicePipelineKey(params: { deal: Record<string, any> }): ServicePipelineKey | null {
   const explicitPipelineKey = resolveServicePipelineKey(params.deal);
   if (explicitPipelineKey) return explicitPipelineKey;
-  if (params.serviceTypeKey === 'pci') return 'pci';
-
-  const normalizedTitle = normalizeComparison(params.title);
-  const compactTitle = normalizeCompact(params.title);
-  if (/\bpci\b/.test(normalizedTitle) || compactTitle.includes('pci')) return 'pci';
 
   return null;
 }
@@ -604,14 +590,11 @@ function resolveServicePipelineKey(deal: Record<string, any>): ServicePipelineKe
     .filter(Boolean);
   const gepServicesLabel = normalizeComparison(SERVICE_PIPELINE_LABELS.gepServices);
   const preventivosLabel = normalizeComparison(SERVICE_PIPELINE_LABELS.preventivos);
-  const pciLabel = normalizeComparison(SERVICE_PIPELINE_LABELS.pci);
 
   for (const candidateRaw of candidates) {
     const candidate = normalizeComparison(candidateRaw);
-    const candidateCompact = normalizeCompact(candidateRaw);
     if (candidate === gepServicesLabel) return 'gepServices';
     if (candidate === preventivosLabel) return 'preventivos';
-    if (candidate === pciLabel || candidate.includes('pci') || candidateCompact.includes('pci')) return 'pci';
   }
 
   return null;
@@ -923,8 +906,6 @@ export async function syncBudgetToHolded({
   const servicePipelineKey = pipelineMode === 'services'
     ? inferServicePipelineKey({
         deal,
-        serviceTypeKey,
-        title,
       })
     : null;
 
