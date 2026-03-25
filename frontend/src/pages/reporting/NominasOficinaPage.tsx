@@ -1015,7 +1015,7 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
               </Col>
               <Col md={4}>
                 <Form.Group controlId="payroll-base-retencion-detalle">
-                  <Form.Label>Base de retención (detalle anual)</Form.Label>
+                  <Form.Label>Base retributiva</Form.Label>
                   <Form.Control
                     type="text"
                     value={fields.baseRetencionDetalle}
@@ -1025,7 +1025,7 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
               </Col>
               <Col md={4}>
                 <Form.Group controlId="payroll-base-retencion">
-                  <Form.Label>Base de retención (Detalle anual / 12)</Form.Label>
+                  <Form.Label>Base retributiva mensual</Form.Label>
                   <Form.Control
                     type="number"
                     step="0.01"
