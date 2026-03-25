@@ -6,6 +6,7 @@ import {
   deleteWooCommerceComprasWebhook,
   fetchWooCommerceComprasWebhooks,
   sendWooCommerceCompraToPipe,
+  syncWooCommerceCompras,
   type SendWooCommerceCompraToPipeResult,
   type WooCommerceComprasWebhookEvent,
 } from '../../features/reporting/api';
@@ -227,6 +228,32 @@ export default function WoocommerceComprasPage() {
     },
   });
 
+  const syncWooMutation = useMutation({
+    mutationFn: syncWooCommerceCompras,
+    onSuccess: (result) => {
+      setFeedback({
+        eventId: 'sync',
+        kind: 'success',
+        title: 'Sincronización completada.',
+        message: `Último pedido detectado: ${result.latestOrderNumber ?? result.latestOrderId ?? '—'}. Revisados ${result.inspectedCount} pedidos completados desde 01/01/2026. Nuevos pedidos incorporados: ${result.importedCount}.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['reporting', 'woocommerce-compras-webhooks'] });
+    },
+    onError: (error) => {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : 'No se pudo sincronizar WooCommerce.';
+      setFeedback({
+        eventId: 'sync',
+        kind: 'danger',
+        title: 'No se pudo sincronizar WooCommerce.',
+        message,
+      });
+    },
+  });
+
   const sendToPipeMutation = useMutation({
     mutationFn: sendWooCommerceCompraToPipe,
     onSuccess: (result, eventId) => {
@@ -304,9 +331,28 @@ export default function WoocommerceComprasPage() {
           <p className="text-muted mb-2">
             Registro de pedidos completados recibidos desde el webhook nativo de WooCommerce.
           </p>
-          <p className="small text-muted mb-4">
+          <p className="small text-muted mb-3">
             Endpoint de recepción: <code>https://erpgep.netlify.app/api/woocommerce-compras-webhook</code>. Configura en WooCommerce el campo <code>Secret</code> con el token compartido para que la cabecera <code>X-WC-Webhook-Signature</code> se valide automáticamente.
           </p>
+          <div className="d-flex justify-content-end mb-4">
+            <Button
+              variant="primary"
+              disabled={syncWooMutation.isPending}
+              onClick={() => {
+                setFeedback(null);
+                syncWooMutation.mutate();
+              }}
+            >
+              {syncWooMutation.isPending ? (
+                <>
+                  <Spinner as="span" animation="border" size="sm" className="me-2" />
+                  Actualizando…
+                </>
+              ) : (
+                'Actualizar'
+              )}
+            </Button>
+          </div>
           {feedback ? (
             <Alert variant={feedback.kind} dismissible onClose={() => setFeedback(null)}>
               <Alert.Heading className="h6">{feedback.title}</Alert.Heading>
