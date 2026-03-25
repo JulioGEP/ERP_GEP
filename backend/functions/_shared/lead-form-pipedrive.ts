@@ -58,6 +58,7 @@ const PIPEDRIVE_BASE_URL = process.env.PIPEDRIVE_BASE_URL || 'https://api.pipedr
 const DEFAULT_PIPE_OWNER_ID = parseIntegerEnv(process.env.LEAD_FORM_PIPE_DEFAULT_OWNER_ID, 13444807);
 const DEFAULT_VISIBLE_TO = parseVisibilityEnv(process.env.LEAD_FORM_PIPE_VISIBLE_TO, '7');
 const DEFAULT_SLACK_CHANNEL_ID = String(process.env.LEAD_FORM_SLACK_CHANNEL_ID ?? 'C05PBDREZ54').trim();
+const OPEN_TRAINING_SLACK_CHANNEL_ID = 'C06P4G70GJD';
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
 const DEFAULT_GEP_SERVICES_LEAD_STATUS_VALUE = String(process.env.LEAD_FORM_PIPE_GS_LEAD_STATUS_VALUE ?? '63').trim();
 const DEFAULT_GEP_SERVICES_LEAD_SERVICE_VALUE = String(process.env.LEAD_FORM_PIPE_GS_LEAD_SERVICE_VALUE ?? '234').trim();
@@ -425,7 +426,14 @@ function buildSlackMessage(lead: NormalizedLeadForm, result: PipedriveSyncResult
   return lines.join('\n');
 }
 
-async function postSlackMessage(text: string): Promise<void> {
+function resolveSlackChannelId(lead: NormalizedLeadForm): string {
+  if (isOpenTrainingBudgetLead(lead)) {
+    return OPEN_TRAINING_SLACK_CHANNEL_ID;
+  }
+  return DEFAULT_SLACK_CHANNEL_ID;
+}
+
+async function postSlackMessage(lead: NormalizedLeadForm, text: string): Promise<void> {
   const token = getSlackToken();
   if (!token.length) {
     throw new Error('No existe la variable SLACK_TOKEN en Netlify.');
@@ -438,7 +446,7 @@ async function postSlackMessage(text: string): Promise<void> {
       'Content-Type': 'application/json; charset=utf-8',
     },
     body: JSON.stringify({
-      channel: DEFAULT_SLACK_CHANNEL_ID,
+      channel: resolveSlackChannelId(lead),
       text,
     }),
   });
@@ -931,6 +939,7 @@ export const __test__ = {
   isOpenTrainingBudgetLead,
   parseVisibilityEnv,
   buildSlackMessage,
+  resolveSlackChannelId,
 };
 
 export async function sendLeadFormToPipedrive(params: {
@@ -1098,7 +1107,7 @@ export async function sendLeadFormToPipedrive(params: {
     warnings,
   };
 
-  await postSlackMessage(buildSlackMessage(normalized, result));
+  await postSlackMessage(normalized, buildSlackMessage(normalized, result));
   result.slackNotified = true;
 
   await params.prisma.lead_form_webhooks.update({

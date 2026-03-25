@@ -327,3 +327,43 @@ test('buildSlackMessage for GEP Services includes Servicio and omits training an
   assert.doesNotMatch(message, /Organización Pipedrive:/);
   assert.doesNotMatch(message, /Persona Pipedrive:/);
 });
+
+test('resolveSlackChannelId routes GEPCO individual leads to formaciones_abiertas channel', () => {
+  const channelId = __test__.resolveSlackChannelId({
+    websiteLabel: 'GEPCO',
+    companyType: 'Individual / Autónomo / Particulares',
+    companyName: 'Empresa demo',
+    leadName: 'Julio Garcia',
+    leadEmail: 'julio@gepgroup.es',
+    leadPhone: '600000000',
+    leadMessage: 'Hola',
+    courseName: 'Curso PAUX',
+    siteName: 'Madrid',
+    trafficSource: 'google',
+    formName: 'Contacto',
+    source: 'wordpress',
+    serviceName: null,
+  });
+
+  assert.equal(channelId, 'C06P4G70GJD');
+});
+
+test('resolveSlackChannelId keeps default channel for non-open-training leads', () => {
+  const channelId = __test__.resolveSlackChannelId({
+    websiteLabel: 'GEPCO',
+    companyType: 'Empresa que quiere formar a menos de 5 personas',
+    companyName: 'Empresa demo',
+    leadName: 'Julio Garcia',
+    leadEmail: 'julio@gepgroup.es',
+    leadPhone: '600000000',
+    leadMessage: 'Hola',
+    courseName: 'Curso PAUX',
+    siteName: 'Madrid',
+    trafficSource: 'google',
+    formName: 'Contacto',
+    source: 'wordpress',
+    serviceName: null,
+  });
+
+  assert.equal(channelId, 'C05PBDREZ54');
+});
