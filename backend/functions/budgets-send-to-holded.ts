@@ -38,6 +38,7 @@ const DEAL_MATERIAL_PIPELINE_ID = '4';
 const SERVICE_PIPELINE_LABELS = {
   gepServices: 'GEP Services',
   preventivos: 'Preventivos',
+  pci: 'PCI',
 } as const;
 const DEAL_WON_STATUS = 'won';
 const DEAL_EMPRESA_STAGE_NAME = 'Presupuesto aceptado';
@@ -279,10 +280,6 @@ function normalizeComparison(value: unknown): string {
     .toLowerCase();
 }
 
-function normalizeCompact(value: unknown): string {
-  return normalizeComparison(value).replace(/[^a-z0-9]/g, '');
-}
-
 function htmlToPlainText(value: unknown): string {
   const text = normalizeText(value) ?? '';
   return text
@@ -361,38 +358,15 @@ function resolveAbiertaRouteKey(routeLabel: string | null): AbiertaRouteKey | nu
 
 function resolveEmpresaRouteKey(routeLabel: string | null): EmpresaRouteKey | null {
   const normalized = normalizeComparison(routeLabel);
-  const compact = normalizeCompact(routeLabel);
   if (!normalized) return null;
   if (normalized === 'nacional') return 'nacional';
-  const hasInCompanyMarker =
-    normalized.includes('in company')
-    || normalized.includes('in-company')
-    || compact.includes('incompany');
-  if (normalized.includes('andaluc') && hasInCompanyMarker) return 'andaluciaInCompany';
-  if (normalized.includes('madrid') && hasInCompanyMarker) return 'madridInCompany';
-  if (normalized.includes('sabadell') && hasInCompanyMarker) return 'sabadellInCompany';
+  if (normalized.includes('andaluc') && normalized.includes('in company')) return 'andaluciaInCompany';
+  if (normalized.includes('madrid') && normalized.includes('in company')) return 'madridInCompany';
+  if (normalized.includes('sabadell') && normalized.includes('in company')) return 'sabadellInCompany';
   if (normalized.includes('andaluc')) return 'andalucia';
   if (normalized.includes('madrid')) return 'madrid';
   if (normalized.includes('sabadell')) return 'sabadell';
   return null;
-}
-
-function coerceServiceRouteKey(params: {
-  routeKey: EmpresaRouteKey | null;
-  pipelineKey: ServicePipelineKey | null;
-  serviceTypeKey: ServiceTypeKey | null;
-}): EmpresaRouteKey | null {
-  const { routeKey, pipelineKey, serviceTypeKey } = params;
-  if (!routeKey) return null;
-  if (routeKey === 'nacional') return routeKey;
-
-  const shouldForceInCompany = pipelineKey === 'preventivos' || serviceTypeKey === 'bomberosPrivados';
-  if (!shouldForceInCompany) return routeKey;
-
-  if (routeKey === 'andalucia') return 'andaluciaInCompany';
-  if (routeKey === 'madrid') return 'madridInCompany';
-  if (routeKey === 'sabadell') return 'sabadellInCompany';
-  return routeKey;
 }
 
 function resolveBudgetKind(serviceTypeLabel: string | null): BudgetKind | null {
@@ -413,10 +387,9 @@ function getEmpresaRouteConfig(routeKey: EmpresaRouteKey): RouteConfig {
 
 function resolveServiceTypeKey(serviceTypeLabel: string | null): ServiceTypeKey | null {
   const normalized = normalizeComparison(serviceTypeLabel);
-  const compact = normalizeCompact(serviceTypeLabel);
   if (!normalized) return null;
   if (normalized.includes('bomberos privados')) return 'bomberosPrivados';
-  if (/\bpci\b/.test(normalized) || compact.includes('pci')) return 'pci';
+  if (normalized === 'pci' || normalized.includes(' pci')) return 'pci';
   if (normalized.includes('pau')) return 'pau';
   if (normalized.includes('productos')) return 'productos';
   if (normalized.includes('cesion de material') || normalized.includes('cesion material')) return 'cesion';
@@ -437,6 +410,10 @@ function resolveServicesRouteConfig(params: {
   serviceTypeKey: ServiceTypeKey | null;
   routeKey: EmpresaRouteKey | null;
 }): RouteConfig | null {
+  if (params.pipelineKey === 'pci') {
+    return SERVICES_TYPE_CONFIG.pci;
+  }
+
   if (params.pipelineKey === 'preventivos') {
     return getPreventivosRouteConfig(params.routeKey);
   }
@@ -455,9 +432,18 @@ function resolveServicesRouteConfig(params: {
   return config;
 }
 
-function inferServicePipelineKey(params: { deal: Record<string, any> }): ServicePipelineKey | null {
+function inferServicePipelineKey(params: {
+  deal: Record<string, any>;
+  serviceTypeKey: ServiceTypeKey | null;
+  title: string | null;
+}): ServicePipelineKey | null {
   const explicitPipelineKey = resolveServicePipelineKey(params.deal);
   if (explicitPipelineKey) return explicitPipelineKey;
+  if (params.serviceTypeKey === 'pci') return 'pci';
+
+  const normalizedTitle = normalizeComparison(params.title);
+  const compactTitle = normalizeCompact(params.title);
+  if (/\bpci\b/.test(normalizedTitle) || compactTitle.includes('pci')) return 'pci';
 
   return null;
 }
@@ -609,15 +595,13 @@ function buildItems(products: any[]): Array<Record<string, unknown>> {
 
 function resolveServicePipelineKey(deal: Record<string, any>): ServicePipelineKey | null {
   const candidates = [deal?.pipeline_name, deal?.pipeline_label, deal?.pipeline_id]
-    .map((value) => normalizeText(value))
+    .map((value) => normalizeComparison(normalizeText(value)))
     .filter(Boolean);
-  const gepServicesLabel = normalizeComparison(SERVICE_PIPELINE_LABELS.gepServices);
-  const preventivosLabel = normalizeComparison(SERVICE_PIPELINE_LABELS.preventivos);
 
-  for (const candidateRaw of candidates) {
-    const candidate = normalizeComparison(candidateRaw);
-    if (candidate === gepServicesLabel) return 'gepServices';
-    if (candidate === preventivosLabel) return 'preventivos';
+  for (const candidate of candidates) {
+    if (candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.gepServices)) return 'gepServices';
+    if (candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.preventivos)) return 'preventivos';
+    if (candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.pci)) return 'pci';
   }
 
   return null;
@@ -629,12 +613,12 @@ function isMaterialPipeline(value: unknown): boolean {
 }
 
 function resolvePipelineMode(deal: Record<string, any>): PipelineMode | null {
-  if (resolveServicePipelineKey(deal)) return 'services';
-
   const pipelineId = normalizeText(deal?.pipeline_id);
   if (pipelineId === DEAL_EMPRESA_PIPELINE_ID) return 'empresa';
   if (pipelineId === DEAL_ABIERTA_PIPELINE_ID) return 'abierta';
   if (pipelineId === DEAL_MATERIAL_PIPELINE_ID) return 'material';
+
+  if (resolveServicePipelineKey(deal)) return 'services';
 
   const pipelineLabel = normalizeText(deal?.pipeline_name ?? deal?.pipeline_label);
   const normalizedPipeline = normalizeComparison(pipelineLabel);
@@ -921,27 +905,17 @@ export async function syncBudgetToHolded({
     );
   }
 
-  const routeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_ROUTE_SITE_FIELD_KEYS)
-    ?? resolveFieldLabelByNames(deal, fieldDefs, ['Sede de la formación', 'Sede de formacion', 'Sede']);
-  const serviceTypeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_SERVICE_TYPE_FIELD_KEYS)
-    ?? resolveFieldLabelByNames(deal, fieldDefs, ['Tipo de Servicio', 'Tipo de servicio']);
+  const routeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_ROUTE_SITE_FIELD_KEYS);
+  const serviceTypeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_SERVICE_TYPE_FIELD_KEYS);
+  const servicePipelineKey = pipelineMode === 'services' ? resolveServicePipelineKey(deal) : null;
   const serviceTypeKey = pipelineMode === 'services' ? resolveServiceTypeKey(serviceTypeLabel) : null;
-  const servicePipelineKey = pipelineMode === 'services'
-    ? inferServicePipelineKey({
-        deal,
-      })
-    : null;
 
   const routeKey = pipelineMode === 'empresa'
     ? resolveEmpresaRouteKey(routeLabel)
     : pipelineMode === 'abierta'
       ? resolveAbiertaRouteKey(routeLabel)
       : pipelineMode === 'services'
-        ? coerceServiceRouteKey({
-            routeKey: resolveEmpresaRouteKey(routeLabel),
-            pipelineKey: servicePipelineKey,
-            serviceTypeKey,
-          })
+        ? resolveEmpresaRouteKey(routeLabel)
         : null;
 
   if (pipelineMode !== 'services' && pipelineMode !== 'material' && !routeKey) {
