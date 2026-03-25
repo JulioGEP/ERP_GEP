@@ -583,9 +583,24 @@ function resolveServicePipelineKey(deal: Record<string, any>): ServicePipelineKe
     .filter(Boolean);
 
   for (const candidate of candidates) {
-    if (candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.gepServices)) return 'gepServices';
-    if (candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.preventivos)) return 'preventivos';
-    if (candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.pci)) return 'pci';
+    if (
+      candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.gepServices)
+      || candidate.includes(normalizeComparison(SERVICE_PIPELINE_LABELS.gepServices))
+    ) {
+      return 'gepServices';
+    }
+    if (
+      candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.preventivos)
+      || candidate.includes(normalizeComparison(SERVICE_PIPELINE_LABELS.preventivos))
+    ) {
+      return 'preventivos';
+    }
+    if (
+      candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.pci)
+      || candidate.includes(normalizeComparison(SERVICE_PIPELINE_LABELS.pci))
+    ) {
+      return 'pci';
+    }
   }
 
   return null;
@@ -892,14 +907,17 @@ export async function syncBudgetToHolded({
   const routeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_ROUTE_SITE_FIELD_KEYS);
   const serviceTypeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_SERVICE_TYPE_FIELD_KEYS);
   const servicePipelineKey = pipelineMode === 'services' ? resolveServicePipelineKey(deal) : null;
-  const serviceTypeKey = pipelineMode === 'services' ? resolveServiceTypeKey(serviceTypeLabel) : null;
+  const isPciServicesPipeline = pipelineMode === 'services' && servicePipelineKey === 'pci';
+  const serviceTypeKey = pipelineMode === 'services'
+    ? resolveServiceTypeKey(serviceTypeLabel ?? (isPciServicesPipeline ? SERVICE_PIPELINE_LABELS.pci : null))
+    : null;
 
   const routeKey = pipelineMode === 'empresa'
     ? resolveEmpresaRouteKey(routeLabel)
     : pipelineMode === 'abierta'
       ? resolveAbiertaRouteKey(routeLabel)
       : pipelineMode === 'services'
-        ? resolveEmpresaRouteKey(routeLabel)
+        ? resolveEmpresaRouteKey(routeLabel) ?? (isPciServicesPipeline ? 'sabadell' : null)
         : null;
 
   if (pipelineMode !== 'services' && pipelineMode !== 'material' && !routeKey) {
