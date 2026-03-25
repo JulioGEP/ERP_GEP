@@ -226,3 +226,71 @@ test('buildOpenTrainingDealProductPayload prepares the deal product line with qu
     is_enabled: true,
   });
 });
+
+test('buildSlackMessage omits Pipedrive IDs and updates text for GEPCO leads', () => {
+  const message = __test__.buildSlackMessage(
+    {
+      websiteLabel: 'GEPCO',
+      companyType: 'Empresa',
+      companyName: 'Empresa demo',
+      leadName: 'Julio Garcia',
+      leadEmail: 'julio@gepgroup.es',
+      leadPhone: '600000000',
+      leadMessage: 'Hola',
+      courseName: 'Curso PAUX',
+      siteName: 'Madrid',
+      trafficSource: 'google',
+      formName: 'Contacto',
+      source: 'wordpress',
+      serviceName: null,
+    },
+    {
+      leadId: 'lead-1',
+      personId: '123',
+      organizationId: '456',
+      warnings: [],
+      normalizedPayload: {},
+    },
+  );
+
+  assert.match(message, /Nuevo lead de GEPCO\./);
+  assert.doesNotMatch(message, /Prospecto Pipedrive:/);
+  assert.doesNotMatch(message, /Organización Pipedrive:/);
+  assert.doesNotMatch(message, /Persona Pipedrive:/);
+});
+
+test('buildSlackMessage for GEP Services includes Servicio and omits training and Pipedrive fields', () => {
+  const message = __test__.buildSlackMessage(
+    {
+      websiteLabel: 'GEP Services',
+      companyType: 'Empresa',
+      companyName: 'Empresa servicios',
+      leadName: 'Laura Pérez',
+      leadEmail: 'laura@empresa.es',
+      leadPhone: '600111222',
+      leadMessage: 'Necesito información del servicio',
+      courseName: 'Curso X',
+      siteName: 'Barcelona',
+      trafficSource: 'google',
+      formName: 'Contacto servicios',
+      source: 'wordpress',
+      serviceName: 'PCI',
+    },
+    {
+      leadId: 'lead-1',
+      personId: '123',
+      organizationId: '456',
+      warnings: [],
+      normalizedPayload: {},
+    },
+  );
+
+  assert.match(message, /Nuevo de GEP Services\./);
+  assert.match(message, /Servicio: PCI/);
+  assert.doesNotMatch(message, /Tipo:/);
+  assert.doesNotMatch(message, /Curso:/);
+  assert.doesNotMatch(message, /Sede:/);
+  assert.doesNotMatch(message, /Prospecto Pipedrive:/);
+  assert.doesNotMatch(message, /Organización Pipedrive:/);
+  assert.doesNotMatch(message, /Persona Pipedrive:/);
+});
