@@ -1044,7 +1044,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                   </Col>
                   <Col md={4}>
                     <Form.Group controlId="payroll-base-retencion-detalle">
-                      <Form.Label>Base de retención (detalle anual)</Form.Label>
+                      <Form.Label>Base retributiva</Form.Label>
                       <Form.Control
                         type="text"
                         value={values.payroll.baseRetencionDetalle}
@@ -1059,8 +1059,7 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
                   <Col md={4}>
                     <Form.Group controlId="payroll-base-retencion">
                       <Form.Label>
-                        Base de retención{' '}
-                        <small className="text-muted">(Detalle anual / 12)</small>
+                        Base retributiva mensual
                       </Form.Label>
                       <Form.Control
                         type="number"
