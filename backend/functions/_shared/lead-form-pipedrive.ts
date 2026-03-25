@@ -382,6 +382,34 @@ function buildSlackMessage(lead: NormalizedLeadForm, result: PipedriveSyncResult
     return lines.join('\n');
   }
 
+  if (lead.websiteLabel === 'GEPCO') {
+    return [
+      'Nuevo lead de GEPCO.',
+      `Empresa: ${lead.companyName ?? '—'}`,
+      `Contacto: ${lead.leadName ?? '—'}`,
+      `Email: ${lead.leadEmail ?? '—'}`,
+      `Teléfono: ${lead.leadPhone ?? '—'}`,
+      `Tipo: ${lead.companyType ?? '—'}`,
+      `Curso: ${lead.courseName ?? '—'}`,
+      `Sede: ${lead.siteName ?? '—'}`,
+      `Canal: ${lead.trafficSource ?? '—'}`,
+      `Mensaje: ${lead.leadMessage ?? '—'}`,
+    ].join('\n');
+  }
+
+  if (lead.websiteLabel === 'GEP Services') {
+    return [
+      'Nuevo de GEP Services.',
+      `Empresa: ${lead.companyName ?? '—'}`,
+      `Contacto: ${lead.leadName ?? '—'}`,
+      `Email: ${lead.leadEmail ?? '—'}`,
+      `Teléfono: ${lead.leadPhone ?? '—'}`,
+      `Servicio: ${lead.serviceName ?? '—'}`,
+      `Canal: ${lead.trafficSource ?? '—'}`,
+      `Mensaje: ${lead.leadMessage ?? '—'}`,
+    ].join('\n');
+  }
+
   const lines = [
     `Nuevo lead sincronizado desde ${lead.websiteLabel}.`,
     `Empresa: ${lead.companyName ?? '—'}`,
@@ -911,6 +939,7 @@ export const __test__ = {
   buildLeadNotePayload,
   isOpenTrainingBudgetLead,
   parseVisibilityEnv,
+  buildSlackMessage,
 };
 
 export async function sendLeadFormToPipedrive(params: {
