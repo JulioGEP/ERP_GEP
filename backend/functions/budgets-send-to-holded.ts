@@ -585,7 +585,7 @@ function resolveServicePipelineKey(deal: Record<string, any>): ServicePipelineKe
   for (const candidate of candidates) {
     if (candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.gepServices)) return 'gepServices';
     if (candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.preventivos)) return 'preventivos';
-    if (candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.pci)) return 'pci';
+    if (candidate === normalizeComparison(SERVICE_PIPELINE_LABELS.pci) || candidate.includes('pci')) return 'pci';
   }
 
   return null;
@@ -889,8 +889,10 @@ export async function syncBudgetToHolded({
     );
   }
 
-  const routeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_ROUTE_SITE_FIELD_KEYS);
-  const serviceTypeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_SERVICE_TYPE_FIELD_KEYS);
+  const routeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_ROUTE_SITE_FIELD_KEYS)
+    ?? resolveFieldLabelByNames(deal, fieldDefs, ['Sede de la formación', 'Sede de formacion', 'Sede']);
+  const serviceTypeLabel = resolveFieldLabel(deal, fieldDefs, DEAL_SERVICE_TYPE_FIELD_KEYS)
+    ?? resolveFieldLabelByNames(deal, fieldDefs, ['Tipo de Servicio', 'Tipo de servicio']);
   const servicePipelineKey = pipelineMode === 'services' ? resolveServicePipelineKey(deal) : null;
   const serviceTypeKey = pipelineMode === 'services' ? resolveServiceTypeKey(serviceTypeLabel) : null;
 
