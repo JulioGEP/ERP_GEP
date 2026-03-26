@@ -81,13 +81,9 @@ const DEAL_FUNDAE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_FUNDAE_FIEL
 const DEAL_CAES_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_CAES_FIELD_KEY ?? 'e1971bf3a21d48737b682bf8d864ddc5eb15a351').trim();
 const DEAL_TRAFFIC_SOURCE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_TRAFFIC_SOURCE_FIELD_KEY ?? 'abfa216589d01466453514fdcfeb1c6e5b9fdf8d').trim();
 const DEAL_SOURCE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_SOURCE_FIELD_KEY ?? 'c6eabce7c04f864646aa72c944f875fd71cdf178').trim();
-const DEAL_COMPANY_TYPE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_COMPANY_TYPE_FIELD_KEY ?? '8a65e9b780cbab3f08ccc8babe92a290fb79f216').trim();
-const DEAL_ACQUISITION_CHANNEL_FIELD_KEY = String(
-  process.env.LEAD_FORM_PIPE_DEAL_ACQUISITION_CHANNEL_FIELD_KEY ?? '6eb20e6b912f055c127241c9012f20a8223637f6',
-).trim();
-const DEAL_TRAINING_INDIVIDUAL_FIELD_KEY = String(
-  process.env.LEAD_FORM_PIPE_DEAL_TRAINING_INDIVIDUAL_FIELD_KEY ?? '99554c188c3f63ad9bc8b2cf7b50cbd145455ab',
-).trim();
+const DEAL_COMPANY_TYPE_FIELD_KEY = readOptionalFieldKey(process.env.LEAD_FORM_PIPE_DEAL_COMPANY_TYPE_FIELD_KEY);
+const DEAL_ACQUISITION_CHANNEL_FIELD_KEY = readOptionalFieldKey(process.env.LEAD_FORM_PIPE_DEAL_ACQUISITION_CHANNEL_FIELD_KEY);
+const DEAL_TRAINING_INDIVIDUAL_FIELD_KEY = readOptionalFieldKey(process.env.LEAD_FORM_PIPE_DEAL_TRAINING_INDIVIDUAL_FIELD_KEY);
 const ORG_CIF_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_ORG_CIF_FIELD_KEY ?? '6d39d015a33921753410c1bab0b067ca93b8cf2c').trim();
 const DEFAULT_OPEN_TRAINING_SERVICE_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_SERVICE_VALUE ?? '234').trim();
 const DEFAULT_OPEN_TRAINING_STATUS_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_STATUS_VALUE ?? '64').trim();
@@ -147,6 +143,11 @@ type PipedriveField = { key?: string | null; options?: PipedriveOption[] | null 
 function parseIntegerEnv(rawValue: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(String(rawValue ?? ''), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function readOptionalFieldKey(rawValue: string | undefined): string | null {
+  const normalized = String(rawValue ?? '').trim();
+  return normalized.length ? normalized : null;
 }
 
 function parseVisibilityEnv(rawValue: string | undefined, fallback: '1' | '3' | '5' | '7'): '1' | '3' | '5' | '7' {
@@ -846,9 +847,15 @@ function buildOpenTrainingDealPayload(
   };
 
   if (isOpenTrainingBudgetLead(lead)) {
-    payload[DEAL_COMPANY_TYPE_FIELD_KEY] = OPEN_TRAINING_INDIVIDUAL_COMPANY_TYPE_OPTION_ID;
-    payload[DEAL_ACQUISITION_CHANNEL_FIELD_KEY] = OPEN_TRAINING_INDIVIDUAL_CHANNEL_OPTION_ID;
-    payload[DEAL_TRAINING_INDIVIDUAL_FIELD_KEY] = resolveOpenTrainingIndividualTrainingOptionId(lead.courseName) ?? undefined;
+    if (DEAL_COMPANY_TYPE_FIELD_KEY) {
+      payload[DEAL_COMPANY_TYPE_FIELD_KEY] = OPEN_TRAINING_INDIVIDUAL_COMPANY_TYPE_OPTION_ID;
+    }
+    if (DEAL_ACQUISITION_CHANNEL_FIELD_KEY) {
+      payload[DEAL_ACQUISITION_CHANNEL_FIELD_KEY] = OPEN_TRAINING_INDIVIDUAL_CHANNEL_OPTION_ID;
+    }
+    if (DEAL_TRAINING_INDIVIDUAL_FIELD_KEY) {
+      payload[DEAL_TRAINING_INDIVIDUAL_FIELD_KEY] = resolveOpenTrainingIndividualTrainingOptionId(lead.courseName) ?? undefined;
+    }
   }
 
   return payload;
