@@ -5,6 +5,7 @@ import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-quer
 import {
   useReactTable,
   getCoreRowModel,
+  getSortedRowModel,
   type ColumnDef,
   type HeaderContext,
   type SortingState,
@@ -411,6 +412,61 @@ function getFollowUpValidationSortValue(value: boolean | null): number {
   if (value === true) return 2;
   if (value === false) return 1;
   return 0;
+}
+
+function getBudgetColumnSortValue(
+  budget: DealSummary,
+  columnId: string,
+  variant: BudgetTableVariant,
+): string | number {
+  switch (columnId) {
+    case 'presupuesto': {
+      const budgetId = getBudgetId(budget);
+      if (!budgetId) return '';
+      const numericId = Number(budgetId);
+      return Number.isFinite(numericId) ? numericId : budgetId;
+    }
+    case 'empresa':
+      return getOrganizationLabel(budget);
+    case 'fecha_formacion':
+      return variant === 'unworked'
+        ? getNearestSessionStartDateInfo(budget).sortValue ?? Number.MAX_SAFE_INTEGER
+        : getTrainingDateInfo(budget).sortValue ?? Number.MAX_SAFE_INTEGER;
+    case 'fundae_label':
+    case 'caes_label':
+    case 'hotel_label':
+    case 'transporte':
+    case 'po':
+      return getFollowUpLabel(budget, columnId as FollowUpLabelKey);
+    case 'fundae_val':
+    case 'caes_val':
+    case 'hotel_val':
+    case 'transporte_val':
+    case 'po_val':
+      return getFollowUpValidationSortValue(
+        getFollowUpValidationValue(budget, columnId as FollowUpValidationKey),
+      );
+    case 'titulo':
+      return getTitleLabel(budget);
+    case 'productos':
+      return getProductNames(budget).join(', ');
+    case 'fecha_entrega':
+      return getEstimatedDeliveryDateInfo(budget).sortValue ?? Number.MAX_SAFE_INTEGER;
+    case 'negocio':
+      return getNegocioLabel(budget);
+    default:
+      return '';
+  }
+}
+
+function compareBudgetSortValues(a: string | number, b: string | number): number {
+  if (typeof a === 'number' && typeof b === 'number') {
+    return a - b;
+  }
+  return String(a).localeCompare(String(b), 'es', {
+    sensitivity: 'base',
+    numeric: true,
+  });
 }
 
 function getSessionTimestamp(session: DealSummarySession | null | undefined): number | null {
@@ -1113,7 +1169,25 @@ export function BudgetTable({
     ? serverQuery.data ?? []
     : clientFilteredBudgets;
 
-  const resultCount = tableBudgets.length;
+  const sortedBudgets = useMemo(() => {
+    if (!sortingState.length) {
+      return tableBudgets;
+    }
+
+    return [...tableBudgets].sort((left, right) => {
+      for (const sortRule of sortingState) {
+        const leftValue = getBudgetColumnSortValue(left, sortRule.id, variant);
+        const rightValue = getBudgetColumnSortValue(right, sortRule.id, variant);
+        const comparison = compareBudgetSortValues(leftValue, rightValue);
+        if (comparison !== 0) {
+          return sortRule.desc ? -comparison : comparison;
+        }
+      }
+      return 0;
+    });
+  }, [sortingState, tableBudgets, variant]);
+
+  const resultCount = sortedBudgets.length;
 
   const effectivePageSize = typeof pageSize === 'number' && pageSize > 0 ? Math.floor(pageSize) : null;
   const pageCount = effectivePageSize ? Math.max(1, Math.ceil(resultCount / effectivePageSize)) : 1;
@@ -1137,11 +1211,11 @@ export function BudgetTable({
 
   const paginatedBudgets = useMemo(() => {
     if (!effectivePageSize) {
-      return tableBudgets;
+      return sortedBudgets;
     }
     const start = pageIndex * effectivePageSize;
-    return tableBudgets.slice(start, start + effectivePageSize);
-  }, [effectivePageSize, pageIndex, tableBudgets]);
+    return sortedBudgets.slice(start, start + effectivePageSize);
+  }, [effectivePageSize, pageIndex, sortedBudgets]);
 
   const hasAppliedFilters = useMemo(() => {
     const hasFilterValues = Object.entries(enforcedFilters).some(
@@ -1570,6 +1644,7 @@ export function BudgetTable({
     onSortingChange: handleSortingChange,
     getRowId: (row, index) => getBudgetId(row) ?? row.deal_id ?? row.dealId ?? String(index),
     getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
   });
 
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
