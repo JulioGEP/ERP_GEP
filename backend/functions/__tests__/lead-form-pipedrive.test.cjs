@@ -234,6 +234,8 @@ test('buildOrganizationPayload sets address and CIF defaults for GEPCO individua
   assert.equal(payload.name, 'No disponible');
   assert.equal(payload.address, 'No disponible');
   assert.equal(payload['6d39d015a33921753410c1bab0b067ca93b8cf2c'], 'No disponible');
+  assert.equal(payload['8a65e9b780cbab3f08ccc8babe92a290fb79f216'], 241);
+  assert.equal(payload['6eb20e6b912f055c127241c9012f20a8223637f6'], 139);
 });
 
 test('buildOpenTrainingDealProductPayload prepares the deal product line with quantity 1', () => {
