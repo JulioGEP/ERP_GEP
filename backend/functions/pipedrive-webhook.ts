@@ -8,6 +8,7 @@ import { buildMailchimpPersonInput } from './_shared/pipedrive-mailchimp';
 import { syncBudgetToHolded } from './budgets-send-to-holded';
 
 const EXPECTED_TOKEN = process.env.PIPEDRIVE_WEBHOOK_TOKEN;
+const WOO_BUDGET_SYNC_DELAY_MS = 30_000;
 
 function normalizeHeaders(headers: unknown): Record<string, string> {
   if (!headers || typeof headers !== 'object') return {};
@@ -245,6 +246,34 @@ function resolveEntityId(body: Record<string, unknown>): string | null {
 
 function isDealWonStatus(status: unknown): boolean {
   return typeof status === 'string' && status.trim().toLowerCase() === 'won';
+}
+
+function normalizeTextValue(value: string | null | undefined): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function isWooReservationMode(value: string | null | undefined): boolean {
+  const normalized = normalizeTextValue(value);
+  return normalized === 'reserva web' || normalized.includes('woocommerce');
+}
+
+async function maybeDelayWooBudgetSync(prisma: ReturnType<typeof getPrisma>, dealId: string): Promise<void> {
+  const storedDeal = await prisma.deals.findUnique({
+    where: { deal_id: dealId },
+    select: { modo_reserva: true },
+  });
+
+  if (!isWooReservationMode(storedDeal?.modo_reserva)) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, WOO_BUDGET_SYNC_DELAY_MS);
+  });
 }
 
 function buildErrorResponse(statusCode: number, code: string, message: string) {
@@ -534,6 +563,7 @@ export const handler: Handler = async (event) => {
 
       await importDealFromPipedrive(dealId);
       await refreshDealAfterWebhook(prisma, dealId);
+      await maybeDelayWooBudgetSync(prisma, dealId);
       await autoSyncBudgetToHolded(prisma, dealId);
 
       processedDealId = dealId;
