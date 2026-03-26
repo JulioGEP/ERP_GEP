@@ -211,6 +211,9 @@ type HoldedContact = {
   id?: string | number;
   code?: string | null;
   name?: string | null;
+  email?: string | null;
+  mobile?: string | null;
+  phone?: string | null;
 };
 
 type HoldedContactPersonInput = {
@@ -692,12 +695,35 @@ async function findOrCreateHoldedContact(params: {
   currency: string | null;
   individual: boolean;
 }) {
+  const normalizedCompanyName = normalizeComparison(params.name);
+  const normalizedOrganizationEmail = normalizeComparison(params.organizationEmail);
+  const normalizedOrganizationMobile = normalizeCompact(params.organizationMobile);
   const normalizedCif = normalizeComparison(params.cif);
-  if (normalizedCif) {
-    const url = `${HOLDED_CONTACTS_ENDPOINT}?search=${encodeURIComponent(params.cif as string)}`;
+  const searchTerms = [params.cif, params.name, params.organizationEmail, params.organizationMobile].filter(
+    (value): value is string => Boolean(normalizeText(value)),
+  );
+
+  for (const searchTerm of searchTerms) {
+    const url = `${HOLDED_CONTACTS_ENDPOINT}?search=${encodeURIComponent(searchTerm)}`;
     const results = await holdedRequest<HoldedContact[]>(params.apiKey, url, { method: 'GET' }).catch(() => []);
+    const normalizedSearch = normalizeComparison(searchTerm);
+
     const matched = Array.isArray(results)
-      ? results.find((contact) => normalizeComparison(contact?.code) === normalizedCif)
+      ? results.find((contact) => {
+          const codeMatches = normalizedCif
+            ? normalizeComparison(contact?.code) === normalizedCif
+            : normalizeComparison(contact?.code) === normalizedSearch;
+          const nameMatches = normalizedCompanyName
+            ? normalizeComparison(contact?.name) === normalizedCompanyName
+            : false;
+          const emailMatches = normalizedOrganizationEmail
+            ? normalizeComparison(contact?.email) === normalizedOrganizationEmail
+            : false;
+          const mobileMatches = normalizedOrganizationMobile
+            ? normalizeCompact(contact?.mobile ?? contact?.phone) === normalizedOrganizationMobile
+            : false;
+          return codeMatches || nameMatches || emailMatches || mobileMatches;
+        })
       : null;
 
     if (matched?.id != null) {
@@ -712,7 +738,7 @@ async function findOrCreateHoldedContact(params: {
   const payload = {
     code: params.cif ?? undefined,
     type: 'client',
-    isperson: 'Company',
+    isperson: false,
     email: params.organizationEmail ?? undefined,
     mobile: params.organizationMobile ?? undefined,
     iban: params.iban ?? undefined,
