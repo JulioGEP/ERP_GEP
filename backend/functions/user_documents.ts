@@ -117,6 +117,21 @@ function decimalToNumber(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function resolvePayrollPeriod(year: number, month: number, day: number): { year: number; month: number } | null {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    !Number.isFinite(date.getTime()) ||
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  const payrollAnchor = new Date(Date.UTC(year, month - 1 + (day >= 26 ? 1 : 0), 1));
+  return { year: payrollAnchor.getUTCFullYear(), month: payrollAnchor.getUTCMonth() + 1 };
+}
+
 function resolveDocumentType(value: unknown) {
   const defaultLabel = ALLOWED_DOCUMENT_TYPES.get('otros') ?? 'Otros';
   const key = toStringOrNull(value)?.toLowerCase();
@@ -256,20 +271,23 @@ function parsePayrollExpense(value: any, column: PayrollExpenseColumn, documentT
     const year = Number(dateMatch[1]);
     const month = Number(dateMatch[2]);
     const day = Number(dateMatch[3]);
-    const reconstructed = new Date(Date.UTC(year, month - 1, day));
-    if (
-      reconstructed.getUTCFullYear() === year &&
-      reconstructed.getUTCMonth() === month - 1 &&
-      reconstructed.getUTCDate() === day
-    ) {
-      parsedYear = year;
-      parsedMonth = month;
+    const payrollPeriod = resolvePayrollPeriod(year, month, day);
+    if (payrollPeriod) {
+      parsedYear = payrollPeriod.year;
+      parsedMonth = payrollPeriod.month;
     }
   } else {
     const parsedDate = new Date(rawDate);
     if (!Number.isNaN(parsedDate.getTime())) {
-      parsedYear = parsedDate.getUTCFullYear();
-      parsedMonth = parsedDate.getUTCMonth() + 1;
+      const payrollPeriod = resolvePayrollPeriod(
+        parsedDate.getUTCFullYear(),
+        parsedDate.getUTCMonth() + 1,
+        parsedDate.getUTCDate(),
+      );
+      if (payrollPeriod) {
+        parsedYear = payrollPeriod.year;
+        parsedMonth = payrollPeriod.month;
+      }
     }
   }
 
