@@ -96,6 +96,8 @@ const DEFAULT_OPEN_TRAINING_STATUS_VALUE = String(process.env.LEAD_FORM_PIPE_OPE
 const DEFAULT_OPEN_TRAINING_FUNDAE_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_FUNDAE_VALUE ?? '85').trim();
 const DEFAULT_OPEN_TRAINING_CAES_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_CAES_VALUE ?? '25').trim();
 const DEFAULT_OPEN_TRAINING_SOURCE_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_SOURCE_VALUE ?? 'Lead Web').trim();
+const DEFAULT_OPEN_TRAINING_LABEL_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_LABEL_VALUE ?? 'MAIL LEAD').trim();
+const DEFAULT_OPEN_TRAINING_TRAINING_OPTION_FALLBACK_ID = '50';
 const OPEN_TRAINING_INDIVIDUAL_COMPANY_TYPE_OPTION_ID = '241';
 const OPEN_TRAINING_INDIVIDUAL_CHANNEL_OPTION_ID = '139';
 const OPEN_TRAINING_INDIVIDUAL_DEFAULT_TEXT = 'No disponible';
@@ -247,6 +249,10 @@ function resolveOpenTrainingIndividualTrainingOptionId(courseName: string | null
   const normalizedCourseName = normalizeLookupLabel(courseName);
   if (!normalizedCourseName) return null;
   return OPEN_TRAINING_INDIVIDUAL_TRAINING_OPTION_MAP[normalizedCourseName] ?? null;
+}
+
+function resolveOpenTrainingDealTrainingOptionId(courseName: string | null): string {
+  return resolveOpenTrainingIndividualTrainingOptionId(courseName) ?? DEFAULT_OPEN_TRAINING_TRAINING_OPTION_FALLBACK_ID;
 }
 
 function resolveOrganizationNameForLead(lead: NormalizedLeadForm): string | null {
@@ -852,6 +858,7 @@ function buildOpenTrainingDealPayload(
     [DEAL_TRAFFIC_SOURCE_FIELD_KEY]: lead.trafficSource ?? undefined,
     [DEAL_SOURCE_FIELD_KEY]: DEFAULT_OPEN_TRAINING_SOURCE_VALUE,
     [DEAL_TRAINING_FIELD_KEY]: options.trainingOptionId ?? undefined,
+    label: DEFAULT_OPEN_TRAINING_LABEL_VALUE,
   };
 
   if (isOpenTrainingBudgetLead(lead)) {
@@ -930,12 +937,17 @@ async function resolveOpenTrainingDealSingleOptionValues(
   const siteLookupLabel = readString(lead.siteName);
 
   const [trainingOption, siteOption] = await Promise.all([
-    resolveSingleOptionId(prisma, {
-      fieldKey: DEAL_TRAINING_FIELD_KEY,
-      fieldName: 'Formación',
-      candidateLabels: trainingLookupCandidates,
-      fallbackLabels: trainingFallbackCandidates,
-    }),
+    isOpenTrainingBudgetLead(lead)
+      ? Promise.resolve({
+          optionId: resolveOpenTrainingDealTrainingOptionId(trainingPrimaryLabel),
+          matchedLabel: trainingPrimaryLabel,
+        })
+      : resolveSingleOptionId(prisma, {
+          fieldKey: DEAL_TRAINING_FIELD_KEY,
+          fieldName: 'Formación',
+          candidateLabels: trainingLookupCandidates,
+          fallbackLabels: trainingFallbackCandidates,
+        }),
     resolveSingleOptionId(prisma, {
       fieldKey: DEAL_SITE_FIELD_KEY,
       fieldName: 'Sede de la Formación',
@@ -1020,6 +1032,7 @@ export const __test__ = {
   buildOrganizationPayload,
   buildLeadPayload,
   buildOpenTrainingDealPayload,
+  resolveOpenTrainingDealTrainingOptionId,
   buildOpenTrainingDealProductPayload,
   buildLeadNotePayload,
   isOpenTrainingBudgetLead,
