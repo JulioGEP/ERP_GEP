@@ -237,6 +237,8 @@ async function requestWooOrders(page: number): Promise<unknown[]> {
 
 type WooImportSummary = {
   importedCount: number;
+  autoSentCount: number;
+  autoSendFailedCount: number;
   latestOrderNumber: string | null;
   latestOrderId: string | null;
   inspectedCount: number;
@@ -250,6 +252,8 @@ export async function importWooCompletedOrders(): Promise<WooImportSummary> {
   const prisma = getPrisma();
   let page = 1;
   let importedCount = 0;
+  let autoSentCount = 0;
+  let autoSendFailedCount = 0;
   let inspectedCount = 0;
   let latestOrderNumber: string | null = null;
   let latestOrderId: string | null = null;
@@ -317,23 +321,44 @@ export async function importWooCompletedOrders(): Promise<WooImportSummary> {
     });
 
     if (missingOrders.length) {
-      await prisma.woocommerce_compras_webhooks.createMany({
-        data: missingOrders.map((order) => ({
-          source: 'woocommerce_api_pull',
-          event_name: 'order.completed.sync',
-          order_id: order.id,
-          order_number: order.number,
-          presupuesto: order.presupuesto,
-          order_status: order.status,
-          order_total: order.total,
-          currency: order.currency,
-          customer_name: order.customerName,
-          customer_email: order.customerEmail,
-          payment_method: order.paymentMethod,
-          payload_json: order.payload as Prisma.InputJsonValue,
-        })),
-      });
-      importedCount += missingOrders.length;
+      for (const order of missingOrders) {
+        const createdEvent = await prisma.woocommerce_compras_webhooks.create({
+          data: {
+            source: 'woocommerce_api_pull',
+            event_name: 'order.completed.sync',
+            order_id: order.id,
+            order_number: order.number,
+            presupuesto: order.presupuesto,
+            order_status: order.status,
+            order_total: order.total,
+            currency: order.currency,
+            customer_name: order.customerName,
+            customer_email: order.customerEmail,
+            payment_method: order.paymentMethod,
+            payload_json: order.payload as Prisma.InputJsonValue,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+        importedCount += 1;
+
+        try {
+          await sendWooOrderToPipedrive({
+            prisma,
+            webhookEventId: createdEvent.id,
+          });
+          autoSentCount += 1;
+        } catch (error) {
+          autoSendFailedCount += 1;
+          console.error('[reporting-woocommerce-compras] Failed to auto-send pulled order to Pipedrive', {
+            orderId: order.id,
+            orderNumber: order.number,
+            error,
+          });
+        }
+      }
     }
 
     const hasOlderOrders = sanitized.some((order) =>
@@ -345,6 +370,8 @@ export async function importWooCompletedOrders(): Promise<WooImportSummary> {
 
   return {
     importedCount,
+    autoSentCount,
+    autoSendFailedCount,
     latestOrderNumber,
     latestOrderId,
     inspectedCount,
