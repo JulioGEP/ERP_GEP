@@ -11,6 +11,11 @@ type PipedriveFieldScope = 'deal' | 'organization';
 
 const TARGET_FIELDS = [
   {
+    fieldKey: 'label',
+    fallbackName: 'Etiqueta',
+    scope: 'deal',
+  },
+  {
     fieldKey: 'c99554c188c3f63ad9bc8b2cf7b50cbd145455ab',
     fallbackName: 'Formacion',
     scope: 'deal',
