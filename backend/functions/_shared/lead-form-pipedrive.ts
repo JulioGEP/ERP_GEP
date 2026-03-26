@@ -183,6 +183,54 @@ const OPEN_TRAINING_INDIVIDUAL_PRODUCT_MAP: Record<string, string> = {
   'curso de riesgo quimico para renovacion de bombero/a de empresa': '1174',
 };
 
+const OPEN_TRAINING_INDIVIDUAL_ITEM_PRICE_MAP: Record<string, number> = {
+  'curso pack emergencias - extincion de incendios basico y primeros auxilios': 185,
+  'curso de trabajos en altura': 185,
+  'curso de trabajos verticales': 430,
+  'curso carretilla elevadora': 120,
+  'curso espacios confinados': 185,
+  'curso especializado telco': 160,
+  'curso especializado telco riesgo electrico': 160,
+  'curso especializado telco espacios confinados': 160,
+  'curso especializado telco trabajos en altura': 160,
+  'curso de extincion de incendios': 185,
+  'curso avanzado de extincion de incendios': 185,
+  'curso avanzado de extincion de incendios con casa de humo y rescate': 185,
+  'curso riesgo quimico nbq': 185,
+  'curso primeros auxilios': 120,
+  'curso svb y dea (certificacion oficial)': 120,
+  'curso implantacion pau': 185,
+  'curso jefes de emergencia y jefes de intervencion': 185,
+  'curso equipo de respiracion autonomo (era)': 185,
+  'curso montaje y desmontaje de andamios': 150,
+  'curs pack emergencies - extincio dincendis basic i primers auxilis': 185,
+  'curs de treballs en altura': 185,
+  'curs de treballs verticals': 415,
+  'curs carreto elevador': 120,
+  'curs espais confinats': 185,
+  'curs especialitzat telco': 160,
+  'curs especialitzat telco risc electric': 160,
+  'curs especialitzat telco espais confinats': 160,
+  'curs especialitzat telco treballs en alcada': 160,
+  'curs dextincio dincendis': 185,
+  'curs avancat dextincio dincendis': 185,
+  'curs avancat dextincio dincendis amb casa de fum i rescat': 185,
+  'curs risc quimic nbq': 185,
+  'curs primers auxilis': 185,
+  'curs svb i dea (certificacio oficial)': 185,
+  'curs implantacio pau': 185,
+  'curs caps demergencia i caps dintervencio': 185,
+  'curs equip de respiracio autonom (era)': 185,
+  'curs muntatge i desmuntatge de bastides': 160,
+  'curso de trabajos verticales claudio galeno': 430,
+  contacto: 185,
+  'curso de bombero/a de empresa': 430,
+  'pack 20 horas renovacion de bombero de empresa - formacion oficial ispc': 3950,
+  'curso avanzado de extincion de incendios para renovacion bombero/a de empresa': 795,
+  'curso de primeros auxilios con svb y dea para renovacion bombero/a de empresa': 425,
+  'curso de riesgo quimico para renovacion de bombero/a de empresa': 295,
+};
+
 type GepServicesRoute = 'bomberos_privados' | 'pci' | 'pau' | 'productos' | 'cesion_material' | 'formacion';
 
 const GEP_SERVICES_ROUTE_LABELS: Record<GepServicesRoute, string[]> = {
@@ -314,6 +362,12 @@ function resolveOpenTrainingIndividualProductId(courseName: string | null): stri
   const normalizedCourseName = normalizeProductLookupLabel(courseName);
   if (!normalizedCourseName) return null;
   return OPEN_TRAINING_INDIVIDUAL_PRODUCT_MAP[normalizedCourseName] ?? null;
+}
+
+function resolveOpenTrainingIndividualItemPrice(courseName: string | null): number | null {
+  const normalizedCourseName = normalizeProductLookupLabel(courseName);
+  if (!normalizedCourseName) return null;
+  return OPEN_TRAINING_INDIVIDUAL_ITEM_PRICE_MAP[normalizedCourseName] ?? null;
 }
 
 function resolveOrganizationNameForLead(lead: NormalizedLeadForm): string | null {
@@ -965,8 +1019,9 @@ function toNumberOrNull(value: unknown): number | null {
 async function resolveOpenTrainingProduct(prisma: PrismaClient, lead: NormalizedLeadForm): Promise<ProductResolution> {
   if (isOpenTrainingBudgetLead(lead)) {
     const mappedProductId = resolveOpenTrainingIndividualProductId(lead.courseName);
+    const mappedItemPrice = resolveOpenTrainingIndividualItemPrice(lead.courseName);
     if (mappedProductId) {
-      return { idPipe: mappedProductId, productName: lead.courseName, price: null };
+      return { idPipe: mappedProductId, productName: lead.courseName, price: mappedItemPrice };
     }
   }
 
@@ -1104,6 +1159,7 @@ export const __test__ = {
   buildLeadPayload,
   buildOpenTrainingDealPayload,
   resolveOpenTrainingDealTrainingOptionId,
+  resolveOpenTrainingIndividualItemPrice,
   buildOpenTrainingDealProductPayload,
   buildLeadNotePayload,
   isOpenTrainingBudgetLead,
