@@ -3,7 +3,7 @@ import { requireAuth } from './_shared/auth';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, successResponse } from './_shared/response';
 import { toMadridISOString } from './_shared/timezone';
-import { getDealFieldByCode, getOrganizationFieldByCode } from './_shared/pipedrive';
+import { getDealFieldByCode, getDealFields, getOrganizationFieldByCode } from './_shared/pipedrive';
 
 const ALLOWED_ROLES = ['Admin'] as const;
 
@@ -80,6 +80,22 @@ type StoredOptionCreateInput = {
   synced_at: Date;
 };
 
+
+
+async function resolveTargetField(target: (typeof TARGET_FIELDS)[number]) {
+  if (target.scope === 'organization') {
+    return getOrganizationFieldByCode(target.fieldKey);
+  }
+
+  if (target.fieldKey.toLowerCase() === 'label') {
+    const fields = await getDealFields();
+    const rows = Array.isArray(fields) ? fields : [];
+    const matched = rows.find((row: any) => normalizeString(row?.key)?.toLowerCase() === 'label');
+    if (matched) return matched;
+  }
+
+  return getDealFieldByCode(target.fieldKey);
+}
 function normalizeString(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const normalized = String(value).trim();
@@ -140,10 +156,7 @@ async function syncFieldsFromPipedrive() {
 
   const resolvedFields = await Promise.all(
     TARGET_FIELDS.map(async (target) => {
-      const field =
-        target.scope === 'organization'
-          ? await getOrganizationFieldByCode(target.fieldKey)
-          : await getDealFieldByCode(target.fieldKey);
+      const field = await resolveTargetField(target);
       const fieldName = normalizeString(field?.name) ?? target.fallbackName;
       const fieldType = normalizeString(field?.field_type) ?? normalizeString(field?.fieldType) ?? 'enum';
       const optionsRaw = Array.isArray(field?.options) ? field.options : [];
