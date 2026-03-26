@@ -209,7 +209,7 @@ test('buildOpenTrainingDealPayload creates a formación abierta deal instead of 
   assert.equal(payload['e1971bf3a21d48737b682bf8d864ddc5eb15a351'], '25');
   assert.equal(payload['abfa216589d01466453514fdcfeb1c6e5b9fdf8d'], 'google');
   assert.equal(payload['c6eabce7c04f864646aa72c944f875fd71cdf178'], 'Lead Web');
-  assert.equal(payload.label, 'MAIL LEAD');
+  assert.deepEqual(payload.label, [370]);
   assert.equal(payload['8a65e9b780cbab3f08ccc8babe92a290fb79f216'], undefined);
   assert.equal(payload['6eb20e6b912f055c127241c9012f20a8223637f6'], undefined);
   assert.equal(payload['99554c188c3f63ad9bc8b2cf7b50cbd145455ab'], undefined);
@@ -219,6 +219,13 @@ test('resolveOpenTrainingDealTrainingOptionId falls back to option 50 when cours
   assert.equal(__test__.resolveOpenTrainingDealTrainingOptionId('Curso primeros auxilios'), '257');
   assert.equal(__test__.resolveOpenTrainingDealTrainingOptionId('Curso inventado sin mapeo'), '50');
   assert.equal(__test__.resolveOpenTrainingDealTrainingOptionId(null), '50');
+});
+
+test('resolveOpenTrainingIndividualItemPrice maps GEPCO web training names to Pipedrive item_price values', () => {
+  assert.equal(__test__.resolveOpenTrainingIndividualItemPrice('Curso de Trabajos Verticales'), 430);
+  assert.equal(__test__.resolveOpenTrainingIndividualItemPrice('Curs de Treballs Verticals'), 415);
+  assert.equal(__test__.resolveOpenTrainingIndividualItemPrice('Pack 20 horas Renovación de Bombero de Empresa - Formación Oficial ISPC'), 3950);
+  assert.equal(__test__.resolveOpenTrainingIndividualItemPrice('Curso inventado sin mapeo'), null);
 });
 
 test('buildOrganizationPayload sets address and CIF defaults for GEPCO individuals', () => {
