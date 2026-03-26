@@ -60,7 +60,7 @@ function normalizeField(row: any): PipedriveCustomField {
     fieldName,
     fieldType,
     syncedAt,
-    options: optionsRaw.map((option) => normalizeOption(option)),
+    options: optionsRaw.map((option: unknown) => normalizeOption(option)),
   };
 }
 
