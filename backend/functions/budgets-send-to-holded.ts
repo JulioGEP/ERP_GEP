@@ -3,6 +3,7 @@ import {
   findFieldDef,
   getDeal,
   getDealFields,
+  getOrganizationFieldByCode,
   getDealProducts,
   getOrganization,
   getPerson,
@@ -23,6 +24,10 @@ const DEAL_ROUTE_SITE_FIELD_KEYS = [
   '676d6bd51e52999c582c01f67c99a35ed30bf6ae',
 ] as const;
 const DEAL_CONTACT_CODE_FIELD_KEY = '3f67c7125b2291a31a63dc01a778b6fd1ef41b3d';
+const ORG_CIF_FIELD_KEY = '6d39d015a33921753410c1bab0b067ca93b8cf2c';
+const ORG_EMAIL_FIELD_KEY = '304ab03c5ac339ef085f0f6cfe4cb1c89ed6aa9f';
+const ORG_MOBILE_FIELD_KEY = 'b4379db06dfbe0758d84c2c2dd45ef04fa093b6d';
+const ORG_IBAN_FIELD_KEY = 'bd8ac0c959d5a9a98908523b7f86a49cbdedb988';
 const DEAL_PO_FIELD_KEY = '9cf8ccb7ef293494974f98ddbc72ec726486310e';
 const DEAL_PAYMENT_DAY_FIELD_KEY = '2bbffae2c28ba11855fc1272ad70a31967bdb97c';
 const DEAL_PAYMENT_FORM_FIELD_KEY = 'fccd44232ff07afb4014d6d32f8e94709afb24fe';
@@ -208,6 +213,12 @@ type HoldedContact = {
   name?: string | null;
 };
 
+type HoldedContactPersonInput = {
+  name: string;
+  email?: string;
+  phone?: string;
+};
+
 type HoldedBudgetSyncOperation = 'created' | 'updated';
 
 export type SyncBudgetToHoldedParams = {
@@ -278,6 +289,10 @@ function normalizeComparison(value: unknown): string {
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
+}
+
+function normalizeCompact(value: unknown): string {
+  return normalizeComparison(value).replace(/\s+/g, '');
 }
 
 function htmlToPlainText(value: unknown): string {
@@ -667,41 +682,42 @@ async function holdedRequest<T = any>(
 
 async function findOrCreateHoldedContact(params: {
   apiKey: string;
-  code: string | null;
+  cif: string | null;
   name: string;
-  phone: string | null;
+  organizationEmail: string | null;
+  organizationMobile: string | null;
+  iban: string | null;
   address: string | null;
+  person: HoldedContactPersonInput | null;
   currency: string | null;
   individual: boolean;
 }) {
-  const searchTerms = [params.code, params.name].filter((value): value is string => Boolean(value));
-  for (const searchTerm of searchTerms) {
-    const url = `${HOLDED_CONTACTS_ENDPOINT}?search=${encodeURIComponent(searchTerm)}`;
+  const normalizedCif = normalizeComparison(params.cif);
+  if (normalizedCif) {
+    const url = `${HOLDED_CONTACTS_ENDPOINT}?search=${encodeURIComponent(params.cif as string)}`;
     const results = await holdedRequest<HoldedContact[]>(params.apiKey, url, { method: 'GET' }).catch(() => []);
-    const normalizedSearch = normalizeComparison(searchTerm);
     const matched = Array.isArray(results)
-      ? results.find((contact) => {
-          const codeMatches = normalizeComparison(contact?.code) === normalizedSearch;
-          const nameMatches = normalizeComparison(contact?.name) === normalizeComparison(params.name);
-          return codeMatches || nameMatches;
-        })
+      ? results.find((contact) => normalizeComparison(contact?.code) === normalizedCif)
       : null;
 
     if (matched?.id != null) {
       return {
         id: String(matched.id),
-        code: normalizeText(matched.code) ?? params.code ?? '',
+        code: normalizeText(matched.code) ?? params.cif ?? '',
         created: false,
       };
     }
   }
 
   const payload = {
-    code: params.code ?? undefined,
+    code: params.cif ?? undefined,
     type: 'client',
     isperson: 'Company',
-    phone: params.phone ?? undefined,
-    address: params.address ?? undefined,
+    email: params.organizationEmail ?? undefined,
+    mobile: params.organizationMobile ?? undefined,
+    iban: params.iban ?? undefined,
+    billAddress: params.address ? { address: params.address } : undefined,
+    contactPersons: params.person ? [params.person] : undefined,
     tags: params.individual ? ['abiertaindividual'] : [],
     name: params.name,
     currency: params.currency ?? undefined,
@@ -719,7 +735,7 @@ async function findOrCreateHoldedContact(params: {
 
   return {
     id: createdId,
-    code: normalizeText(created?.code) ?? params.code ?? '',
+    code: normalizeText(created?.code) ?? params.cif ?? '',
     created: true,
   };
 }
@@ -822,6 +838,25 @@ export async function deleteBudgetFromHolded({
   }
 
   return { documentId: storedHoldedId, deleted: true };
+}
+
+function buildContactPerson(person: any): HoldedContactPersonInput | null {
+  const name = [
+    normalizeText(person?.first_name),
+    normalizeText(person?.last_name),
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(' ')
+    .trim()
+    || normalizeText(person?.name);
+  if (!name) return null;
+
+  const contactPerson: HoldedContactPersonInput = { name };
+  const email = pickPrimaryValue(person?.email);
+  const phone = pickPrimaryValue(person?.phone);
+  if (email) contactPerson.email = email;
+  if (phone) contactPerson.phone = phone;
+  return contactPerson;
 }
 
 export async function syncBudgetToHolded({
@@ -969,16 +1004,25 @@ export async function syncBudgetToHolded({
   }
 
   const contactCode = normalizeText(deal?.[DEAL_CONTACT_CODE_FIELD_KEY]);
-  const contactPhone = pickPrimaryValue(person?.phone ?? (deal.person_id as any)?.phone);
+  const contactCif = normalizeText(organization?.[ORG_CIF_FIELD_KEY]) ?? contactCode;
+  const organizationEmail = pickPrimaryValue(organization?.[ORG_EMAIL_FIELD_KEY]);
+  const organizationMobile = pickPrimaryValue(organization?.[ORG_MOBILE_FIELD_KEY]);
+  const ibanField = await getOrganizationFieldByCode(ORG_IBAN_FIELD_KEY).catch(() => null);
+  const iban = optionLabelOf(ibanField, organization?.[ORG_IBAN_FIELD_KEY])
+    ?? normalizeText(organization?.[ORG_IBAN_FIELD_KEY]);
   const contactAddress = resolveAddress(organization?.address ?? (deal.org_id as any)?.address);
   const currency = normalizeText(deal?.currency);
+  const contactPerson = buildContactPerson(person);
 
   const holdedContact = await findOrCreateHoldedContact({
     apiKey: holdedApiKey,
-    code: contactCode,
+    cif: contactCif,
     name: contactName,
-    phone: contactPhone,
+    organizationEmail,
+    organizationMobile,
+    iban,
     address: contactAddress,
+    person: contactPerson,
     currency,
     individual: budgetKind === 'individual',
   });
