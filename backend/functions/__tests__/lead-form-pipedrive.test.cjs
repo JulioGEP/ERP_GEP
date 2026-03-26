@@ -261,6 +261,22 @@ test('buildOpenTrainingDealProductPayload prepares the deal product line with qu
   });
 });
 
+test('buildOpenTrainingDealProductPayload defaults item_price to zero when product price is missing', () => {
+  const payload = __test__.buildOpenTrainingDealProductPayload({
+    idPipe: '203',
+    productName: 'Curso PAUX',
+    price: null,
+  });
+
+  assert.deepEqual(payload, {
+    product_id: 203,
+    item_price: 0,
+    quantity: 1,
+    tax_method: 'exclusive',
+    is_enabled: true,
+  });
+});
+
 test('buildSlackMessage omits Pipedrive IDs and updates text for GEPCO leads', () => {
   const message = __test__.buildSlackMessage(
     {

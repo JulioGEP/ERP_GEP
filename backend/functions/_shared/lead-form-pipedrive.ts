@@ -1038,9 +1038,11 @@ function buildOpenTrainingDealProductPayload(resolvedProduct: ProductResolution)
     throw new Error(`El product_id de Pipedrive no es un entero válido: ${resolvedProduct.idPipe ?? 'sin valor'}`);
   }
 
+  const normalizedItemPrice = Number.isFinite(resolvedProduct.price) ? resolvedProduct.price : 0;
+
   return {
     product_id: normalizedProductId,
-    item_price: resolvedProduct.price ?? undefined,
+    item_price: normalizedItemPrice,
     quantity: 1,
     tax_method: 'exclusive',
     is_enabled: true,
