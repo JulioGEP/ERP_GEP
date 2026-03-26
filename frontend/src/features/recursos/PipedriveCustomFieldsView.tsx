@@ -86,10 +86,14 @@ export function PipedriveCustomFieldsView() {
   });
 
   const fields = query.data ?? [];
+  const dealLabelField = useMemo(
+    () => fields.find((field) => field.fieldKey.toLowerCase() === 'label'),
+    [fields],
+  );
   const lastSyncedAt = useMemo(() => {
     const values = fields
       .map((field) => (field.syncedAt ? new Date(field.syncedAt) : null))
-      .filter((value): value is Date => Boolean(value) && !Number.isNaN(value.getTime()));
+      .filter((value): value is Date => value instanceof Date && !Number.isNaN(value.getTime()));
 
     if (!values.length) return null;
     return new Date(Math.max(...values.map((value) => value.getTime()))).toISOString();
@@ -148,6 +152,45 @@ export function PipedriveCustomFieldsView() {
               </Col>
             ))}
           </Row>
+
+          <Card className="shadow-sm">
+            <Card.Body className="d-flex flex-column gap-3">
+              <div>
+                <Card.Title className="mb-1">IDs de Etiqueta del negocio</Card.Title>
+                <p className="text-muted mb-0 small">
+                  Campo API: <code>label</code>
+                </p>
+              </div>
+
+              {dealLabelField?.options.length ? (
+                <div className="table-responsive">
+                  <Table hover size="sm" className="align-middle mb-0">
+                    <thead>
+                      <tr>
+                        <th>Etiqueta</th>
+                        <th style={{ width: '180px' }}>ID</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dealLabelField.options.map((option) => (
+                        <tr key={`deal-label-${option.id}`}>
+                          <td>{option.label}</td>
+                          <td>
+                            <code>{option.id}</code>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
+              ) : (
+                <Alert variant="warning" className="mb-0">
+                  No se han encontrado opciones para el campo <code>label</code>. Pulsa <strong>Actualizar</strong>{' '}
+                  para sincronizarlo desde Pipedrive.
+                </Alert>
+              )}
+            </Card.Body>
+          </Card>
         </>
       )}
     </div>
