@@ -242,7 +242,7 @@ type WooImportSummary = {
   inspectedCount: number;
 };
 
-async function importWooCompletedOrders(): Promise<WooImportSummary> {
+export async function importWooCompletedOrders(): Promise<WooImportSummary> {
   if (!WOO_BASE_URL || !WOO_CLIENT_KEY || !WOO_CLIENT_SECRET) {
     throw new Error('Faltan variables de WooCommerce (WOO_BASE_URL, CLAVE_CLIENTE_WC o CLAVE_SECRETA_WC).');
   }
