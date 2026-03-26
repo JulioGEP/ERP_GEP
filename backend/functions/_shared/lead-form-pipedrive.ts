@@ -97,6 +97,7 @@ const DEFAULT_OPEN_TRAINING_FUNDAE_VALUE = String(process.env.LEAD_FORM_PIPE_OPE
 const DEFAULT_OPEN_TRAINING_CAES_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_CAES_VALUE ?? '25').trim();
 const DEFAULT_OPEN_TRAINING_SOURCE_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_SOURCE_VALUE ?? 'Lead Web').trim();
 const DEFAULT_OPEN_TRAINING_LABEL_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_LABEL_VALUE ?? 'MAIL LEAD').trim();
+const OPEN_TRAINING_INDIVIDUAL_LABEL_OPTION_ID = '370';
 const DEFAULT_OPEN_TRAINING_TRAINING_OPTION_FALLBACK_ID = '50';
 const OPEN_TRAINING_INDIVIDUAL_COMPANY_TYPE_OPTION_ID = '241';
 const OPEN_TRAINING_INDIVIDUAL_CHANNEL_OPTION_ID = '139';
@@ -132,6 +133,54 @@ const OPEN_TRAINING_INDIVIDUAL_TRAINING_OPTION_MAP: Record<string, string> = {
   'curso avanzado de extincion de incendios para renovacion bombero/a de empresa': '375',
   'curso de primeros auxilios con svb y dea para renovacion bombero/a de empresa': '375',
   'curso de riesgo quimico para renovacion de bombero/a de empresa': '375',
+};
+
+const OPEN_TRAINING_INDIVIDUAL_PRODUCT_MAP: Record<string, string> = {
+  'curso pack emergencias - extincion de incendios basico y primeros auxilios': '214',
+  'curso de trabajos en altura': '215',
+  'curso de trabajos verticales': '212',
+  'curso carretilla elevadora': '210',
+  'curso espacios confinados': '213',
+  'curso especializado telco': '246',
+  'curso especializado telco riesgo electrico': '247',
+  'curso especializado telco espacios confinados': '248',
+  'curso especializado telco trabajos en altura': '249',
+  'curso de extincion de incendios': '214',
+  'curso avanzado de extincion de incendios': '214',
+  'curso avanzado de extincion de incendios con casa de humo y rescate': '214',
+  'curso riesgo quimico nbq': '214',
+  'curso primeros auxilios': '217',
+  'curso svb y dea (certificacion oficial)': '217',
+  'curso implantacion pau': '214',
+  'curso jefes de emergencia y jefes de intervencion': '219',
+  'curso equipo de respiracion autonomo (era)': '214',
+  'curso montaje y desmontaje de andamios': '210',
+  'curs pack emergencies - extincio dincendis basic i primers auxilis': '214',
+  'curs de treballs en altura': '215',
+  'curs de treballs verticals': '212',
+  'curs carreto elevador': '210',
+  'curs espais confinats': '213',
+  'curs especialitzat telco': '246',
+  'curs especialitzat telco risc electric': '247',
+  'curs especialitzat telco espais confinats': '248',
+  'curs especialitzat telco treballs en alcada': '249',
+  'curs dextincio dincendis': '214',
+  'curs avancat dextincio dincendis': '214',
+  'curs avancat dextincio dincendis amb casa de fum i rescat': '214',
+  'curs risc quimic nbq': '214',
+  'curs primers auxilis': '257',
+  'curs svb i dea (certificacio oficial)': '257',
+  'curs implantacio pau': '214',
+  'curs caps demergencia i caps dintervencio': '219',
+  'curs equip de respiracio autonom (era)': '214',
+  'curs muntatge i desmuntatge de bastides': '210',
+  'curso de trabajos verticales claudio galeno': '212',
+  contacto: '214',
+  'curso de bombero/a de empresa': '1171',
+  'pack 20 horas renovacion de bombero de empresa - formacion oficial ispc': '1175',
+  'curso avanzado de extincion de incendios para renovacion bombero/a de empresa': '1173',
+  'curso de primeros auxilios con svb y dea para renovacion bombero/a de empresa': '1172',
+  'curso de riesgo quimico para renovacion de bombero/a de empresa': '1174',
 };
 
 type GepServicesRoute = 'bomberos_privados' | 'pci' | 'pau' | 'productos' | 'cesion_material' | 'formacion';
@@ -253,6 +302,18 @@ function resolveOpenTrainingIndividualTrainingOptionId(courseName: string | null
 
 function resolveOpenTrainingDealTrainingOptionId(courseName: string | null): string {
   return resolveOpenTrainingIndividualTrainingOptionId(courseName) ?? DEFAULT_OPEN_TRAINING_TRAINING_OPTION_FALLBACK_ID;
+}
+
+function normalizeProductLookupLabel(value: string | null): string | null {
+  const normalized = normalizeLookupLabel(value);
+  if (!normalized) return null;
+  return normalized.replace(/['’`´]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function resolveOpenTrainingIndividualProductId(courseName: string | null): string | null {
+  const normalizedCourseName = normalizeProductLookupLabel(courseName);
+  if (!normalizedCourseName) return null;
+  return OPEN_TRAINING_INDIVIDUAL_PRODUCT_MAP[normalizedCourseName] ?? null;
 }
 
 function resolveOrganizationNameForLead(lead: NormalizedLeadForm): string | null {
@@ -862,6 +923,7 @@ function buildOpenTrainingDealPayload(
   };
 
   if (isOpenTrainingBudgetLead(lead)) {
+    payload.label = [toPipedriveOptionValue(OPEN_TRAINING_INDIVIDUAL_LABEL_OPTION_ID)];
     if (DEAL_COMPANY_TYPE_FIELD_KEY) {
       payload[DEAL_COMPANY_TYPE_FIELD_KEY] = OPEN_TRAINING_INDIVIDUAL_COMPANY_TYPE_OPTION_ID;
     }
@@ -901,6 +963,13 @@ function toNumberOrNull(value: unknown): number | null {
 }
 
 async function resolveOpenTrainingProduct(prisma: PrismaClient, lead: NormalizedLeadForm): Promise<ProductResolution> {
+  if (isOpenTrainingBudgetLead(lead)) {
+    const mappedProductId = resolveOpenTrainingIndividualProductId(lead.courseName);
+    if (mappedProductId) {
+      return { idPipe: mappedProductId, productName: lead.courseName, price: null };
+    }
+  }
+
   const courseCandidates = buildTrainingLookupCandidates([lead.courseName]);
 
   for (const candidate of courseCandidates) {
