@@ -429,7 +429,7 @@ function resolveServicesRouteConfig(params: {
   routeKey: EmpresaRouteKey | null;
 }): RouteConfig | null {
   if (params.pipelineKey === 'pci') {
-    return getPreventivosRouteConfig(params.routeKey);
+    return SERVICES_TYPE_CONFIG.pci;
   }
 
   if (params.pipelineKey === 'preventivos') {
