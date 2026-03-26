@@ -11,6 +11,7 @@ import {
   type ReportingTrainerControlHoursItem,
   type TrainerHoursFilters
 } from '../../features/reporting/api';
+import { getCurrentPayrollDateRange } from '../../utils/payrollPeriod';
 
 function getIsoWeekInfo(sessionDate: string | null): { weekKey: string; label: string } {
   if (!sessionDate) {
@@ -36,15 +37,6 @@ function getIsoWeekInfo(sessionDate: string | null): { weekKey: string; label: s
   };
 }
 
-function getCurrentMonthRange(): { startDate: string; endDate: string } {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const format = (value: Date) =>
-    `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
-  return { startDate: format(start), endDate: format(end) };
-}
-
 function toTimeInputValue(value: string | null): string {
   if (!value) return '';
   const date = new Date(value);
@@ -60,7 +52,7 @@ type ModalState = {
 export default function ControlHorasFormadoresPage() {
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState(() => ({
-    ...getCurrentMonthRange(),
+    ...getCurrentPayrollDateRange(),
     trainerSearch: '',
     status: 'all' as 'all' | 'logged' | 'pending',
     isoWeek: 'all'

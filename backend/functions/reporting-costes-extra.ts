@@ -191,14 +191,28 @@ function decimalToNumber(value: DecimalLike | number | string | null | undefined
   return 0;
 }
 
-function buildMonthBoundaries(date: Date): { start: Date; end: Date } | null {
+function resolvePayrollPeriod(date: Date): { year: number; month: number; start: Date; end: Date } | null {
   if (!Number.isFinite(date.getTime())) {
     return null;
   }
 
-  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
-  const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1));
-  return { start, end };
+  const day = date.getUTCDate();
+  const monthOffset = day >= 26 ? 1 : 0;
+  const payrollAnchor = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + monthOffset, 1));
+
+  const start = new Date(
+    Date.UTC(payrollAnchor.getUTCFullYear(), payrollAnchor.getUTCMonth() - 1, 26, 0, 0, 0, 0),
+  );
+  const end = new Date(
+    Date.UTC(payrollAnchor.getUTCFullYear(), payrollAnchor.getUTCMonth(), 25, 23, 59, 59, 999),
+  );
+
+  return {
+    year: payrollAnchor.getUTCFullYear(),
+    month: payrollAnchor.getUTCMonth() + 1,
+    start,
+    end,
+  };
 }
 
 type PayrollDelta = {
@@ -259,13 +273,12 @@ async function applyPayrollDelta(
     return;
   }
 
-  const boundaries = buildMonthBoundaries(periodDate);
-  if (!boundaries) {
+  const payrollPeriod = resolvePayrollPeriod(periodDate);
+  if (!payrollPeriod) {
     return;
   }
 
-  const year = boundaries.start.getUTCFullYear();
-  const month = boundaries.start.getUTCMonth() + 1;
+  const { year, month } = payrollPeriod;
 
   const existing = await prisma.office_payrolls.findUnique({
     where: { user_id_year_month: { user_id: trainer.user_id, year, month } },
