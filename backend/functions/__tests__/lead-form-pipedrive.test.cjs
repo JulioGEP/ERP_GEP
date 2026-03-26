@@ -138,7 +138,7 @@ test('isOpenTrainingBudgetLead detects GEPCO individuals for open training budge
       leadEmail: 'alvaro@example.com',
       leadPhone: '600000000',
       leadMessage: null,
-      courseName: 'Curso PAUX',
+      courseName: 'Curso primeros auxilios',
       siteName: 'Madrid',
       trafficSource: 'google',
       formName: 'Lead',
@@ -157,7 +157,7 @@ test('isOpenTrainingBudgetLead detects GEPCO individuals for open training budge
       leadEmail: 'alvaro@example.com',
       leadPhone: '600000000',
       leadMessage: null,
-      courseName: 'Curso PAUX',
+      courseName: 'Curso primeros auxilios',
       siteName: 'Madrid',
       trafficSource: 'google',
       formName: 'Lead',
@@ -178,7 +178,7 @@ test('buildOpenTrainingDealPayload creates a formación abierta deal instead of 
       leadEmail: 'julio@gepgroup.es',
       leadPhone: '600000000',
       leadMessage: 'Hola',
-      courseName: 'Curso PAUX',
+      courseName: 'Curso primeros auxilios',
       siteName: 'Madrid',
       trafficSource: 'google',
       formName: 'Contacto',
@@ -190,7 +190,7 @@ test('buildOpenTrainingDealPayload creates a formación abierta deal instead of 
     {
       trainingOptionId: 901,
       siteOptionId: 902,
-      trainingLookupLabel: 'Curso PAUX',
+      trainingLookupLabel: 'Curso primeros auxilios',
       siteLookupLabel: 'Madrid',
     },
   );
@@ -209,6 +209,31 @@ test('buildOpenTrainingDealPayload creates a formación abierta deal instead of 
   assert.equal(payload['e1971bf3a21d48737b682bf8d864ddc5eb15a351'], '25');
   assert.equal(payload['abfa216589d01466453514fdcfeb1c6e5b9fdf8d'], 'google');
   assert.equal(payload['c6eabce7c04f864646aa72c944f875fd71cdf178'], 'Lead Web');
+  assert.equal(payload['8a65e9b780cbab3f08ccc8babe92a290fb79f216'], '241');
+  assert.equal(payload['6eb20e6b912f055c127241c9012f20a8223637f6'], '139');
+  assert.equal(payload['99554c188c3f63ad9bc8b2cf7b50cbd145455ab'], '257');
+});
+
+test('buildOrganizationPayload sets address and CIF defaults for GEPCO individuals', () => {
+  const payload = __test__.buildOrganizationPayload({
+    websiteLabel: 'GEPCO',
+    companyType: 'Individual / Autónomo / Particulares',
+    companyName: 'No disponible',
+    leadName: 'Julio Garcia',
+    leadEmail: 'julio@gepgroup.es',
+    leadPhone: '600000000',
+    leadMessage: 'Hola',
+    courseName: 'Curso primeros auxilios',
+    siteName: 'Madrid',
+    trafficSource: 'google',
+    formName: 'Contacto',
+    source: 'wordpress',
+    serviceName: null,
+  });
+
+  assert.equal(payload.name, 'No disponible');
+  assert.equal(payload.address, 'No disponible');
+  assert.equal(payload['6d39d015a33921753410c1bab0b067ca93b8cf2c'], 'No disponible');
 });
 
 test('buildOpenTrainingDealProductPayload prepares the deal product line with quantity 1', () => {

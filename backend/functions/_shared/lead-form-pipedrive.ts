@@ -81,11 +81,54 @@ const DEAL_FUNDAE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_FUNDAE_FIEL
 const DEAL_CAES_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_CAES_FIELD_KEY ?? 'e1971bf3a21d48737b682bf8d864ddc5eb15a351').trim();
 const DEAL_TRAFFIC_SOURCE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_TRAFFIC_SOURCE_FIELD_KEY ?? 'abfa216589d01466453514fdcfeb1c6e5b9fdf8d').trim();
 const DEAL_SOURCE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_SOURCE_FIELD_KEY ?? 'c6eabce7c04f864646aa72c944f875fd71cdf178').trim();
+const DEAL_COMPANY_TYPE_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_DEAL_COMPANY_TYPE_FIELD_KEY ?? '8a65e9b780cbab3f08ccc8babe92a290fb79f216').trim();
+const DEAL_ACQUISITION_CHANNEL_FIELD_KEY = String(
+  process.env.LEAD_FORM_PIPE_DEAL_ACQUISITION_CHANNEL_FIELD_KEY ?? '6eb20e6b912f055c127241c9012f20a8223637f6',
+).trim();
+const DEAL_TRAINING_INDIVIDUAL_FIELD_KEY = String(
+  process.env.LEAD_FORM_PIPE_DEAL_TRAINING_INDIVIDUAL_FIELD_KEY ?? '99554c188c3f63ad9bc8b2cf7b50cbd145455ab',
+).trim();
+const ORG_CIF_FIELD_KEY = String(process.env.LEAD_FORM_PIPE_ORG_CIF_FIELD_KEY ?? '6d39d015a33921753410c1bab0b067ca93b8cf2c').trim();
 const DEFAULT_OPEN_TRAINING_SERVICE_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_SERVICE_VALUE ?? '234').trim();
 const DEFAULT_OPEN_TRAINING_STATUS_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_STATUS_VALUE ?? '64').trim();
 const DEFAULT_OPEN_TRAINING_FUNDAE_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_FUNDAE_VALUE ?? '85').trim();
 const DEFAULT_OPEN_TRAINING_CAES_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_CAES_VALUE ?? '25').trim();
 const DEFAULT_OPEN_TRAINING_SOURCE_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_SOURCE_VALUE ?? 'Lead Web').trim();
+const OPEN_TRAINING_INDIVIDUAL_COMPANY_TYPE_OPTION_ID = '241';
+const OPEN_TRAINING_INDIVIDUAL_CHANNEL_OPTION_ID = '139';
+const OPEN_TRAINING_INDIVIDUAL_DEFAULT_TEXT = 'No disponible';
+
+const OPEN_TRAINING_INDIVIDUAL_TRAINING_OPTION_MAP: Record<string, string> = {
+  'curso pack emergencias - extincion de incendios basico y primeros auxilios': '50',
+  'curso primeros auxilios': '257',
+  'curso avanzado de extincion de incendios': '254',
+  'curso riesgo quimico nbq': '254',
+  'curso avanzado de extincion de incendios con casa de humo y rescate': '255',
+  'curso svb y dea (certificacion oficial)': '258',
+  'curso equipo de respiracion autonomo (era)': '261',
+  'curso jefes de emergencia y jefes de intervencion': '260',
+  'curso implantacion pau': '259',
+  'curso de trabajos en altura': '52',
+  'curso de trabajos verticales': '53',
+  'curso espacios confinados': '56',
+  'curso especializado telco': '55',
+  'curso carretilla elevadora': '54',
+  'curso de extincion de incendios': '253',
+  'cursos de formacion a medida': '373',
+  'curso especializado telco espacios confinados': '151',
+  'curso especializado telco trabajos en altura': '152',
+  'curso especializado telco riesgo electrico': '150',
+  'curso montaje y desmontaje de andamios': '262',
+  'curso de trabajos verticales claudio galeno': '53',
+  'safety day': '373',
+  'curso avanzado en campo de fuego': '254',
+  'team building - seguridad esencial': '373',
+  'pack 20 horas renovacion de bombero de empresa - formacion oficial ispc': '375',
+  'curso de bombero/a de empresa': '376',
+  'curso avanzado de extincion de incendios para renovacion bombero/a de empresa': '375',
+  'curso de primeros auxilios con svb y dea para renovacion bombero/a de empresa': '375',
+  'curso de riesgo quimico para renovacion de bombero/a de empresa': '375',
+};
 
 type GepServicesRoute = 'bomberos_privados' | 'pci' | 'pau' | 'productos' | 'cesion_material' | 'formacion';
 
@@ -191,6 +234,18 @@ function includesNormalized(value: string | null, search: string): boolean {
 
 function isOpenTrainingBudgetLead(lead: NormalizedLeadForm): boolean {
   return lead.websiteLabel === 'GEPCO' && includesNormalized(lead.companyType, 'Individual / Autónomo / Particulares');
+}
+
+function resolveOpenTrainingIndividualTrainingOptionId(courseName: string | null): string | null {
+  const normalizedCourseName = normalizeLookupLabel(courseName);
+  if (!normalizedCourseName) return null;
+  return OPEN_TRAINING_INDIVIDUAL_TRAINING_OPTION_MAP[normalizedCourseName] ?? null;
+}
+
+function resolveOrganizationNameForLead(lead: NormalizedLeadForm): string | null {
+  if (lead.companyName) return lead.companyName;
+  if (isOpenTrainingBudgetLead(lead)) return OPEN_TRAINING_INDIVIDUAL_DEFAULT_TEXT;
+  return null;
 }
 
 function detectGepServicesRoute(serviceName: string | null): GepServicesRoute | null {
@@ -708,11 +763,18 @@ function normalizeLeadForm(payloadJson: JsonValue, source: string | null, formNa
 }
 
 function buildOrganizationPayload(lead: NormalizedLeadForm) {
-  return {
+  const payload: Record<string, unknown> = {
     name: lead.companyName,
     owner_id: DEFAULT_PIPE_OWNER_ID,
     visible_to: DEFAULT_VISIBLE_TO,
   };
+
+  if (isOpenTrainingBudgetLead(lead)) {
+    payload.address = OPEN_TRAINING_INDIVIDUAL_DEFAULT_TEXT;
+    payload[ORG_CIF_FIELD_KEY] = OPEN_TRAINING_INDIVIDUAL_DEFAULT_TEXT;
+  }
+
+  return payload;
 }
 
 function buildPersonPayload(lead: NormalizedLeadForm, organizationId: string | null) {
@@ -764,7 +826,7 @@ function buildOpenTrainingDealPayload(
   personId: string,
   options: DealSingleOptionValues,
 ) {
-  return {
+  const payload: Record<string, unknown> = {
     title: buildOpenTrainingDealTitle(lead),
     status: 'open',
     stage_id: DEFAULT_OPEN_TRAINING_STAGE_ID,
@@ -782,6 +844,14 @@ function buildOpenTrainingDealPayload(
     [DEAL_SOURCE_FIELD_KEY]: DEFAULT_OPEN_TRAINING_SOURCE_VALUE,
     [DEAL_TRAINING_FIELD_KEY]: options.trainingOptionId ?? undefined,
   };
+
+  if (isOpenTrainingBudgetLead(lead)) {
+    payload[DEAL_COMPANY_TYPE_FIELD_KEY] = OPEN_TRAINING_INDIVIDUAL_COMPANY_TYPE_OPTION_ID;
+    payload[DEAL_ACQUISITION_CHANNEL_FIELD_KEY] = OPEN_TRAINING_INDIVIDUAL_CHANNEL_OPTION_ID;
+    payload[DEAL_TRAINING_INDIVIDUAL_FIELD_KEY] = resolveOpenTrainingIndividualTrainingOptionId(lead.courseName) ?? undefined;
+  }
+
+  return payload;
 }
 
 function toNumberOrNull(value: unknown): number | null {
@@ -932,6 +1002,7 @@ function buildLeadNotePayload(
 
 export const __test__ = {
   readInteger,
+  buildOrganizationPayload,
   buildLeadPayload,
   buildOpenTrainingDealPayload,
   buildOpenTrainingDealProductPayload,
@@ -987,10 +1058,12 @@ export async function sendLeadFormToPipedrive(params: {
     throw new Error('El lead no incluye suficiente información de contacto para crear la persona en Pipedrive.');
   }
 
+  const organizationName = resolveOrganizationNameForLead(normalized);
+
   let existingOrganization: any | null = null;
   let organizationId: string | null = readString(record.pipedrive_organization_id);
-  if (normalized.companyName) {
-    existingOrganization = await searchOrganizationByName(normalized.companyName);
+  if (organizationName) {
+    existingOrganization = await searchOrganizationByName(organizationName);
     if (existingOrganization) {
       organizationId = extractEntityId(existingOrganization);
     }
@@ -999,16 +1072,16 @@ export async function sendLeadFormToPipedrive(params: {
   }
 
   let organizationCreated = false;
-  if (!organizationId && normalized.companyName) {
+  if (!organizationId && organizationName) {
     const organizationResponse = await pdRequest('/organizations', {
       method: 'POST',
-      body: buildOrganizationPayload(normalized),
+      body: buildOrganizationPayload({ ...normalized, companyName: organizationName }),
     });
     organizationId = extractEntityId(organizationResponse?.data ?? organizationResponse);
     organizationCreated = Boolean(organizationId);
   }
 
-  if (normalized.companyName && !organizationId) {
+  if (organizationName && !organizationId) {
     throw new Error('No se ha podido resolver la organización en Pipedrive.');
   }
 
