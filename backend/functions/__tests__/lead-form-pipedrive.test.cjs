@@ -128,6 +128,39 @@ test('buildLeadNotePayload prepares the note for the Notes API instead of the le
   });
 });
 
+test('buildDealNotePayload prepares the note for open training deals', () => {
+  const payload = __test__.buildDealNotePayload(
+    '789',
+    {
+      websiteLabel: 'GEPCO',
+      companyType: 'Individual / Autónomo / Particulares',
+      companyName: 'Empresa demo',
+      leadName: 'Laura Pérez',
+      leadEmail: 'laura@empresa.es',
+      leadPhone: '600111222',
+      leadMessage: 'test',
+      courseName: 'Curso primeros auxilios',
+      siteName: 'Madrid',
+      trafficSource: 'google',
+      formName: 'Contacto',
+      source: 'wordpress',
+      serviceName: null,
+    },
+    '123',
+    '456',
+  );
+
+  assert.deepEqual(payload, {
+    content: 'test',
+    deal_id: 789,
+    person_id: 123,
+    org_id: 456,
+    pinned_to_deal_flag: 1,
+    pinned_to_person_flag: 1,
+    pinned_to_organization_flag: 1,
+  });
+});
+
 test('isOpenTrainingBudgetLead detects GEPCO individuals for open training budgets', () => {
   assert.equal(
     __test__.isOpenTrainingBudgetLead({
