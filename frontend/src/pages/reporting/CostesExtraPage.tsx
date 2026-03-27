@@ -857,11 +857,11 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
 
     return (
       <div className="table-responsive" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
-        <Table striped bordered hover className="mb-0">
+        <Table striped bordered hover size="sm" className="mb-0 align-middle" style={{ tableLayout: 'fixed', width: '100%' }}>
           <thead>
             <tr>
               <th
-                style={{ width: '60px', position: 'sticky', top: 0, zIndex: 3 }}
+                style={{ width: '48px', position: 'sticky', top: 0, zIndex: 3 }}
                 className="text-center bg-light"
               >
                 <Form.Check
@@ -871,20 +871,20 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                   aria-label="Seleccionar todos los registros"
                 />
               </th>
-              <th style={{ minWidth: '120px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+              <th style={{ width: '95px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
                 Fecha
               </th>
-              <th style={{ minWidth: '220px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+              <th style={{ width: '170px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
                 Formador
               </th>
-              <th style={{ minWidth: '260px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+              <th style={{ width: '210px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
                 Sesiones
               </th>
-              <th style={{ minWidth: '200px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+              <th style={{ width: '150px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
                 Documentos
               </th>
               <th
-                style={{ minWidth: '120px', position: 'sticky', top: 0, zIndex: 3 }}
+                style={{ width: '90px', position: 'sticky', top: 0, zIndex: 3 }}
                 className="text-end bg-light"
               >
                 Horas
@@ -893,12 +893,12 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                 <th
                   key={definition.key}
                   className="text-end bg-light"
-                  style={{ minWidth: '140px', position: 'sticky', top: 0, zIndex: 3 }}
+                  style={{ width: '105px', position: 'sticky', top: 0, zIndex: 3 }}
                 >
                   {definition.label}
                 </th>
               ))}
-              <th style={{ width: '120px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+              <th style={{ width: '95px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
                 Acciones
               </th>
             </tr>
@@ -964,7 +964,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                     />
                   </td>
                   <td className="align-middle">{trainingDateLabel}</td>
-                  <td className="align-middle">
+                  <td className="align-middle text-break">
                     <div className="fw-semibold">{trainerDisplayName}</div>
                     {trainerFlags.length ? (
                       <div className="d-flex gap-1 flex-wrap mt-1">
@@ -976,7 +976,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                       </div>
                     ) : null}
                   </td>
-                  <td className="align-middle">
+                  <td className="align-middle text-break">
                     <div className="fw-semibold d-flex align-items-center gap-2 flex-wrap">
                       {canOpenBudgetDetail ? (
                         <Button
@@ -1041,6 +1041,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                   {TABLE_VISIBLE_COST_FIELD_DEFINITIONS.map((definition) => (
                     <td key={definition.key} className="align-middle">
                       <Form.Control
+                        size="sm"
                         type="text"
                         inputMode="decimal"
                         value={draft.fields[definition.key]}
@@ -1052,6 +1053,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                             ? 'bg-warning-subtle border-warning'
                             : ''
                         }`}
+                        style={{ minWidth: 0 }}
                       />
                     </td>
                   ))}
@@ -1059,6 +1061,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                     <Button
                       variant="primary"
                       size="sm"
+                      className="w-100"
                       onClick={handleSave}
                       disabled={!dirty || invalid || saving || isSavingSelected}
                     >
