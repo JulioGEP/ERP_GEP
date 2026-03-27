@@ -30,6 +30,28 @@ function asInteger(value: unknown): number | null {
   return Math.trunc(numeric);
 }
 
+function isMissingCreatedByColumnError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const candidate = error as {
+    code?: unknown;
+    message?: unknown;
+    meta?: { code?: unknown; message?: unknown };
+  };
+
+  const directCode = typeof candidate.code === 'string' ? candidate.code : '';
+  const pgCode = typeof candidate.meta?.code === 'string' ? candidate.meta.code : '';
+  const message =
+    typeof candidate.meta?.message === 'string'
+      ? candidate.meta.message
+      : typeof candidate.message === 'string'
+        ? candidate.message
+        : '';
+
+  if (directCode === '42703' || pgCode === '42703') return true;
+  return /created_by_user_id/i.test(message) && /does not exist|no existe/i.test(message);
+}
+
 export const handler = createHttpHandler<Body>(async (request) => {
   if (request.method !== 'POST') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
@@ -73,36 +95,72 @@ export const handler = createHttpHandler<Body>(async (request) => {
 
   try {
     const createdByUserId = auth.user.id;
-    await prisma.$executeRaw`
-      INSERT INTO actuaciones_preventivos (
-        presupuesto,
-        cliente,
-        persona_contacto,
-        direccion_preventivo,
-        bombero,
-        fecha_ejercicio,
-        turno,
-        partes_trabajo,
-        asistencias_sanitarias,
-        observaciones,
-        responsable,
-        created_by_user_id
-      )
-      VALUES (
-        ${presupuesto},
-        ${cliente},
-        ${personaContacto},
-        ${direccionPreventivo},
-        ${bombero},
-        ${exerciseDate},
-        ${turno},
-        ${partesTrabajo},
-        ${asistenciasSanitarias},
-        ${observaciones},
-        ${responsable},
-        ${createdByUserId}
-      )
-    `;
+    try {
+      await prisma.$executeRaw`
+        INSERT INTO actuaciones_preventivos (
+          presupuesto,
+          cliente,
+          persona_contacto,
+          direccion_preventivo,
+          bombero,
+          fecha_ejercicio,
+          turno,
+          partes_trabajo,
+          asistencias_sanitarias,
+          observaciones,
+          responsable,
+          created_by_user_id
+        )
+        VALUES (
+          ${presupuesto},
+          ${cliente},
+          ${personaContacto},
+          ${direccionPreventivo},
+          ${bombero},
+          ${exerciseDate},
+          ${turno},
+          ${partesTrabajo},
+          ${asistenciasSanitarias},
+          ${observaciones},
+          ${responsable},
+          ${createdByUserId}
+        )
+      `;
+    } catch (insertError) {
+      if (!isMissingCreatedByColumnError(insertError)) {
+        throw insertError;
+      }
+
+      await prisma.$executeRaw`
+        INSERT INTO actuaciones_preventivos (
+          presupuesto,
+          cliente,
+          persona_contacto,
+          direccion_preventivo,
+          bombero,
+          fecha_ejercicio,
+          turno,
+          partes_trabajo,
+          asistencias_sanitarias,
+          observaciones,
+          responsable
+        )
+        VALUES (
+          ${presupuesto},
+          ${cliente},
+          ${personaContacto},
+          ${direccionPreventivo},
+          ${bombero},
+          ${exerciseDate},
+          ${turno},
+          ${partesTrabajo},
+          ${asistenciasSanitarias},
+          ${observaciones},
+          ${responsable}
+        )
+      `;
+    }
+
     return successResponse({ message: 'Actuación preventiva guardada correctamente.' }, 201);
   } catch (error) {
     console.error('[actuaciones-preventivos] Error al guardar informe', error);
