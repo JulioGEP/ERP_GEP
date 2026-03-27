@@ -71,6 +71,9 @@ const RecursosFormacionAbiertaPage = lazy(() => import('../pages/recursos/Formac
 const InformesFormacionPage = lazy(() => import('../pages/informes/FormacionReportPage'));
 const InformesPreventivoPage = lazy(() => import('../pages/informes/PreventivoReportPage'));
 const InformesSimulacroPage = lazy(() => import('../pages/informes/SimulacroReportPage'));
+const InformesActuacionesPreventivosPage = lazy(
+  () => import('../pages/informes/ActuacionesPreventivosReportPage'),
+);
 const InformesRecursoPreventivoEbroPage = lazy(
   () => import('../pages/informes/RecursoPreventivoEbroReportPage'),
 );
@@ -502,6 +505,15 @@ export function AppRouter({
         <Route
           path="/informes/simulacro"
           element={<GuardedRoute path="/informes/simulacro" element={<InformesSimulacroPage />} />}
+        />
+        <Route
+          path="/informes/actuaciones_preventivos"
+          element={
+            <GuardedRoute
+              path="/informes/actuaciones_preventivos"
+              element={<InformesActuacionesPreventivosPage />}
+            />
+          }
         />
         <Route
           path="/informes/recurso_preventivo_ebro"
