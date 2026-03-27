@@ -30,6 +30,28 @@ function asInteger(value: unknown): number | null {
   return Math.trunc(numeric);
 }
 
+async function ensureActuacionesPreventivosTable() {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS actuaciones_preventivos (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      presupuesto TEXT NOT NULL,
+      cliente TEXT NOT NULL,
+      persona_contacto TEXT NOT NULL,
+      direccion_preventivo TEXT NOT NULL,
+      bombero TEXT NOT NULL,
+      fecha_ejercicio TIMESTAMPTZ NOT NULL,
+      turno TEXT NOT NULL,
+      partes_trabajo INTEGER NOT NULL DEFAULT 0 CHECK (partes_trabajo >= 0),
+      asistencias_sanitarias INTEGER NOT NULL DEFAULT 0 CHECK (asistencias_sanitarias >= 0),
+      observaciones TEXT NOT NULL DEFAULT '',
+      responsable TEXT NOT NULL,
+      created_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+}
+
 export const handler = createHttpHandler<Body>(async (request) => {
   if (request.method !== 'POST') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
@@ -72,6 +94,8 @@ export const handler = createHttpHandler<Body>(async (request) => {
   }
 
   try {
+    await ensureActuacionesPreventivosTable();
+
     const createdByUserId = auth.user.id;
     await prisma.$executeRaw`
       INSERT INTO actuaciones_preventivos (
@@ -109,3 +133,9 @@ export const handler = createHttpHandler<Body>(async (request) => {
     return errorResponse('INTERNAL_ERROR', 'No se pudo guardar la actuación preventiva.', 500);
   }
 });
+
+export const __test__ = {
+  asRequiredString,
+  asInteger,
+  ensureActuacionesPreventivosTable,
+};
