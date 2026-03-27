@@ -218,6 +218,7 @@ export const handler = async (event: any) => {
         cliente: organizationName || '',
         contacto: contacto || '',
         comercial: toStringOrNull(deal.comercial) || '',
+        direccion: toStringOrNull((deal as any).training_address) || '',
         sesiones: normalizedSessions,
         products: mappedDealProducts,
       },

@@ -440,6 +440,11 @@ export default function Form({
 
       const cliente = typeof payload.cliente === 'string' ? payload.cliente : ''
       const contacto = typeof payload.contacto === 'string' ? payload.contacto : ''
+      const direccionPresupuesto =
+        toTrimmedOrNull(payload?.direccion) ||
+        toTrimmedOrNull(payload?.training_address) ||
+        toTrimmedOrNull(payload?.sede) ||
+        ''
 
       let selected = null
       if (normalizedSessions.length === 1) {
@@ -466,7 +471,7 @@ export default function Form({
         cliente: cliente || d.cliente,
         contacto: contacto || d.contacto,
         comercial: '',
-        sede: selected?.direccion || (normalizedSessions.length > 1 ? '' : d.sede),
+        sede: selected?.direccion || (normalizedSessions.length > 1 ? direccionPresupuesto : (direccionPresupuesto || d.sede)),
       }))
 
       if (isFormacion) {
