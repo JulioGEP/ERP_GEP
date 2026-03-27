@@ -239,6 +239,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         label: 'Comparativa Formaciones y Servicios',
         path: '/reporting/comparativa',
       },
+      {
+        key: 'Reporting/ActuacionesPreventivos',
+        label: 'Dashboard Actuaciones Preventivos',
+        path: '/reporting/actuaciones_preventivos',
+      },
     ],
   },
   {

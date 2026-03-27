@@ -91,6 +91,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/recursos/slack',
   '/reporting/logs',
   '/reporting/reporte_nominas',
+  '/reporting/actuaciones_preventivos',
   '/usuarios/control_horario_fijos',
   '/usuarios/control_horario_discontinuos',
   '/reporting/control_horario_fijos',
