@@ -30,6 +30,15 @@ function asInteger(value: unknown): number | null {
   return Math.trunc(numeric);
 }
 
+function asOptionalUuid(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed.length) return null;
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(trimmed) ? trimmed : null;
+}
+
 export const handler = createHttpHandler<Body>(async (request) => {
   if (request.method !== 'POST') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
@@ -72,7 +81,7 @@ export const handler = createHttpHandler<Body>(async (request) => {
   }
 
   try {
-    const createdByUserId = auth.user.id;
+    const createdByUserId = asOptionalUuid(auth.user.id);
     await prisma.$executeRaw`
       INSERT INTO actuaciones_preventivos (
         presupuesto,
@@ -106,6 +115,14 @@ export const handler = createHttpHandler<Body>(async (request) => {
     return successResponse({ message: 'Actuación preventiva guardada correctamente.' }, 201);
   } catch (error) {
     console.error('[actuaciones-preventivos] Error al guardar informe', error);
+    const prismaErrorCode = (error as { code?: string } | null)?.code;
+    if (prismaErrorCode === '22P02' || prismaErrorCode === '23503') {
+      return errorResponse(
+        'VALIDATION_ERROR',
+        'No se pudo asociar el usuario autenticado al informe. Vuelve a iniciar sesión e inténtalo de nuevo.',
+        400,
+      );
+    }
     return errorResponse('INTERNAL_ERROR', 'No se pudo guardar la actuación preventiva.', 500);
   }
 });
