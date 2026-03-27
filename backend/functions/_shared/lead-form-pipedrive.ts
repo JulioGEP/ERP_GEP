@@ -99,6 +99,7 @@ const DEFAULT_OPEN_TRAINING_SOURCE_VALUE = String(process.env.LEAD_FORM_PIPE_OPE
 const DEFAULT_OPEN_TRAINING_LABEL_VALUE = String(process.env.LEAD_FORM_PIPE_OPEN_TRAINING_LABEL_VALUE ?? 'MAIL LEAD').trim();
 const OPEN_TRAINING_INDIVIDUAL_LABEL_OPTION_ID = '370';
 const DEFAULT_OPEN_TRAINING_TRAINING_OPTION_FALLBACK_ID = '50';
+const DEFAULT_OPEN_TRAINING_PRODUCT_ID = '214';
 const OPEN_TRAINING_INDIVIDUAL_COMPANY_TYPE_OPTION_ID = '241';
 const OPEN_TRAINING_INDIVIDUAL_CHANNEL_OPTION_ID = '139';
 const OPEN_TRAINING_INDIVIDUAL_DEFAULT_TEXT = 'No disponible';
@@ -1042,7 +1043,7 @@ async function resolveOpenTrainingProduct(prisma: PrismaClient, lead: Normalized
     }
   }
 
-  return { idPipe: null, productName: lead.courseName, price: null };
+  return { idPipe: DEFAULT_OPEN_TRAINING_PRODUCT_ID, productName: lead.courseName, price: null };
 }
 
 async function resolveOpenTrainingDealSingleOptionValues(
@@ -1128,6 +1129,23 @@ async function createLeadNote(
   });
 }
 
+async function createDealNote(
+  dealId: string,
+  lead: NormalizedLeadForm,
+  personId: string | null,
+  organizationId: string | null,
+): Promise<void> {
+  const body = buildDealNotePayload(dealId, lead, personId, organizationId);
+  if (!body) {
+    return;
+  }
+
+  await pdRequest('/notes', {
+    method: 'POST',
+    body,
+  });
+}
+
 function buildLeadNotePayload(
   leadId: string,
   lead: NormalizedLeadForm,
@@ -1153,6 +1171,32 @@ function buildLeadNotePayload(
   };
 }
 
+function buildDealNotePayload(
+  dealId: string,
+  lead: NormalizedLeadForm,
+  personId: string | null,
+  organizationId: string | null,
+): Record<string, unknown> | null {
+  const content = readString(lead.leadMessage);
+  if (!content) {
+    return null;
+  }
+
+  const personNumericId = readInteger(personId);
+  const organizationNumericId = readInteger(organizationId);
+  const dealNumericId = readInteger(dealId);
+
+  return {
+    content,
+    deal_id: dealNumericId ?? undefined,
+    person_id: personNumericId ?? undefined,
+    org_id: organizationNumericId ?? undefined,
+    pinned_to_deal_flag: dealNumericId ? 1 : undefined,
+    pinned_to_person_flag: personNumericId ? 1 : undefined,
+    pinned_to_organization_flag: organizationNumericId ? 1 : undefined,
+  };
+}
+
 export const __test__ = {
   readInteger,
   buildOrganizationPayload,
@@ -1162,6 +1206,7 @@ export const __test__ = {
   resolveOpenTrainingIndividualItemPrice,
   buildOpenTrainingDealProductPayload,
   buildLeadNotePayload,
+  buildDealNotePayload,
   isOpenTrainingBudgetLead,
   parseVisibilityEnv,
   buildSlackMessage,
@@ -1303,6 +1348,9 @@ export async function sendLeadFormToPipedrive(params: {
 
       if (leadId && resolvedProduct.idPipe) {
         await addProductToDeal(leadId, buildOpenTrainingDealProductPayload(resolvedProduct));
+      }
+      if (leadId) {
+        await createDealNote(leadId, normalized, personId, organizationId);
       }
     } else {
       const serviceTypeOptionId = await resolveGepServicesServiceTypeOptionId(normalized, warnings);
