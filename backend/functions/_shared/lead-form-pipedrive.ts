@@ -355,19 +355,50 @@ function resolveOpenTrainingDealTrainingOptionId(courseName: string | null): str
 function normalizeProductLookupLabel(value: string | null): string | null {
   const normalized = normalizeLookupLabel(value);
   if (!normalized) return null;
-  return normalized.replace(/['’`´]/g, '').replace(/\s+/g, ' ').trim();
+  return normalized
+    .replace(/['’`´]/g, '')
+    .replace(/[()]/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function resolveOpenTrainingIndividualProductId(courseName: string | null): string | null {
   const normalizedCourseName = normalizeProductLookupLabel(courseName);
   if (!normalizedCourseName) return null;
-  return OPEN_TRAINING_INDIVIDUAL_PRODUCT_MAP[normalizedCourseName] ?? null;
+  const directMatch = OPEN_TRAINING_INDIVIDUAL_PRODUCT_MAP[normalizedCourseName];
+  if (directMatch) return directMatch;
+
+  const mapEntries = Object.entries(OPEN_TRAINING_INDIVIDUAL_PRODUCT_MAP)
+    .map(([rawLabel, productId]) => ({ normalizedLabel: normalizeProductLookupLabel(rawLabel), productId }))
+    .filter((entry): entry is { normalizedLabel: string; productId: string } => Boolean(entry.normalizedLabel))
+    .sort((a, b) => b.normalizedLabel.length - a.normalizedLabel.length);
+
+  const partialMatch = mapEntries.find(
+    (entry) =>
+      normalizedCourseName.includes(entry.normalizedLabel) || entry.normalizedLabel.includes(normalizedCourseName),
+  );
+
+  return partialMatch?.productId ?? null;
 }
 
 function resolveOpenTrainingIndividualItemPrice(courseName: string | null): number | null {
   const normalizedCourseName = normalizeProductLookupLabel(courseName);
   if (!normalizedCourseName) return null;
-  return OPEN_TRAINING_INDIVIDUAL_ITEM_PRICE_MAP[normalizedCourseName] ?? null;
+  const directMatch = OPEN_TRAINING_INDIVIDUAL_ITEM_PRICE_MAP[normalizedCourseName];
+  if (Number.isFinite(directMatch)) return directMatch;
+
+  const mapEntries = Object.entries(OPEN_TRAINING_INDIVIDUAL_ITEM_PRICE_MAP)
+    .map(([rawLabel, price]) => ({ normalizedLabel: normalizeProductLookupLabel(rawLabel), price }))
+    .filter((entry): entry is { normalizedLabel: string; price: number } => Boolean(entry.normalizedLabel))
+    .sort((a, b) => b.normalizedLabel.length - a.normalizedLabel.length);
+
+  const partialMatch = mapEntries.find(
+    (entry) =>
+      normalizedCourseName.includes(entry.normalizedLabel) || entry.normalizedLabel.includes(normalizedCourseName),
+  );
+
+  return partialMatch?.price ?? null;
 }
 
 function resolveOrganizationNameForLead(lead: NormalizedLeadForm): string | null {
