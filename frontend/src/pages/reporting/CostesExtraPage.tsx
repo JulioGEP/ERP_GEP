@@ -857,11 +857,18 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
 
     return (
       <div className="table-responsive" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
-        <Table striped bordered hover size="sm" className="mb-0 align-middle" style={{ tableLayout: 'fixed', width: '100%' }}>
+        <Table
+          striped
+          bordered
+          hover
+          size="sm"
+          className="mb-0 align-middle"
+          style={{ tableLayout: 'fixed', width: '100%', fontSize: '0.85rem' }}
+        >
           <thead>
             <tr>
               <th
-                style={{ width: '48px', position: 'sticky', top: 0, zIndex: 3 }}
+                style={{ width: '34px', position: 'sticky', top: 0, zIndex: 3 }}
                 className="text-center bg-light"
               >
                 <Form.Check
@@ -871,20 +878,20 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                   aria-label="Seleccionar todos los registros"
                 />
               </th>
-              <th style={{ width: '95px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+              <th style={{ width: '76px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
                 Fecha
               </th>
-              <th style={{ width: '170px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+              <th style={{ width: '120px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
                 Formador
               </th>
-              <th style={{ width: '210px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+              <th style={{ width: '150px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
                 Sesiones
               </th>
-              <th style={{ width: '150px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+              <th style={{ width: '98px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
                 Documentos
               </th>
               <th
-                style={{ width: '90px', position: 'sticky', top: 0, zIndex: 3 }}
+                style={{ width: '64px', position: 'sticky', top: 0, zIndex: 3 }}
                 className="text-end bg-light"
               >
                 Horas
@@ -893,12 +900,12 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                 <th
                   key={definition.key}
                   className="text-end bg-light"
-                  style={{ width: '105px', position: 'sticky', top: 0, zIndex: 3 }}
+                  style={{ width: '78px', position: 'sticky', top: 0, zIndex: 3 }}
                 >
                   {definition.label}
                 </th>
               ))}
-              <th style={{ width: '95px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
+              <th style={{ width: '76px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
                 Acciones
               </th>
             </tr>
