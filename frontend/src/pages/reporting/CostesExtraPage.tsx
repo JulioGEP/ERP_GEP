@@ -854,32 +854,14 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
       backgroundColor: 'var(--bs-table-bg)',
       boxShadow: '0 -1px 0 rgba(0, 0, 0, 0.08)',
     } as const;
-    const stickyHeaderBaseStyle = { position: 'sticky', top: 0, zIndex: 3 } as const;
-    const columnWidths = {
-      selector: '40px',
-      fecha: '72px',
-      formador: '130px',
-      sesiones: '180px',
-      documentos: '110px',
-      horas: '64px',
-      coste: '82px',
-      acciones: '78px',
-    } as const;
 
     return (
       <div className="table-responsive" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
-        <Table
-          striped
-          bordered
-          hover
-          size="sm"
-          className="mb-0 align-middle"
-          style={{ tableLayout: 'fixed', width: '100%', fontSize: '0.79rem' }}
-        >
+        <Table striped bordered hover size="sm" className="mb-0 align-middle" style={{ tableLayout: 'fixed', width: '100%' }}>
           <thead>
             <tr>
               <th
-                style={{ ...stickyHeaderBaseStyle, width: columnWidths.selector }}
+                style={{ width: '48px', position: 'sticky', top: 0, zIndex: 3 }}
                 className="text-center bg-light"
               >
                 <Form.Check
@@ -889,20 +871,20 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                   aria-label="Seleccionar todos los registros"
                 />
               </th>
-              <th style={{ ...stickyHeaderBaseStyle, width: columnWidths.fecha }} className="bg-light">
+              <th style={{ width: '95px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
                 Fecha
               </th>
-              <th style={{ ...stickyHeaderBaseStyle, width: columnWidths.formador }} className="bg-light">
+              <th style={{ width: '170px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
                 Formador
               </th>
-              <th style={{ ...stickyHeaderBaseStyle, width: columnWidths.sesiones }} className="bg-light">
+              <th style={{ width: '210px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
                 Sesiones
               </th>
-              <th style={{ ...stickyHeaderBaseStyle, width: columnWidths.documentos }} className="bg-light">
+              <th style={{ width: '150px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
                 Documentos
               </th>
               <th
-                style={{ ...stickyHeaderBaseStyle, width: columnWidths.horas }}
+                style={{ width: '90px', position: 'sticky', top: 0, zIndex: 3 }}
                 className="text-end bg-light"
               >
                 Horas
@@ -911,12 +893,12 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                 <th
                   key={definition.key}
                   className="text-end bg-light"
-                  style={{ ...stickyHeaderBaseStyle, width: columnWidths.coste }}
+                  style={{ width: '105px', position: 'sticky', top: 0, zIndex: 3 }}
                 >
                   {definition.label}
                 </th>
               ))}
-              <th style={{ ...stickyHeaderBaseStyle, width: columnWidths.acciones }} className="bg-light">
+              <th style={{ width: '95px', position: 'sticky', top: 0, zIndex: 3 }} className="bg-light">
                 Acciones
               </th>
             </tr>
@@ -1071,7 +1053,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                             ? 'bg-warning-subtle border-warning'
                             : ''
                         }`}
-                        style={{ minWidth: 0, paddingLeft: '0.35rem', paddingRight: '0.35rem' }}
+                        style={{ minWidth: 0 }}
                       />
                     </td>
                   ))}
@@ -1079,7 +1061,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                     <Button
                       variant="primary"
                       size="sm"
-                      className="w-100 px-1"
+                      className="w-100"
                       onClick={handleSave}
                       disabled={!dirty || invalid || saving || isSavingSelected}
                     >
