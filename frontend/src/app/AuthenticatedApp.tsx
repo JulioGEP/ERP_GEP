@@ -188,6 +188,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Informes/Preventivo', label: 'Preventivo', path: '/informes/preventivo' },
       { key: 'Informes/Simulacro', label: 'Simulacro', path: '/informes/simulacro' },
       {
+        key: 'Informes/ActuacionesPreventivos',
+        label: 'Actuaciones Preventivos',
+        path: '/informes/actuaciones_preventivos',
+      },
+      {
         key: 'Informes/RecursoPreventivoEbro',
         label: 'Recurso Preventivo EBRO',
         path: '/informes/recurso_preventivo_ebro',
