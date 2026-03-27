@@ -206,6 +206,15 @@ export default function ActuacionesPreventivosReportPage() {
                       onChange={(e) => setForm((current) => ({ ...current, personaContacto: e.target.value }))}
                     />
                   </div>
+                  <div className="col-12">
+                    <label className="form-label">Dirección del Preventivo</label>
+                    <input
+                      className="form-control"
+                      value={form.direccionPreventivo}
+                      required
+                      onChange={(e) => setForm((current) => ({ ...current, direccionPreventivo: e.target.value }))}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -217,21 +226,12 @@ export default function ActuacionesPreventivosReportPage() {
                 <h2 className="h5">Registro</h2>
                 <div className="row g-3">
                   <div className="col-12">
-                    <label className="form-label">Dirección del Preventivo</label>
-                    <input
-                      className="form-control"
-                      value={form.direccionPreventivo}
-                      required
-                      onChange={(e) => setForm((current) => ({ ...current, direccionPreventivo: e.target.value }))}
-                    />
-                  </div>
-                  <div className="col-12">
                     <label className="form-label">Bombero/a</label>
                     <input
                       className="form-control"
                       value={form.bombero}
                       required
-                      onChange={(e) => setForm((current) => ({ ...current, bombero: e.target.value }))}
+                      readOnly
                     />
                   </div>
                   <div className="col-12">
@@ -256,12 +256,19 @@ export default function ActuacionesPreventivosReportPage() {
             <div className="row g-3">
               <div className="col-md-3">
                 <label className="form-label">Turno</label>
-                <input
-                  className="form-control"
+                <select
+                  className="form-select"
                   value={form.turno}
                   required
                   onChange={(e) => setForm((current) => ({ ...current, turno: e.target.value }))}
-                />
+                >
+                  <option value="" disabled>
+                    Selecciona turno
+                  </option>
+                  <option value="Mañana">Mañana</option>
+                  <option value="Tarde">Tarde</option>
+                  <option value="Noche">Noche</option>
+                </select>
               </div>
               <div className="col-md-3">
                 <label className="form-label">Partes de trabajo</label>
@@ -293,6 +300,7 @@ export default function ActuacionesPreventivosReportPage() {
                 <label className="form-label">Responsable</label>
                 <input
                   className="form-control"
+                  placeholder="Nombre - Primer Apellido"
                   value={form.responsable}
                   required
                   onChange={(e) => setForm((current) => ({ ...current, responsable: e.target.value }))}
