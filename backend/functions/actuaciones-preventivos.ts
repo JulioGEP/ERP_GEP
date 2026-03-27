@@ -17,6 +17,21 @@ type Body = {
   responsable?: string;
 };
 
+type CreatorColumn =
+  | 'created_by_user_id'
+  | 'created_by_trainer_id'
+  | 'created_by_bombero_id'
+  | 'created_by_firefighter_id'
+  | 'created_by_actor_id';
+
+const CREATOR_COLUMN_CANDIDATES: readonly CreatorColumn[] = [
+  'created_by_user_id',
+  'created_by_trainer_id',
+  'created_by_bombero_id',
+  'created_by_firefighter_id',
+  'created_by_actor_id',
+];
+
 function asRequiredString(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -37,6 +52,110 @@ function asOptionalUuid(value: unknown): string | null {
   const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return uuidRegex.test(trimmed) ? trimmed : null;
+}
+
+async function getAvailableCreatorColumns(): Promise<Set<CreatorColumn>> {
+  const rows = await prisma.$queryRaw<Array<{ column_name: string }>>`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'actuaciones_preventivos'
+      AND column_name IN (
+        'created_by_user_id',
+        'created_by_trainer_id',
+        'created_by_bombero_id',
+        'created_by_firefighter_id',
+        'created_by_actor_id'
+      )
+  `;
+
+  const found = new Set<CreatorColumn>();
+  for (const row of rows) {
+    if (CREATOR_COLUMN_CANDIDATES.includes(row.column_name as CreatorColumn)) {
+      found.add(row.column_name as CreatorColumn);
+    }
+  }
+  return found;
+}
+
+async function insertActuacionPreventiva(params: {
+  presupuesto: string;
+  cliente: string;
+  personaContacto: string;
+  direccionPreventivo: string;
+  bombero: string;
+  exerciseDate: Date;
+  turno: string;
+  partesTrabajo: number;
+  asistenciasSanitarias: number;
+  observaciones: string;
+  responsable: string;
+  role: string | null | undefined;
+  actorId: string | null;
+  forceNullUserId?: boolean;
+}): Promise<void> {
+  const {
+    presupuesto,
+    cliente,
+    personaContacto,
+    direccionPreventivo,
+    bombero,
+    exerciseDate,
+    turno,
+    partesTrabajo,
+    asistenciasSanitarias,
+    observaciones,
+    responsable,
+    role,
+    actorId,
+    forceNullUserId = false,
+  } = params;
+
+  const availableCreatorColumns = await getAvailableCreatorColumns();
+  const normalizedRole = typeof role === 'string' ? role.trim().toLowerCase() : '';
+  const isTrainer = normalizedRole === 'formador';
+  const isFirefighter = normalizedRole === 'bombero';
+
+  const columnValues: Array<[string, string | number | Date | null]> = [
+    ['presupuesto', presupuesto],
+    ['cliente', cliente],
+    ['persona_contacto', personaContacto],
+    ['direccion_preventivo', direccionPreventivo],
+    ['bombero', bombero],
+    ['fecha_ejercicio', exerciseDate],
+    ['turno', turno],
+    ['partes_trabajo', partesTrabajo],
+    ['asistencias_sanitarias', asistenciasSanitarias],
+    ['observaciones', observaciones],
+    ['responsable', responsable],
+  ];
+
+  if (availableCreatorColumns.has('created_by_user_id')) {
+    columnValues.push(['created_by_user_id', forceNullUserId ? null : actorId]);
+  }
+
+  if (availableCreatorColumns.has('created_by_actor_id')) {
+    columnValues.push(['created_by_actor_id', actorId]);
+  }
+
+  if (availableCreatorColumns.has('created_by_trainer_id')) {
+    columnValues.push(['created_by_trainer_id', isTrainer ? actorId : null]);
+  }
+
+  if (availableCreatorColumns.has('created_by_bombero_id')) {
+    columnValues.push(['created_by_bombero_id', isFirefighter ? actorId : null]);
+  }
+
+  if (availableCreatorColumns.has('created_by_firefighter_id')) {
+    columnValues.push(['created_by_firefighter_id', isFirefighter ? actorId : null]);
+  }
+
+  const columnsSql = columnValues.map(([column]) => `"${column}"`).join(', ');
+  const placeholdersSql = columnValues.map((_, index) => `$${index + 1}`).join(', ');
+  const values = columnValues.map(([, value]) => value);
+
+  const sql = `INSERT INTO actuaciones_preventivos (${columnsSql}) VALUES (${placeholdersSql})`;
+  await prisma.$executeRawUnsafe(sql, ...values);
 }
 
 export const handler = createHttpHandler<Body>(async (request) => {
@@ -81,37 +200,48 @@ export const handler = createHttpHandler<Body>(async (request) => {
   }
 
   try {
-    const createdByUserId = asOptionalUuid(auth.user.id);
-    await prisma.$executeRaw`
-      INSERT INTO actuaciones_preventivos (
+    const actorId = asOptionalUuid(auth.user.id);
+
+    try {
+      await insertActuacionPreventiva({
         presupuesto,
         cliente,
-        persona_contacto,
-        direccion_preventivo,
+        personaContacto,
+        direccionPreventivo,
         bombero,
-        fecha_ejercicio,
+        exerciseDate,
         turno,
-        partes_trabajo,
-        asistencias_sanitarias,
+        partesTrabajo,
+        asistenciasSanitarias,
         observaciones,
         responsable,
-        created_by_user_id
-      )
-      VALUES (
-        ${presupuesto},
-        ${cliente},
-        ${personaContacto},
-        ${direccionPreventivo},
-        ${bombero},
-        ${exerciseDate},
-        ${turno},
-        ${partesTrabajo},
-        ${asistenciasSanitarias},
-        ${observaciones},
-        ${responsable},
-        ${createdByUserId}
-      )
-    `;
+        role: auth.user.role,
+        actorId,
+      });
+    } catch (error) {
+      const prismaErrorCode = (error as { code?: string } | null)?.code;
+      if (prismaErrorCode === '23503' && actorId) {
+        await insertActuacionPreventiva({
+          presupuesto,
+          cliente,
+          personaContacto,
+          direccionPreventivo,
+          bombero,
+          exerciseDate,
+          turno,
+          partesTrabajo,
+          asistenciasSanitarias,
+          observaciones,
+          responsable,
+          role: auth.user.role,
+          actorId,
+          forceNullUserId: true,
+        });
+      } else {
+        throw error;
+      }
+    }
+
     return successResponse({ message: 'Actuación preventiva guardada correctamente.' }, 201);
   } catch (error) {
     console.error('[actuaciones-preventivos] Error al guardar informe', error);
