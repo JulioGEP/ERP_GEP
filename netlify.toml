@@ -5,6 +5,11 @@
 [build.environment]
   NODE_VERSION = "22"
   NPM_FLAGS = "--no-audit --fund=false --progress=false --prefer-offline"
+  # Evita que extensiones de Netlify instaladas desde la UI bloqueen el deploy
+  # si su paquete remoto no resuelve DNS (p.ej. error ENOTFOUND en *.netlify.app).
+  # Si Netlify ignora esta variable en tu plan/runtime, hay que desactivar la
+  # extensión "neon" en la UI del sitio.
+  NETLIFY_SKIP_EXTENSIONS = "true"
   # Aumentamos el timeout de bloqueo para Prisma en builds de Netlify; el pooler de Neon
   # puede tardar más de 10s en dar el advisory lock y fallaba el deploy (P1002).
   PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT = "60000"
