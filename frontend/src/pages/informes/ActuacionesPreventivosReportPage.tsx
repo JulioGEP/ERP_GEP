@@ -5,11 +5,13 @@ type ReportPrefillResponse = {
   deal?: {
     cliente?: string;
     contacto?: string;
+    direccion?: string;
     sessions?: Array<{ direccion?: string }>;
     sesiones?: Array<{ direccion?: string }>;
   };
   cliente?: string;
   contacto?: string;
+  direccion?: string;
   sessions?: Array<{ direccion?: string }>;
   sesiones?: Array<{ direccion?: string }>;
   error?: string;
@@ -49,12 +51,10 @@ const INITIAL_STATE: FormState = {
   responsable: '',
 };
 
-function resolveFirstSessionAddress(payload: ReportPrefillResponse): string {
-  const sessions =
-    payload.deal?.sessions ?? payload.deal?.sesiones ?? payload.sessions ?? payload.sesiones ?? [];
-  if (!Array.isArray(sessions) || sessions.length === 0) return '';
-  const first = sessions.find((session) => typeof session?.direccion === 'string' && session.direccion.trim());
-  return first?.direccion?.trim() ?? '';
+function resolveDealAddress(payload: ReportPrefillResponse): string {
+  const source = payload.deal ?? payload;
+  if (typeof source?.direccion !== 'string') return '';
+  return source.direccion.trim();
 }
 
 export default function ActuacionesPreventivosReportPage() {
@@ -105,7 +105,7 @@ export default function ActuacionesPreventivosReportPage() {
           typeof source?.contacto === 'string' && source.contacto.trim()
             ? source.contacto.trim()
             : current.personaContacto,
-        direccionPreventivo: resolveFirstSessionAddress(payload) || current.direccionPreventivo,
+        direccionPreventivo: resolveDealAddress(payload) || current.direccionPreventivo,
       }));
     } catch (error) {
       const text = error instanceof Error ? error.message : 'Error inesperado al buscar presupuesto.';
