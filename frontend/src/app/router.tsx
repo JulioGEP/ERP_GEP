@@ -122,6 +122,9 @@ const NominasFijosDiscontinuosPage = lazy(
 );
 const SlackPage = lazy(() => import('../pages/recursos/SlackPage'));
 const ReporteNominasPage = lazy(() => import('../pages/reporting/ReporteNominasPage'));
+const ActuacionesPreventivosDashboardPage = lazy(
+  () => import('../pages/reporting/ActuacionesPreventivosDashboardPage'),
+);
 
 type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
@@ -777,6 +780,17 @@ export function AppRouter({
               path="/reporting/reporte_nominas"
               roles={['Admin']}
               element={<ReporteNominasPage />}
+            />
+          }
+        />
+
+        <Route
+          path="/reporting/actuaciones_preventivos"
+          element={
+            <GuardedRoute
+              path="/reporting/actuaciones_preventivos"
+              roles={['Admin']}
+              element={<ActuacionesPreventivosDashboardPage />}
             />
           }
         />
