@@ -188,11 +188,6 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Informes/Preventivo', label: 'Preventivo', path: '/informes/preventivo' },
       { key: 'Informes/Simulacro', label: 'Simulacro', path: '/informes/simulacro' },
       {
-        key: 'Informes/ActuacionesPreventivos',
-        label: 'Actuaciones Preventivos',
-        path: '/informes/actuaciones_preventivos',
-      },
-      {
         key: 'Informes/RecursoPreventivoEbro',
         label: 'Recurso Preventivo EBRO',
         path: '/informes/recurso_preventivo_ebro',
@@ -238,11 +233,6 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         key: 'Reporting/Comparativa',
         label: 'Comparativa Formaciones y Servicios',
         path: '/reporting/comparativa',
-      },
-      {
-        key: 'Reporting/ActuacionesPreventivos',
-        label: 'Dashboard Actuaciones Preventivos',
-        path: '/reporting/actuaciones_preventivos',
       },
     ],
   },
