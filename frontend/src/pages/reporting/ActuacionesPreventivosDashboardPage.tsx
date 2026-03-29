@@ -306,66 +306,6 @@ export default function ActuacionesPreventivosDashboardPage() {
       <Card className="shadow-sm">
         <Card.Header as="h2" className="h5 mb-0">Evolución mensual (según filtro de semana)</Card.Header>
         <Card.Body className="d-grid gap-4">
-          <Row className="g-3">
-            <Col xs={12} md={4}>
-              <Form.Group controlId="selectedWeekOfMonth">
-                <Form.Label>Semana del mes</Form.Label>
-                <Form.Select
-                  value={selectedWeekOfMonth}
-                  onChange={(event) => setSelectedWeekOfMonth(Number(event.target.value))}
-                >
-                  {[1, 2, 3, 4, 5, 6].map((week) => (
-                    <option key={week} value={week}>Semana {week}</option>
-                  ))}
-                </Form.Select>
-              </Form.Group>
-            </Col>
-          </Row>
-
-          {informesQuery.isLoading ? (
-            <div className="d-flex justify-content-center py-4">
-              <Spinner animation="border" role="status" />
-            </div>
-          ) : (
-            <div className="table-responsive">
-              <Table bordered size="sm" className="align-middle mb-0">
-                <thead>
-                  <tr>
-                    <th>Mes</th>
-                    <th>Partes</th>
-                    <th>Asistencias</th>
-                    <th>Visual</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lineChartData.map((row) => {
-                    const partesWidth = maxLineValue ? (row.partes / maxLineValue) * 100 : 0;
-                    const asistenciasWidth = maxLineValue ? (row.asistencias / maxLineValue) * 100 : 0;
-                    return (
-                      <tr key={row.month}>
-                        <td>{row.month}</td>
-                        <td>{row.partes}</td>
-                        <td>{row.asistencias}</td>
-                        <td style={{ minWidth: 220 }}>
-                          <div className="d-grid gap-1">
-                            <div className="d-flex align-items-center gap-2">
-                              <small className="text-primary fw-semibold" style={{ width: 72 }}>Partes</small>
-                              <div className="bg-primary rounded" style={{ height: 8, width: `${partesWidth}%`, minWidth: partesWidth > 0 ? 4 : 0 }} />
-                            </div>
-                            <div className="d-flex align-items-center gap-2">
-                              <small className="text-danger fw-semibold" style={{ width: 72 }}>Asistencias</small>
-                              <div className="bg-danger rounded" style={{ height: 8, width: `${asistenciasWidth}%`, minWidth: asistenciasWidth > 0 ? 4 : 0 }} />
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </Table>
-            </div>
-          )}
-
           <div>
             <h3 className="h6 mb-2">Detalle de la semana seleccionada</h3>
             <Row className="g-3 mb-2">
@@ -461,6 +401,69 @@ export default function ActuacionesPreventivosDashboardPage() {
                         })}
                       </tr>
                     ))}
+                  </tbody>
+                </Table>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h3 className="h6 mb-2">Evolución mensual (según filtro de semana)</h3>
+            <Row className="g-3 mb-2">
+              <Col xs={12} md={4}>
+                <Form.Group controlId="selectedWeekOfMonth">
+                  <Form.Label>Semana del mes</Form.Label>
+                  <Form.Select
+                    value={selectedWeekOfMonth}
+                    onChange={(event) => setSelectedWeekOfMonth(Number(event.target.value))}
+                  >
+                    {[1, 2, 3, 4, 5, 6].map((week) => (
+                      <option key={week} value={week}>Semana {week}</option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+            </Row>
+
+            {informesQuery.isLoading ? (
+              <div className="d-flex justify-content-center py-4">
+                <Spinner animation="border" role="status" />
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <Table bordered size="sm" className="align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>Mes</th>
+                      <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Partes</th>
+                      <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Asistencias</th>
+                      <th>Visual</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lineChartData.map((row) => {
+                      const partesWidth = maxLineValue ? (row.partes / maxLineValue) * 100 : 0;
+                      const asistenciasWidth = maxLineValue ? (row.asistencias / maxLineValue) * 100 : 0;
+                      return (
+                        <tr key={row.month}>
+                          <td>{row.month}</td>
+                          <td className="text-end" style={{ whiteSpace: 'nowrap' }}>{row.partes}</td>
+                          <td className="text-end" style={{ whiteSpace: 'nowrap' }}>{row.asistencias}</td>
+                          <td style={{ minWidth: 220 }}>
+                            <div className="d-grid gap-1">
+                              <div className="d-flex align-items-center gap-2">
+                                <small className="text-primary fw-semibold" style={{ whiteSpace: 'nowrap' }}>Partes</small>
+                                <div className="bg-primary rounded" style={{ height: 8, width: `${partesWidth}%`, minWidth: partesWidth > 0 ? 4 : 0 }} />
+                              </div>
+                              <div className="d-flex align-items-center gap-2">
+                                <small className="text-danger fw-semibold" style={{ whiteSpace: 'nowrap' }}>Asistencias</small>
+                                <div className="bg-danger rounded" style={{ height: 8, width: `${asistenciasWidth}%`, minWidth: asistenciasWidth > 0 ? 4 : 0 }} />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </Table>
               </div>
