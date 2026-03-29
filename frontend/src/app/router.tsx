@@ -71,9 +71,6 @@ const RecursosFormacionAbiertaPage = lazy(() => import('../pages/recursos/Formac
 const InformesFormacionPage = lazy(() => import('../pages/informes/FormacionReportPage'));
 const InformesPreventivoPage = lazy(() => import('../pages/informes/PreventivoReportPage'));
 const InformesSimulacroPage = lazy(() => import('../pages/informes/SimulacroReportPage'));
-const InformesActuacionesPreventivosPage = lazy(
-  () => import('../pages/informes/ActuacionesPreventivosReportPage'),
-);
 const InformesRecursoPreventivoEbroPage = lazy(
   () => import('../pages/informes/RecursoPreventivoEbroReportPage'),
 );
@@ -122,9 +119,6 @@ const NominasFijosDiscontinuosPage = lazy(
 );
 const SlackPage = lazy(() => import('../pages/recursos/SlackPage'));
 const ReporteNominasPage = lazy(() => import('../pages/reporting/ReporteNominasPage'));
-const ActuacionesPreventivosDashboardPage = lazy(
-  () => import('../pages/reporting/ActuacionesPreventivosDashboardPage'),
-);
 
 type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
@@ -510,15 +504,6 @@ export function AppRouter({
           element={<GuardedRoute path="/informes/simulacro" element={<InformesSimulacroPage />} />}
         />
         <Route
-          path="/informes/actuaciones_preventivos"
-          element={
-            <GuardedRoute
-              path="/informes/actuaciones_preventivos"
-              element={<InformesActuacionesPreventivosPage />}
-            />
-          }
-        />
-        <Route
           path="/informes/recurso_preventivo_ebro"
           element={
             <GuardedRoute
@@ -780,17 +765,6 @@ export function AppRouter({
               path="/reporting/reporte_nominas"
               roles={['Admin']}
               element={<ReporteNominasPage />}
-            />
-          }
-        />
-
-        <Route
-          path="/reporting/actuaciones_preventivos"
-          element={
-            <GuardedRoute
-              path="/reporting/actuaciones_preventivos"
-              roles={['Admin']}
-              element={<ActuacionesPreventivosDashboardPage />}
             />
           }
         />

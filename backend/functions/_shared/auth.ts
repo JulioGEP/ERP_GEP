@@ -18,7 +18,6 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/presupuestos/*',
     '/calendario/*',
     '/informes/listado',
-    '/informes/actuaciones_preventivos',
     '/materiales/*',
   ],
   Administracion: [
@@ -149,7 +148,6 @@ export const DEFAULT_ROUTE_ORDER = [
   '/calendario/por_formador',
   '/calendario/por_unidad_movil',
   '/informes/listado',
-  '/informes/actuaciones_preventivos',
   '/informes/formacion',
   '/informes/preventivo',
   '/informes/simulacro',
