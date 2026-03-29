@@ -253,6 +253,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     children: [
       { key: 'Usuarios/Principal', label: 'Gestión de usuarios', path: '/usuarios' },
       { key: 'Usuarios/Formadores', label: 'Formadores / Bomberos', path: '/usuarios/formadores_bomberos' },
+      { key: 'Usuarios/Planificacion', label: 'Planificación de turnos', path: '/usuarios/planificacion' },
       { key: 'Usuarios/Vacaciones', label: 'Vacaciones', path: '/usuarios/vacaciones' },
       {
         key: 'Usuarios/CostesExtra',

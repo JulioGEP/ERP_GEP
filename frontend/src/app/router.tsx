@@ -103,6 +103,7 @@ const TrainerReportsRecursoPreventivoEbroPage = lazy(
   () => import('../pages/usuarios/trainer/informes/TrainerReportsRecursoPreventivoEbroPage'),
 );
 const UsersVacationsPage = lazy(() => import('../pages/usuarios/UsersVacationsPage'));
+const UsersPlanningPage = lazy(() => import('../pages/usuarios/UsersPlanningPage'));
 const ProfilePage = lazy(() => import('../pages/perfil/ProfilePage'));
 const ControlHorasPage = lazy(() => import('../pages/perfil/ControlHorasPage'));
 const ControlHorarioUserPage = lazy(() => import('../pages/controlHorario/ControlHorarioPage'));
@@ -667,6 +668,11 @@ export function AppRouter({
               element={<NominasFijosDiscontinuosPage />}
             />
           }
+        />
+
+        <Route
+          path="/usuarios/planificacion"
+          element={<GuardedRoute path="/usuarios/planificacion" element={<UsersPlanningPage />} />}
         />
 
         <Route
