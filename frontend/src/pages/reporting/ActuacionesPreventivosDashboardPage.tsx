@@ -17,6 +17,22 @@ type KpiRow = {
   promedioActividadDiaria: number;
 };
 
+const WEEK_DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'] as const;
+const MONTH_LABELS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'] as const;
+
+type LineChartPoint = {
+  month: string;
+  partes: number;
+  asistencias: number;
+};
+
+type WeekDayDetail = {
+  day: (typeof WEEK_DAYS)[number];
+  actividad: number;
+  partes: number;
+  asistencias: number;
+};
+
 function toDateOnly(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
@@ -46,6 +62,14 @@ function endOfIsoWeek(date: Date): Date {
 function parseDateSafe(value: string): Date | null {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function toDayIndex(date: Date): number {
+  return date.getDay() === 0 ? 6 : date.getDay() - 1;
+}
+
+function getWeekOfMonth(date: Date): number {
+  return Math.floor((date.getDate() - 1) / 7) + 1;
 }
 
 function formatDateDisplay(value: string): string {
@@ -129,6 +153,9 @@ export default function ActuacionesPreventivosDashboardPage() {
   const [granularity, setGranularity] = useState<Granularity>('mes');
   const [startDate, setStartDate] = useState<string>(() => formatDateInput(new Date(today.getFullYear(), today.getMonth(), 1)));
   const [endDate, setEndDate] = useState<string>(() => formatDateInput(new Date(today.getFullYear(), today.getMonth() + 1, 0)));
+  const [selectedWeekOfMonth, setSelectedWeekOfMonth] = useState<number>(1);
+  const [selectedWeekKey, setSelectedWeekKey] = useState<string>('');
+  const [heatMapMonth, setHeatMapMonth] = useState<number>(0);
 
   const informesQuery = useQuery({
     queryKey: ['reporting', 'actuaciones-preventivos', startDate, endDate],
@@ -155,6 +182,87 @@ export default function ActuacionesPreventivosDashboardPage() {
       { partes: 0, asistencias: 0 },
     );
   }, [informes]);
+
+  const lineChartData = useMemo<LineChartPoint[]>(() => {
+    const grouped = new Map<number, { partes: number; asistencias: number }>();
+    for (let month = 0; month < 12; month += 1) {
+      grouped.set(month, { partes: 0, asistencias: 0 });
+    }
+
+    for (const informe of informes) {
+      const date = parseDateSafe(informe.fechaEjercicio);
+      if (!date || getWeekOfMonth(date) !== selectedWeekOfMonth) continue;
+      const current = grouped.get(date.getMonth());
+      if (!current) continue;
+      current.partes += informe.partesTrabajo;
+      current.asistencias += informe.asistenciasSanitarias;
+    }
+
+    return MONTH_LABELS.map((month, index) => ({
+      month,
+      partes: grouped.get(index)?.partes ?? 0,
+      asistencias: grouped.get(index)?.asistencias ?? 0,
+    }));
+  }, [informes, selectedWeekOfMonth]);
+
+  const weekOptions = useMemo(() => {
+    const weeks = new Set<string>();
+    for (const informe of informes) {
+      const date = parseDateSafe(informe.fechaEjercicio);
+      if (!date) continue;
+      const week = getIsoWeek(date);
+      weeks.add(`${week.year}-W${String(week.week).padStart(2, '0')}`);
+    }
+    return Array.from(weeks).sort();
+  }, [informes]);
+
+  const activeWeekKey = useMemo(() => {
+    if (selectedWeekKey && weekOptions.includes(selectedWeekKey)) return selectedWeekKey;
+    return weekOptions[0] ?? '';
+  }, [selectedWeekKey, weekOptions]);
+
+  const selectedWeekDetails = useMemo<WeekDayDetail[]>(() => {
+    const byDay = WEEK_DAYS.map((day) => ({ day, actividad: 0, partes: 0, asistencias: 0 }));
+    if (!activeWeekKey) return byDay;
+
+    for (const informe of informes) {
+      const date = parseDateSafe(informe.fechaEjercicio);
+      if (!date) continue;
+      const week = getIsoWeek(date);
+      const key = `${week.year}-W${String(week.week).padStart(2, '0')}`;
+      if (key !== activeWeekKey) continue;
+      const dayIndex = toDayIndex(date);
+      byDay[dayIndex].partes += informe.partesTrabajo;
+      byDay[dayIndex].asistencias += informe.asistenciasSanitarias;
+      byDay[dayIndex].actividad += informe.partesTrabajo + informe.asistenciasSanitarias;
+    }
+    return byDay;
+  }, [activeWeekKey, informes]);
+
+  const heatMapRows = useMemo(() => {
+    const grouped = new Map<number, number[]>();
+    for (const informe of informes) {
+      const date = parseDateSafe(informe.fechaEjercicio);
+      if (!date) continue;
+      if (heatMapMonth !== 0 && date.getMonth() + 1 !== heatMapMonth) continue;
+      const weekNumber = getIsoWeek(date).week;
+      const current = grouped.get(weekNumber) ?? Array(7).fill(0);
+      current[toDayIndex(date)] += informe.partesTrabajo + informe.asistenciasSanitarias;
+      grouped.set(weekNumber, current);
+    }
+
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([week, values]) => ({ week, values }));
+  }, [heatMapMonth, informes]);
+
+  const maxHeatValue = useMemo(() => {
+    return heatMapRows.reduce((max, row) => Math.max(max, ...row.values), 0);
+  }, [heatMapRows]);
+
+  const maxLineValue = useMemo(() => {
+    return lineChartData.reduce((max, row) => Math.max(max, row.partes, row.asistencias), 0);
+  }, [lineChartData]);
 
   return (
     <section className="py-3 d-grid gap-3">
@@ -192,6 +300,172 @@ export default function ActuacionesPreventivosDashboardPage() {
               </div>
             </Col>
           </Row>
+        </Card.Body>
+      </Card>
+
+      <Card className="shadow-sm">
+        <Card.Header as="h2" className="h5 mb-0">Evolución mensual (según filtro de semana)</Card.Header>
+        <Card.Body className="d-grid gap-4">
+          <Row className="g-3">
+            <Col xs={12} md={4}>
+              <Form.Group controlId="selectedWeekOfMonth">
+                <Form.Label>Semana del mes</Form.Label>
+                <Form.Select
+                  value={selectedWeekOfMonth}
+                  onChange={(event) => setSelectedWeekOfMonth(Number(event.target.value))}
+                >
+                  {[1, 2, 3, 4, 5, 6].map((week) => (
+                    <option key={week} value={week}>Semana {week}</option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+            </Col>
+          </Row>
+
+          {informesQuery.isLoading ? (
+            <div className="d-flex justify-content-center py-4">
+              <Spinner animation="border" role="status" />
+            </div>
+          ) : (
+            <div className="table-responsive">
+              <Table bordered size="sm" className="align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Mes</th>
+                    <th>Partes</th>
+                    <th>Asistencias</th>
+                    <th>Visual</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lineChartData.map((row) => {
+                    const partesWidth = maxLineValue ? (row.partes / maxLineValue) * 100 : 0;
+                    const asistenciasWidth = maxLineValue ? (row.asistencias / maxLineValue) * 100 : 0;
+                    return (
+                      <tr key={row.month}>
+                        <td>{row.month}</td>
+                        <td>{row.partes}</td>
+                        <td>{row.asistencias}</td>
+                        <td style={{ minWidth: 220 }}>
+                          <div className="d-grid gap-1">
+                            <div className="d-flex align-items-center gap-2">
+                              <small className="text-primary fw-semibold" style={{ width: 72 }}>Partes</small>
+                              <div className="bg-primary rounded" style={{ height: 8, width: `${partesWidth}%`, minWidth: partesWidth > 0 ? 4 : 0 }} />
+                            </div>
+                            <div className="d-flex align-items-center gap-2">
+                              <small className="text-danger fw-semibold" style={{ width: 72 }}>Asistencias</small>
+                              <div className="bg-danger rounded" style={{ height: 8, width: `${asistenciasWidth}%`, minWidth: asistenciasWidth > 0 ? 4 : 0 }} />
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Table>
+            </div>
+          )}
+
+          <div>
+            <h3 className="h6 mb-2">Detalle de la semana seleccionada</h3>
+            <Row className="g-3 mb-2">
+              <Col xs={12} md={4}>
+                <Form.Group controlId="selectedIsoWeek">
+                  <Form.Label>Semana ISO</Form.Label>
+                  <Form.Select
+                    value={activeWeekKey}
+                    onChange={(event) => setSelectedWeekKey(event.target.value)}
+                    disabled={weekOptions.length === 0}
+                  >
+                    {weekOptions.length === 0 ? (
+                      <option value="">Sin semanas disponibles</option>
+                    ) : (
+                      weekOptions.map((week) => (
+                        <option key={week} value={week}>{week}</option>
+                      ))
+                    )}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+            </Row>
+            <div className="table-responsive">
+              <Table striped bordered size="sm" className="align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Día</th>
+                    <th>Actividad</th>
+                    <th>Partes</th>
+                    <th>Asistencias</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedWeekDetails.map((row) => (
+                    <tr key={row.day}>
+                      <td>{row.day}</td>
+                      <td>{row.actividad}</td>
+                      <td>{row.partes}</td>
+                      <td>{row.asistencias}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="h6 mb-2">Heat Map semanal</h3>
+            <Row className="g-3 mb-2">
+              <Col xs={12} md={4}>
+                <Form.Group controlId="heatMapMonth">
+                  <Form.Label>Filtro por mes</Form.Label>
+                  <Form.Select
+                    value={heatMapMonth}
+                    onChange={(event) => setHeatMapMonth(Number(event.target.value))}
+                  >
+                    <option value={0}>Mes = 0 (visión total)</option>
+                    {MONTH_LABELS.map((month, index) => (
+                      <option key={month} value={index + 1}>{month}</option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+            </Row>
+            {heatMapRows.length === 0 ? (
+              <Alert variant="info" className="mb-0">No hay datos para construir el heat map semanal.</Alert>
+            ) : (
+              <div className="table-responsive">
+                <Table bordered size="sm" className="align-middle mb-0 text-end">
+                  <thead>
+                    <tr>
+                      <th className="text-start">Semana</th>
+                      {WEEK_DAYS.map((day) => (
+                        <th key={day}>{day}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {heatMapRows.map((row) => (
+                      <tr key={row.week}>
+                        <td className="text-start fw-semibold">{row.week}</td>
+                        {row.values.map((value, index) => {
+                          const intensity = maxHeatValue ? value / maxHeatValue : 0;
+                          const alpha = value === 0 ? 0.05 : Math.max(0.15, intensity);
+                          return (
+                            <td
+                              key={`${row.week}-${WEEK_DAYS[index]}`}
+                              style={{ backgroundColor: `rgba(220, 53, 69, ${alpha})` }}
+                            >
+                              {value}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
+            )}
+          </div>
         </Card.Body>
       </Card>
 
