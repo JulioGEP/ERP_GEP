@@ -156,7 +156,7 @@ export default function ActuacionesPreventivosDashboardPage() {
   const [startDate, setStartDate] = useState<string>(() => formatDateInput(new Date(today.getFullYear(), today.getMonth(), 1)));
   const [endDate, setEndDate] = useState<string>(() => formatDateInput(new Date(today.getFullYear(), today.getMonth() + 1, 0)));
   const [selectedWeekOfMonth, setSelectedWeekOfMonth] = useState<string>(ACCUMULATED_WEEK_KEY);
-  const [selectedWeekKey, setSelectedWeekKey] = useState<string>('');
+  const [selectedWeekKey, setSelectedWeekKey] = useState<string>(ACCUMULATED_WEEK_KEY);
   const [heatMapMonth, setHeatMapMonth] = useState<number>(0);
 
   const informesQuery = useQuery({
