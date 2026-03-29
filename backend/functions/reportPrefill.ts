@@ -218,6 +218,8 @@ export const handler = async (event: any) => {
         cliente: organizationName || '',
         contacto: contacto || '',
         comercial: toStringOrNull(deal.comercial) || '',
+        direccionPreventivo: toStringOrNull(deal.training_address) || '',
+        training_address: toStringOrNull(deal.training_address) || '',
         sesiones: normalizedSessions,
         products: mappedDealProducts,
       },
