@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Alert, Badge, Button, ButtonGroup, Card, Col, Form, Row, Table } from 'react-bootstrap';
+import { fetchUsers, type UserSummary } from '../../api/users';
+import { exportToExcel } from '../../shared/export/exportToExcel';
 
 type TeamCode = 'A' | 'B' | 'C' | 'D' | 'AP';
 type ShiftType = 'ORDINARIO' | 'ESPECIAL';
@@ -40,20 +43,20 @@ const SHIFT_CYCLE: ReadonlyArray<{ morning: TeamCode; night: TeamCode }> = [
 
 function buildDefaultFirefighters(): Firefighter[] {
   return [
-    { code: 'B01', name: 'Bombero 01', team: 'A' },
-    { code: 'B02', name: 'Bombero 02', team: 'A' },
-    { code: 'B03', name: 'Bombero 03', team: 'A' },
-    { code: 'B04', name: 'Bombero 04', team: 'B' },
-    { code: 'B05', name: 'Bombero 05', team: 'B' },
-    { code: 'B06', name: 'Bombero 06', team: 'B' },
-    { code: 'B07', name: 'Bombero 07', team: 'C' },
-    { code: 'B08', name: 'Bombero 08', team: 'C' },
-    { code: 'B09', name: 'Bombero 09', team: 'C' },
-    { code: 'B10', name: 'Bombero 10', team: 'D' },
-    { code: 'B11', name: 'Bombero 11', team: 'D' },
-    { code: 'B12', name: 'Bombero 12', team: 'D' },
-    { code: 'B13', name: 'Bombero 13', team: 'AP' },
-    { code: 'B14', name: 'Bombero 14', team: 'AP' },
+    { code: 'B01', name: '', team: 'A' },
+    { code: 'B02', name: '', team: 'A' },
+    { code: 'B03', name: '', team: 'A' },
+    { code: 'B04', name: '', team: 'B' },
+    { code: 'B05', name: '', team: 'B' },
+    { code: 'B06', name: '', team: 'B' },
+    { code: 'B07', name: '', team: 'C' },
+    { code: 'B08', name: '', team: 'C' },
+    { code: 'B09', name: '', team: 'C' },
+    { code: 'B10', name: '', team: 'D' },
+    { code: 'B11', name: '', team: 'D' },
+    { code: 'B12', name: '', team: 'D' },
+    { code: 'B13', name: '', team: 'AP' },
+    { code: 'B14', name: '', team: 'AP' },
   ];
 }
 
@@ -83,6 +86,18 @@ function getStatus(totalHours: number): YearSummaryRow['status'] {
 export default function UsersPlanningPage() {
   const [firefighters, setFirefighters] = useState<Firefighter[]>(() => buildDefaultFirefighters());
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<number>(new Date().getMonth());
+  const trainersQuery = useQuery({
+    queryKey: ['users', 'planning', 'active-trainers'],
+    queryFn: async () => {
+      const response = await fetchUsers({
+        includeTrainers: true,
+        status: 'active',
+        pageSize: 500,
+      });
+      return response.users.filter((user) => user.role === 'Formador');
+    },
+  });
+  const activeTrainers = trainersQuery.data ?? [];
 
   const planningDays = useMemo(() => {
     const now = new Date();
@@ -170,6 +185,31 @@ export default function UsersPlanningPage() {
     setFirefighters((previous) => previous.map((ff) => (ff.code === code ? { ...ff, team } : ff)));
   };
 
+  const allFirefightersAssigned = useMemo(
+    () => firefighters.every((firefighter) => firefighter.name.trim().length > 0),
+    [firefighters],
+  );
+
+  const handleDownloadExcel = () => {
+    if (!allFirefightersAssigned) return;
+
+    const rows: Array<Array<string | number>> = [
+      ['Código', 'Nombre', 'Equipo', 'Horas estimadas', 'Estado'],
+      ...yearlySummary.map((row) => [row.firefighterCode, row.firefighterName, row.team, row.totalHours, row.status]),
+    ];
+
+    exportToExcel({
+      rows,
+      fileName: `planificacion-bomberos-${new Date().getFullYear()}.xlsx`,
+      sheetName: 'Planificación',
+      auditEvent: {
+        action: 'users_planning_excel_download',
+        entityType: 'planning',
+        details: { firefighters: yearlySummary.length },
+      },
+    });
+  };
+
   return (
     <div className="d-flex flex-column gap-3">
       <Card>
@@ -202,11 +242,20 @@ export default function UsersPlanningPage() {
                       </div>
                       <Form.Group>
                         <Form.Label className="small text-muted mb-1">Nombre</Form.Label>
-                        <Form.Control
+                        <Form.Select
                           value={firefighter.name}
                           onChange={(event) => handleNameChange(firefighter.code, event.target.value)}
-                          placeholder={`Nombre de ${firefighter.code}`}
-                        />
+                        >
+                          <option value="">Selecciona formador activo</option>
+                          {activeTrainers.map((trainer: UserSummary) => {
+                            const fullName = `${trainer.firstName} ${trainer.lastName}`.trim();
+                            return (
+                              <option key={trainer.id} value={fullName}>
+                                {fullName}
+                              </option>
+                            );
+                          })}
+                        </Form.Select>
                       </Form.Group>
                       <Form.Group>
                         <Form.Label className="small text-muted mb-1">Equipo</Form.Label>
@@ -341,6 +390,11 @@ export default function UsersPlanningPage() {
               ))}
             </tbody>
           </Table>
+          <div className="d-flex justify-content-end mt-3">
+            <Button variant="success" onClick={handleDownloadExcel} disabled={!allFirefightersAssigned}>
+              Descargar Excel
+            </Button>
+          </div>
         </Card.Body>
       </Card>
     </div>
