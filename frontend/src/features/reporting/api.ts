@@ -1494,3 +1494,80 @@ export type SlackDailyTrainersResponse = {
 export async function sendDailyTrainersSlackMessage(): Promise<SlackDailyTrainersResponse> {
   return getJson<SlackDailyTrainersResponse>('/daily-trainers-slack?force=true');
 }
+
+export type ActuacionesPreventivosInforme = {
+  id: string;
+  dealId: string;
+  cliente: string | null;
+  personaContacto: string | null;
+  direccionPreventivo: string | null;
+  bombero: string | null;
+  fechaEjercicio: string;
+  turno: string | null;
+  partesTrabajo: number;
+  asistenciasSanitarias: number;
+  observaciones: string | null;
+  responsable: string | null;
+  createdByUserId: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export type ActuacionesPreventivosFilters = {
+  startDate?: string;
+  endDate?: string;
+};
+
+export async function fetchActuacionesPreventivosInformes(
+  filters: ActuacionesPreventivosFilters = {}
+): Promise<ActuacionesPreventivosInforme[]> {
+  const params = new URLSearchParams();
+  if (filters.startDate) {
+    params.set('startDate', filters.startDate);
+  }
+  if (filters.endDate) {
+    params.set('endDate', filters.endDate);
+  }
+
+  const query = params.toString();
+  const url = query.length
+    ? `/actuaciones-preventivos?${query}`
+    : '/actuaciones-preventivos';
+
+  const response = await getJson<{ informes?: unknown }>(url);
+  if (!Array.isArray(response?.informes)) {
+    return [];
+  }
+
+  return response.informes
+    .map((entry): ActuacionesPreventivosInforme | null => {
+      if (!entry || typeof entry !== 'object') return null;
+      const raw = entry as Record<string, unknown>;
+
+      const id = sanitizeText(raw.id);
+      const dealId = sanitizeText(raw.deal_id);
+      const fechaEjercicio = sanitizeDate(raw.fecha_ejercicio);
+      if (!id || !dealId || !fechaEjercicio) {
+        return null;
+      }
+
+      return {
+        id,
+        dealId,
+        cliente: sanitizeText(raw.cliente),
+        personaContacto: sanitizeText(raw.persona_contacto),
+        direccionPreventivo: sanitizeText(raw.direccion_preventivo),
+        bombero: sanitizeText(raw.bombero),
+        fechaEjercicio,
+        turno: sanitizeText(raw.turno),
+        partesTrabajo: sanitizeInteger(raw.partes_trabajo) ?? 0,
+        asistenciasSanitarias: sanitizeInteger(raw.asistencias_sanitarias) ?? 0,
+        observaciones: sanitizeText(raw.observaciones),
+        responsable: sanitizeText(raw.responsable),
+        createdByUserId: sanitizeText(raw.created_by_user_id),
+        createdAt: sanitizeDate(raw.created_at),
+        updatedAt: sanitizeDate(raw.updated_at),
+      };
+    })
+    .filter((entry): entry is ActuacionesPreventivosInforme => entry !== null);
+}
