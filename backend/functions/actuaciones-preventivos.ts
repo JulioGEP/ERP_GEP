@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-
 import { requireAuth } from './_shared/auth';
 import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
@@ -69,7 +67,6 @@ export const handler = createHttpHandler<any>(async (request) => {
   const record: any = await prisma.$queryRawUnsafe(
     `
       INSERT INTO actuaciones_preventivos_informes (
-        id,
         deal_id,
         cliente,
         persona_contacto,
@@ -83,7 +80,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         responsable,
         created_by_user_id
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
       )
       RETURNING
         id,
@@ -102,7 +99,6 @@ export const handler = createHttpHandler<any>(async (request) => {
         created_at,
         updated_at
     `,
-    randomUUID(),
     dealId,
     trimToNull(body.cliente),
     trimToNull(body.personaContacto),
