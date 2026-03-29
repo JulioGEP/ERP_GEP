@@ -298,9 +298,9 @@ export default function ActuacionesPreventivosDashboardPage() {
             </Col>
             <Col xs={12} lg={3}>
               <div className="d-flex flex-wrap gap-2">
-                <Badge bg="primary">Informes: {informes.length}</Badge>
-                <Badge bg="secondary">Partes: {totals.partes}</Badge>
-                <Badge bg="secondary">Asistencias: {totals.asistencias}</Badge>
+                <Badge bg="success">Informes: {informes.length}</Badge>
+                <Badge bg="primary">Partes: {totals.partes}</Badge>
+                <Badge bg="danger">Asistencias: {totals.asistencias}</Badge>
               </div>
             </Col>
           </Row>
