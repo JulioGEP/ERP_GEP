@@ -25,6 +25,56 @@ const parseRequiredDate = (value: unknown): Date | null => {
 };
 
 export const handler = createHttpHandler<any>(async (request) => {
+  if (request.method === 'GET') {
+    const prisma = getPrisma();
+    const auth = await requireAuth(request, prisma);
+    if ('error' in auth) {
+      return auth.error;
+    }
+
+    const startDateParam = request.queryStringParameters?.startDate;
+    const endDateParam = request.queryStringParameters?.endDate;
+
+    const startDate = startDateParam ? new Date(startDateParam) : null;
+    if (startDateParam && (startDate === null || Number.isNaN(startDate.getTime()))) {
+      return errorResponse('VALIDATION_ERROR', 'El campo startDate no es válido.', 400);
+    }
+
+    const endDate = endDateParam ? new Date(endDateParam) : null;
+    if (endDateParam && (endDate === null || Number.isNaN(endDate.getTime()))) {
+      return errorResponse('VALIDATION_ERROR', 'El campo endDate no es válido.', 400);
+    }
+
+    const records = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `
+        SELECT
+          id,
+          deal_id,
+          cliente,
+          persona_contacto,
+          direccion_preventivo,
+          bombero,
+          fecha_ejercicio,
+          turno,
+          partes_trabajo,
+          asistencias_sanitarias,
+          observaciones,
+          responsable,
+          created_by_user_id,
+          created_at,
+          updated_at
+        FROM actuaciones_preventivos_informes
+        WHERE ($1::timestamptz IS NULL OR fecha_ejercicio >= $1::timestamptz)
+          AND ($2::timestamptz IS NULL OR fecha_ejercicio <= $2::timestamptz)
+        ORDER BY fecha_ejercicio DESC, created_at DESC
+      `,
+      startDate,
+      endDate,
+    );
+
+    return successResponse({ informes: records });
+  }
+
   if (request.method !== 'POST') {
     return METHOD_NOT_ALLOWED;
   }

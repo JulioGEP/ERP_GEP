@@ -113,6 +113,9 @@ const ControlHorarioPage = lazy(() => import('../pages/reporting/ControlHorarioP
 const CostesExtraPage = lazy(() => import('../pages/reporting/CostesExtraPage'));
 const LogsPage = lazy(() => import('../pages/reporting/LogsPage'));
 const ComparativaDashboardPage = lazy(() => import('../pages/reporting/ComparativaDashboardPage'));
+const ActuacionesPreventivosDashboardPage = lazy(
+  () => import('../pages/reporting/ActuacionesPreventivosDashboardPage'),
+);
 const WebhooksPipedrivePage = lazy(() => import('../pages/reporting/WebhooksPipedrivePage'));
 const WoocommerceComprasPage = lazy(() => import('../pages/reporting/WoocommerceComprasPage'));
 const WebhooksLeadFormPage = lazy(() => import('../pages/reporting/WebhooksLeadFormPage'));
@@ -694,6 +697,17 @@ export function AppRouter({
               path="/reporting/comparativa"
               roles={['Admin']}
               element={<ComparativaDashboardPage />}
+            />
+          }
+        />
+
+        <Route
+          path="/reporting/actuaciones_preventivos"
+          element={
+            <GuardedRoute
+              path="/reporting/actuaciones_preventivos"
+              roles={['Admin']}
+              element={<ActuacionesPreventivosDashboardPage />}
             />
           }
         />
