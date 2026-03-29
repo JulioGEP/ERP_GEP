@@ -33,6 +33,8 @@ type WeekDayDetail = {
   asistencias: number;
 };
 
+const ACCUMULATED_WEEK_KEY = '__acumulada__';
+
 function toDateOnly(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
@@ -217,20 +219,21 @@ export default function ActuacionesPreventivosDashboardPage() {
   }, [informes]);
 
   const activeWeekKey = useMemo(() => {
+    if (selectedWeekKey === ACCUMULATED_WEEK_KEY) return ACCUMULATED_WEEK_KEY;
     if (selectedWeekKey && weekOptions.includes(selectedWeekKey)) return selectedWeekKey;
-    return weekOptions[0] ?? '';
+    return weekOptions[0] ?? ACCUMULATED_WEEK_KEY;
   }, [selectedWeekKey, weekOptions]);
 
   const selectedWeekDetails = useMemo<WeekDayDetail[]>(() => {
     const byDay = WEEK_DAYS.map((day) => ({ day, actividad: 0, partes: 0, asistencias: 0 }));
-    if (!activeWeekKey) return byDay;
+    const isAccumulatedWeek = activeWeekKey === ACCUMULATED_WEEK_KEY;
 
     for (const informe of informes) {
       const date = parseDateSafe(informe.fechaEjercicio);
       if (!date) continue;
       const week = getIsoWeek(date);
       const key = `${week.year}-W${String(week.week).padStart(2, '0')}`;
-      if (key !== activeWeekKey) continue;
+      if (!isAccumulatedWeek && key !== activeWeekKey) continue;
       const dayIndex = toDayIndex(date);
       byDay[dayIndex].partes += informe.partesTrabajo;
       byDay[dayIndex].asistencias += informe.asistenciasSanitarias;
@@ -315,10 +318,10 @@ export default function ActuacionesPreventivosDashboardPage() {
                   <Form.Select
                     value={activeWeekKey}
                     onChange={(event) => setSelectedWeekKey(event.target.value)}
-                    disabled={weekOptions.length === 0}
                   >
+                    <option value={ACCUMULATED_WEEK_KEY}>Semana acumulada (todas)</option>
                     {weekOptions.length === 0 ? (
-                      <option value="">Sin semanas disponibles</option>
+                      <option value="" disabled>Sin semanas disponibles</option>
                     ) : (
                       weekOptions.map((week) => (
                         <option key={week} value={week}>{week}</option>
