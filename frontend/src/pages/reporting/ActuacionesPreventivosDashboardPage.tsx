@@ -155,7 +155,7 @@ export default function ActuacionesPreventivosDashboardPage() {
   const [granularity, setGranularity] = useState<Granularity>('mes');
   const [startDate, setStartDate] = useState<string>(() => formatDateInput(new Date(today.getFullYear(), today.getMonth(), 1)));
   const [endDate, setEndDate] = useState<string>(() => formatDateInput(new Date(today.getFullYear(), today.getMonth() + 1, 0)));
-  const [selectedWeekOfMonth, setSelectedWeekOfMonth] = useState<number>(1);
+  const [selectedWeekOfMonth, setSelectedWeekOfMonth] = useState<string>(ACCUMULATED_WEEK_KEY);
   const [selectedWeekKey, setSelectedWeekKey] = useState<string>('');
   const [heatMapMonth, setHeatMapMonth] = useState<number>(0);
 
@@ -193,7 +193,8 @@ export default function ActuacionesPreventivosDashboardPage() {
 
     for (const informe of informes) {
       const date = parseDateSafe(informe.fechaEjercicio);
-      if (!date || getWeekOfMonth(date) !== selectedWeekOfMonth) continue;
+      if (!date) continue;
+      if (selectedWeekOfMonth !== ACCUMULATED_WEEK_KEY && getWeekOfMonth(date).toString() !== selectedWeekOfMonth) continue;
       const current = grouped.get(date.getMonth());
       if (!current) continue;
       current.partes += informe.partesTrabajo;
@@ -418,10 +419,11 @@ export default function ActuacionesPreventivosDashboardPage() {
                   <Form.Label>Semana del mes</Form.Label>
                   <Form.Select
                     value={selectedWeekOfMonth}
-                    onChange={(event) => setSelectedWeekOfMonth(Number(event.target.value))}
+                    onChange={(event) => setSelectedWeekOfMonth(event.target.value)}
                   >
+                    <option value={ACCUMULATED_WEEK_KEY}>Semana acumulada</option>
                     {[1, 2, 3, 4, 5, 6].map((week) => (
-                      <option key={week} value={week}>Semana {week}</option>
+                      <option key={week} value={week.toString()}>Semana {week}</option>
                     ))}
                   </Form.Select>
                 </Form.Group>
