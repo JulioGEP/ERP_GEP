@@ -156,13 +156,23 @@ export default function ActuacionesPreventivosReportPage() {
             </div>
 
             <div className="row g-3">
-              <div className="col-12 col-lg-6">
+              <div className="col-12 col-lg-4">
                 <label className="form-label" htmlFor="cliente">Cliente</label>
                 <input id="cliente" className="form-control" value={form.cliente} readOnly />
               </div>
-              <div className="col-12 col-lg-6">
+              <div className="col-12 col-lg-4">
                 <label className="form-label" htmlFor="persona-contacto">Persona de contacto</label>
                 <input id="persona-contacto" className="form-control" value={form.personaContacto} readOnly />
+              </div>
+              <div className="col-12 col-lg-4">
+                <label className="form-label" htmlFor="responsable">Responsable</label>
+                <input
+                  id="responsable"
+                  className="form-control"
+                  placeholder="Nombre - Primer Apellido"
+                  value={form.responsable}
+                  onChange={(event) => updateField('responsable', event.target.value)}
+                />
               </div>
               <div className="col-12">
                 <label className="form-label" htmlFor="direccion-preventivo">Dirección del Preventivo</label>
@@ -244,16 +254,6 @@ export default function ActuacionesPreventivosReportPage() {
                   rows={4}
                   value={form.observaciones}
                   onChange={(event) => updateField('observaciones', event.target.value)}
-                />
-              </div>
-              <div className="col-12 col-lg-6">
-                <label className="form-label" htmlFor="responsable">Responsable</label>
-                <input
-                  id="responsable"
-                  className="form-control"
-                  placeholder="Nombre - Primer Apellido"
-                  value={form.responsable}
-                  onChange={(event) => updateField('responsable', event.target.value)}
                 />
               </div>
             </div>
