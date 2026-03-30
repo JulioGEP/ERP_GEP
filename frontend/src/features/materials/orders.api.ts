@@ -21,12 +21,26 @@ export type CreateMaterialOrderPayload = {
   pedidoRecibido?: boolean;
 };
 
+export type MaterialStockNotificationProduct = {
+  productName: string;
+  quantity: number;
+};
+
+export type SendMaterialStockNotificationPayload = {
+  budgetId: string;
+  products: MaterialStockNotificationProduct[];
+};
+
 export async function fetchMaterialOrders() {
   return getJson<MaterialOrdersResponse>('/api/material-orders');
 }
 
 export async function createMaterialOrder(payload: CreateMaterialOrderPayload) {
   return postJson<{ order: MaterialOrder; nextOrderNumber: number }>('/api/material-orders', payload);
+}
+
+export async function sendMaterialStockNotification(payload: SendMaterialStockNotificationPayload) {
+  return postJson<{ sent: true }>('/api/material-stock-notification', payload);
 }
 
 export async function deleteMaterialOrder(orderId: number) {

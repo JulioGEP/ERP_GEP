@@ -8,6 +8,7 @@ import { MATERIAL_DEAL_STATUSES } from '../../types/deal';
 import type { MaterialOrder } from '../../types/materialOrder';
 import { patchDealEditable } from '../../features/presupuestos/api/deals.api';
 import { DEALS_ALL_QUERY_KEY } from '../../features/presupuestos/queryKeys';
+import { sendMaterialStockNotification } from '../../features/materials/orders.api';
 import { isMaterialPipeline } from './MaterialsBudgetsPage';
 
 export type MaterialsBoardPageProps = {
@@ -229,6 +230,22 @@ function hasAnyAssociatedOrder(budget: DealSummary, orders: MaterialOrder[]): bo
   });
 }
 
+function getBudgetNotificationProducts(budget: DealSummary): Array<{ productName: string; quantity: number }> {
+  const products = Array.isArray(budget.products) ? budget.products : [];
+  return products
+    .map((product) => {
+      const productName = product?.name?.trim() || product?.code?.trim() || '';
+      if (!productName || isShippingExpense(productName)) return null;
+      const quantityRaw = typeof product?.quantity === 'number' ? product.quantity : Number(product?.quantity);
+      if (!Number.isFinite(quantityRaw)) return null;
+      return {
+        productName,
+        quantity: Math.max(0, quantityRaw),
+      };
+    })
+    .filter((product): product is { productName: string; quantity: number } => product !== null);
+}
+
 const ARCHIVED_MATERIAL_STATUS: MaterialDealStatus = 'Enviados al cliente';
 
 function isArchivedMaterialBudget(budget: DealSummary): boolean {
@@ -258,6 +275,9 @@ export function MaterialsBoardPage({
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [updatingDealId, setUpdatingDealId] = useState<string | null>(null);
   const [pendingOrderPromptBudgetId, setPendingOrderPromptBudgetId] = useState<string | null>(null);
+  const [pendingNotificationMove, setPendingNotificationMove] = useState<{ budgetId: string; targetStatus: MaterialDealStatus } | null>(
+    null,
+  );
 
   const requiresOrderStatuses = useMemo(
     () =>
@@ -370,6 +390,13 @@ export function MaterialsBoardPage({
     },
   });
 
+  const notificationMutation = useMutation({
+    mutationFn: ({ budgetId, products }: { budgetId: string; products: Array<{ productName: string; quantity: number }> }) =>
+      sendMaterialStockNotification({ budgetId, products }),
+    onError: () => {
+      setUpdateError('No se pudo enviar el aviso a logística.');
+    },
+  });
 
   useEffect(() => {
     const statusesToPromote = new Set<MaterialDealStatus>([
@@ -430,6 +457,10 @@ export function MaterialsBoardPage({
         return;
       }
       if (!canMoveToStatus(budget, targetStatus, orderedProductKeys, orders)) return;
+      if (currentStatus === 'Pedidos confirmados' && targetStatus === 'Pendiente compra') {
+        setPendingNotificationMove({ budgetId: data.budgetId, targetStatus });
+        return;
+      }
       handleStatusChange(budget, targetStatus);
     } catch (error) {
       console.error('Error handling drop', error);
@@ -687,6 +718,48 @@ export function MaterialsBoardPage({
             }}
           >
             Sí
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal
+        show={pendingNotificationMove !== null}
+        onHide={() => setPendingNotificationMove(null)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Aviso a logística</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          ¿Quieres avisar de que ya se puede consultar Stock o hacer pedido de material?
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="outline-secondary"
+            onClick={() => setPendingNotificationMove(null)}
+            disabled={notificationMutation.isPending}
+          >
+            No
+          </Button>
+          <Button
+            variant="primary"
+            disabled={notificationMutation.isPending}
+            onClick={async () => {
+              const pendingMove = pendingNotificationMove;
+              setPendingNotificationMove(null);
+              if (!pendingMove) return;
+              const budget = budgetsById.get(pendingMove.budgetId);
+              if (!budget) return;
+              const products = getBudgetNotificationProducts(budget);
+              try {
+                await notificationMutation.mutateAsync({ budgetId: pendingMove.budgetId, products });
+                handleStatusChange(budget, pendingMove.targetStatus);
+              } catch {
+                // Error handled in mutation callback.
+              }
+            }}
+          >
+            {notificationMutation.isPending ? 'Enviando…' : 'Sí'}
           </Button>
         </Modal.Footer>
       </Modal>
