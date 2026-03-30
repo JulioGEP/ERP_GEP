@@ -1516,7 +1516,6 @@ export type ActuacionesPreventivosInforme = {
 export type ActuacionesPreventivosFilters = {
   startDate?: string;
   endDate?: string;
-  turno?: string;
 };
 
 export async function fetchActuacionesPreventivosInformes(
@@ -1528,9 +1527,6 @@ export async function fetchActuacionesPreventivosInformes(
   }
   if (filters.endDate) {
     params.set('endDate', filters.endDate);
-  }
-  if (filters.turno) {
-    params.set('turno', filters.turno);
   }
 
   const query = params.toString();
