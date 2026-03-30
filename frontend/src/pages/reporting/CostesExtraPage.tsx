@@ -900,7 +900,12 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                 <th
                   key={definition.key}
                   className="text-end bg-light"
-                  style={{ width: '78px', position: 'sticky', top: 0, zIndex: 3 }}
+                  style={{
+                    width: definition.key === 'nocturnidad' ? '94px' : '78px',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 3,
+                  }}
                 >
                   {definition.label}
                 </th>
