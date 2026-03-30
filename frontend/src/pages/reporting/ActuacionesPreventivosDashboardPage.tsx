@@ -4,6 +4,7 @@ import { Alert, Badge, Button, Card, Col, Form, Row, Spinner, Table } from 'reac
 import type { Content, TableCell } from 'pdfmake/interfaces';
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
+import preventivoHeaderImg from '../../features/informes/assets/pdf/header.png';
 import { isApiError } from '../../api/client';
 import {
   fetchActuacionesPreventivosInformes,
@@ -50,6 +51,8 @@ type ShiftFilter = 'todos' | 'manana' | 'noche';
 type PdfMakeWithVfs = typeof pdfMake & {
   vfs?: Record<string, string>;
 };
+
+let preventivoHeaderDataUrlPromise: Promise<string> | null = null;
 
 function toDateOnly(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -117,6 +120,22 @@ function ensurePdfMakeFontsLoaded(): void {
   }
 }
 
+function toDataUrl(assetUrl: string): Promise<string> {
+  if (!preventivoHeaderDataUrlPromise) {
+    preventivoHeaderDataUrlPromise = fetch(assetUrl)
+      .then((response) => response.blob())
+      .then(
+        (blob) => new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result ?? ''));
+          reader.onerror = () => reject(new Error('No se pudo leer la cabecera para el PDF.'));
+          reader.readAsDataURL(blob);
+        }),
+      );
+  }
+  return preventivoHeaderDataUrlPromise;
+}
+
 function getMonthLabel(date: Date): string {
   const month = new Intl.DateTimeFormat('es-ES', { month: 'long' }).format(date);
   return `${month.charAt(0).toUpperCase()}${month.slice(1)} ${date.getFullYear()}`;
@@ -137,6 +156,31 @@ function normalizeTurno(turno: string | null): Exclude<ShiftFilter, 'todos'> | n
   if (normalized === 'manana') return 'manana';
   if (normalized === 'noche') return 'noche';
   return null;
+}
+
+function blendHexColor(startHex: string, endHex: string, ratio: number): string {
+  const normalize = (value: number) => Math.min(255, Math.max(0, Math.round(value)));
+  const from = startHex.replace('#', '');
+  const to = endHex.replace('#', '');
+
+  const sr = parseInt(from.slice(0, 2), 16);
+  const sg = parseInt(from.slice(2, 4), 16);
+  const sb = parseInt(from.slice(4, 6), 16);
+  const er = parseInt(to.slice(0, 2), 16);
+  const eg = parseInt(to.slice(2, 4), 16);
+  const eb = parseInt(to.slice(4, 6), 16);
+
+  const r = normalize(sr + (er - sr) * ratio);
+  const g = normalize(sg + (eg - sg) * ratio);
+  const b = normalize(sb + (eb - sb) * ratio);
+
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
+function getHeatMapCellColor(value: number, maxHeatValue: number): string {
+  if (value <= 0 || maxHeatValue <= 0) return '#f8f9fa';
+  const intensity = Math.max(0.2, value / maxHeatValue);
+  return blendHexColor('#f8d7da', '#dc3545', intensity);
 }
 
 function buildKpiRows(informes: ActuacionesPreventivosInforme[], granularity: Granularity): KpiRow[] {
@@ -347,7 +391,7 @@ export default function ActuacionesPreventivosDashboardPage() {
     return lineChartData.reduce((max, row) => Math.max(max, row.partes, row.asistencias, row.derivaronMutua), 0);
   }, [lineChartData]);
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (informes.length === 0) {
       emitToast({ variant: 'warning', message: 'No hay datos para exportar en PDF.' });
       return;
@@ -355,6 +399,7 @@ export default function ActuacionesPreventivosDashboardPage() {
 
     try {
       ensurePdfMakeFontsLoaded();
+      const headerDataUrl = await toDataUrl(preventivoHeaderImg);
 
       const kpiRows: TableCell[][] = [
         [
@@ -466,7 +511,11 @@ export default function ActuacionesPreventivosDashboardPage() {
         ],
         ...heatMapRows.map((row) => [
           { text: row.week.toString(), bold: true },
-          ...row.values.map((value) => ({ text: value.toString(), alignment: 'right' as const })),
+          ...row.values.map((value) => ({
+            text: value.toString(),
+            alignment: 'right' as const,
+            fillColor: getHeatMapCellColor(value, maxHeatValue),
+          })),
         ]),
       ];
 
@@ -479,19 +528,52 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: 'Visual', style: 'tableHeader' },
         ],
         ...lineChartData.map((row) => {
-          const partesWidth = maxLineValue ? Math.round((row.partes / maxLineValue) * 18) : 0;
-          const asistenciasWidth = maxLineValue ? Math.round((row.asistencias / maxLineValue) * 18) : 0;
-          const derivaronMutuaWidth = maxLineValue ? Math.round((row.derivaronMutua / maxLineValue) * 18) : 0;
-          const partesBar = '█'.repeat(partesWidth);
-          const asistenciasBar = '█'.repeat(asistenciasWidth);
-          const derivaronMutuaBar = '█'.repeat(derivaronMutuaWidth);
-          const visual = `P ${partesBar || '·'} | A ${asistenciasBar || '·'} | D ${derivaronMutuaBar || '·'}`;
+          const partesWidth = maxLineValue ? Math.round((row.partes / maxLineValue) * 140) : 0;
+          const asistenciasWidth = maxLineValue ? Math.round((row.asistencias / maxLineValue) * 140) : 0;
+          const derivaronMutuaWidth = maxLineValue ? Math.round((row.derivaronMutua / maxLineValue) * 140) : 0;
+          const monthTotal = row.partes + row.asistencias + row.derivaronMutua;
+          const partesShare = monthTotal > 0 ? Math.round((row.partes / monthTotal) * 100) : 0;
+          const asistenciasShare = monthTotal > 0 ? Math.round((row.asistencias / monthTotal) * 100) : 0;
+          const derivaronMutuaShare = monthTotal > 0 ? Math.round((row.derivaronMutua / monthTotal) * 100) : 0;
+
+          const buildBarRow = (label: string, color: string, barWidth: number, share: number): Content => ({
+            columns: [
+              { text: label, width: 62, fontSize: 8, bold: true, color },
+              {
+                width: '*',
+                canvas: [
+                  { type: 'rect' as const, x: 0, y: 0, w: 140, h: 8, color: '#e9ecef', r: 4 },
+                  { type: 'rect' as const, x: 0, y: 0, w: Math.max(0, barWidth), h: 8, color, r: 4 },
+                ],
+                margin: [0, 3, 0, 0],
+              },
+              { text: `${share}%`, width: 28, alignment: 'right', fontSize: 8, color: '#6c757d', bold: true },
+            ],
+            columnGap: 8,
+            margin: [0, 0, 0, 2],
+          });
+
+          const visualCell: TableCell = {
+            stack: [
+              {
+                columns: [
+                  { text: `Comparado con el pico mensual (${maxLineValue})`, fontSize: 8, bold: true, color: '#6c757d' },
+                  { text: `Total: ${monthTotal}`, fontSize: 8, bold: true, color: 'white', fillColor: '#6c757d', margin: [0, 0, 0, 0], alignment: 'right' },
+                ],
+                margin: [0, 0, 0, 4],
+              },
+              buildBarRow('Partes', '#0d6efd', partesWidth, partesShare),
+              buildBarRow('Asistencias', '#dc3545', asistenciasWidth, asistenciasShare),
+              buildBarRow('Mutua', '#6c757d', derivaronMutuaWidth, derivaronMutuaShare),
+            ],
+          };
+
           return [
             row.month,
             { text: row.partes.toString(), alignment: 'right' as const },
             { text: row.asistencias.toString(), alignment: 'right' as const },
             { text: row.derivaronMutua.toString(), alignment: 'right' as const },
-            { text: visual, fontSize: 8 },
+            visualCell,
           ];
         }),
       ];
@@ -567,7 +649,8 @@ export default function ActuacionesPreventivosDashboardPage() {
 
       pdfMake.createPdf({
         pageOrientation: 'landscape',
-        pageMargins: [24, 24, 24, 24],
+        pageMargins: [24, 72, 24, 24],
+        header: () => ({ image: headerDataUrl, width: 479, alignment: 'center', margin: [0, 12, 0, 0] }),
         content,
         styles: {
           title: { fontSize: 14, bold: true },
