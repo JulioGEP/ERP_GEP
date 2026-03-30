@@ -865,7 +865,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
           className="mb-0 align-middle"
           style={{ tableLayout: 'fixed', width: '100%', fontSize: '0.85rem' }}
         >
-          <thead>
+          <thead style={{ fontSize: 'calc(0.85rem - 1pt)' }}>
             <tr>
               <th
                 style={{ width: '34px', position: 'sticky', top: 0, zIndex: 3 }}
@@ -1068,7 +1068,8 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                     <Button
                       variant="primary"
                       size="sm"
-                      className="w-100"
+                      className="w-100 text-nowrap"
+                      style={{ fontSize: 'calc(0.875rem - 1pt)' }}
                       onClick={handleSave}
                       disabled={!dirty || invalid || saving || isSavingSelected}
                     >
