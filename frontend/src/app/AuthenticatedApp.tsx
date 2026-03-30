@@ -261,29 +261,41 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         path: '/usuarios/sesiones_y_costes_extra',
       },
       {
-        key: 'Usuarios/NominasOficina',
-        label: 'Nómina Fijos',
-        path: '/usuarios/nominas_fijos',
+        key: 'Usuarios/Nominas',
+        label: 'Nóminas',
+        children: [
+          {
+            key: 'Usuarios/NominasOficina',
+            label: 'fijos',
+            path: '/usuarios/nominas_fijos',
+          },
+          {
+            key: 'Usuarios/NominasFijosDiscontinuos',
+            label: 'formadores fijos',
+            path: '/usuarios/nominas_formadores_fijos',
+          },
+          {
+            key: 'Usuarios/NominasFormadoresDiscontinuos',
+            label: 'formadores discontinuos',
+            path: '/usuarios/nominas_formadores_discontinuos',
+          },
+        ],
       },
       {
-        key: 'Usuarios/NominasFijosDiscontinuos',
-        label: 'Nóminas Formadores Fijos',
-        path: '/usuarios/nominas_formadores_fijos',
-      },
-      {
-        key: 'Usuarios/NominasFormadoresDiscontinuos',
-        label: 'Nóminas Formadores Discontinuos',
-        path: '/usuarios/nominas_formadores_discontinuos',
-      },
-      {
-        key: 'Usuarios/ControlHorarioDiscontinuos',
-        label: 'Control horario discontinuos',
-        path: '/usuarios/control_horario_discontinuos',
-      },
-      {
-        key: 'Usuarios/ControlHorarioFijos',
-        label: 'Control horario fijos',
-        path: '/usuarios/control_horario_fijos',
+        key: 'Usuarios/ControlHorario',
+        label: 'Control horario',
+        children: [
+          {
+            key: 'Usuarios/ControlHorarioFijos',
+            label: 'fijos',
+            path: '/usuarios/control_horario_fijos',
+          },
+          {
+            key: 'Usuarios/ControlHorarioDiscontinuos',
+            label: 'discontinuos',
+            path: '/usuarios/control_horario_discontinuos',
+          },
+        ],
       },
     ],
   },
