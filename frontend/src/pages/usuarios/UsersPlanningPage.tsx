@@ -488,6 +488,42 @@ export default function UsersPlanningPage() {
           </div>
         </Card.Body>
       </Card>
+
+      <Card>
+        <Card.Header>
+          <strong>5) Lógicas aplicadas en la planificación</strong>
+        </Card.Header>
+        <Card.Body className="d-flex flex-column gap-3">
+          <div>
+            <h6 className="mb-1">Equilibrio de carga y prioridad de asignación</h6>
+            <p className="mb-0 text-muted">
+              Cada día se asignan 3 bomberos por turno. El sistema prioriza primero a quienes tienen menos servicios en la semana y, en
+              caso de empate, a quienes acumulan menos horas totales en el año para repartir la carga de forma homogénea.
+            </p>
+          </div>
+          <div>
+            <h6 className="mb-1">Control de límites semanales</h6>
+            <p className="mb-0 text-muted">
+              Se aplica un máximo de {WEEKLY_MAX_SERVICES} servicios por semana y bombero. Si en una semana no hay suficientes perfiles
+              elegibles para cubrir el servicio, se mantiene la cobertura mínima y se notifica una alerta de capacidad.
+            </p>
+          </div>
+          <div>
+            <h6 className="mb-1">Tipos de día y cómputo de horas</h6>
+            <p className="mb-0 text-muted">
+              Los días ordinarios computan {ORDINARY_SERVICE_HOURS} horas por servicio y los especiales (viernes y sábado) computan{' '}
+              {SPECIAL_SERVICE_HOURS} horas. Este ajuste permite estimar el impacto real mensual y anual de la planificación.
+            </p>
+          </div>
+          <div>
+            <h6 className="mb-1">Rotación estructural del 7º bombero</h6>
+            <p className="mb-0 text-muted">
+              De forma paralela a los 3 asignados por servicio, se muestra una rotación diaria del 7º bombero por turno para garantizar
+              visibilidad de relevo y facilitar la posterior incorporación de vacaciones o incidencias.
+            </p>
+          </div>
+        </Card.Body>
+      </Card>
     </div>
   );
 }
