@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { Alert, Badge, Card, Col, Form, Row, Spinner, Table } from 'react-bootstrap';
+import { Alert, Badge, Button, Card, Col, Form, Row, Spinner, Table } from 'react-bootstrap';
+import type { Content, TableCell } from 'pdfmake/interfaces';
+import pdfMake from 'pdfmake/build/pdfmake';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
 import { isApiError } from '../../api/client';
 import {
   fetchActuacionesPreventivosInformes,
   type ActuacionesPreventivosInforme,
 } from '../../features/reporting/api';
+import { emitToast } from '../../utils/toast';
 
 type Granularity = 'dia' | 'semana' | 'mes';
 
@@ -34,6 +38,10 @@ type WeekDayDetail = {
 };
 
 const ACCUMULATED_WEEK_KEY = '__acumulada__';
+
+type PdfMakeWithVfs = typeof pdfMake & {
+  vfs?: Record<string, string>;
+};
 
 function toDateOnly(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -81,6 +89,24 @@ function formatDateDisplay(value: string): string {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(date);
+}
+
+function formatDateOnlyDisplay(value: string): string {
+  const date = parseDateSafe(value);
+  if (!date) return value;
+  return new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium' }).format(date);
+}
+
+function ensurePdfMakeFontsLoaded(): void {
+  const pdfMakeWithVfs = pdfMake as PdfMakeWithVfs;
+  if (pdfMakeWithVfs.vfs && Object.keys(pdfMakeWithVfs.vfs).length > 0) return;
+
+  const bundledFonts = pdfFonts as { pdfMake?: { vfs?: Record<string, string> } };
+  const bundledVfs = bundledFonts.pdfMake?.vfs;
+
+  if (bundledVfs) {
+    pdfMakeWithVfs.vfs = bundledVfs;
+  }
 }
 
 function getMonthLabel(date: Date): string {
@@ -268,6 +294,118 @@ export default function ActuacionesPreventivosDashboardPage() {
     return lineChartData.reduce((max, row) => Math.max(max, row.partes, row.asistencias), 0);
   }, [lineChartData]);
 
+  const handleDownloadPdf = () => {
+    if (informes.length === 0) {
+      emitToast({ variant: 'warning', message: 'No hay datos para exportar en PDF.' });
+      return;
+    }
+
+    try {
+      ensurePdfMakeFontsLoaded();
+
+      const kpiRows: TableCell[][] = [
+        [
+          { text: 'Periodo', style: 'tableHeader' },
+          { text: 'Actividad total', style: 'tableHeader', alignment: 'right' },
+          { text: 'Partes trabajo', style: 'tableHeader', alignment: 'right' },
+          { text: 'Asistencias sanitarias', style: 'tableHeader', alignment: 'right' },
+          { text: 'Promedio actividad/día', style: 'tableHeader', alignment: 'right' },
+        ],
+        ...kpis.map((row) => ([
+          row.periodo,
+          { text: row.actividadTotal.toString(), alignment: 'right' as const },
+          { text: row.partesTrabajo.toString(), alignment: 'right' as const },
+          { text: row.asistenciasSanitarias.toString(), alignment: 'right' as const },
+          { text: row.promedioActividadDiaria.toFixed(2), alignment: 'right' as const },
+        ])),
+      ];
+
+      const logRows: TableCell[][] = [
+        [
+          { text: 'Fecha', style: 'tableHeader' },
+          { text: 'Deal ID', style: 'tableHeader' },
+          { text: 'Cliente', style: 'tableHeader' },
+          { text: 'Contacto', style: 'tableHeader' },
+          { text: 'Dirección', style: 'tableHeader' },
+          { text: 'Bombero', style: 'tableHeader' },
+          { text: 'Turno', style: 'tableHeader' },
+          { text: 'Partes', style: 'tableHeader', alignment: 'right' },
+          { text: 'Asistencias', style: 'tableHeader', alignment: 'right' },
+          { text: 'Observaciones', style: 'tableHeader' },
+          { text: 'Responsable', style: 'tableHeader' },
+        ],
+        ...informes.map((informe) => ([
+          formatDateDisplay(informe.fechaEjercicio),
+          informe.dealId,
+          informe.cliente ?? '—',
+          informe.personaContacto ?? '—',
+          informe.direccionPreventivo ?? '—',
+          informe.bombero ?? '—',
+          informe.turno ?? '—',
+          { text: informe.partesTrabajo.toString(), alignment: 'right' as const },
+          { text: informe.asistenciasSanitarias.toString(), alignment: 'right' as const },
+          informe.observaciones ?? '—',
+          informe.responsable ?? '—',
+        ])),
+      ];
+
+      const content: Content[] = [
+        { text: 'Informe completo - Actuaciones preventivos', style: 'title' },
+        {
+          text: `Rango: ${formatDateOnlyDisplay(startDate)} - ${formatDateOnlyDisplay(endDate)}`,
+          margin: [0, 0, 0, 4],
+        },
+        {
+          text: `Informes: ${informes.length}   |   Partes: ${totals.partes}   |   Asistencias: ${totals.asistencias}`,
+          margin: [0, 0, 0, 14],
+        },
+      ];
+
+      if (kpis.length > 0) {
+        content.push(
+          { text: 'KPIs', style: 'sectionTitle' },
+          {
+            table: {
+              headerRows: 1,
+              widths: ['*', 'auto', 'auto', 'auto', 'auto'],
+              body: kpiRows,
+            },
+            layout: 'lightHorizontalLines',
+            fontSize: 9,
+            margin: [0, 0, 0, 12],
+          },
+        );
+      }
+
+      content.push(
+        { text: 'Logs de informes', style: 'sectionTitle' },
+        {
+          table: {
+            headerRows: 1,
+            widths: [58, 38, 58, 52, 66, 50, 30, 28, 35, '*', 52],
+            body: logRows,
+          },
+          layout: 'lightHorizontalLines',
+          fontSize: 7,
+        },
+      );
+
+      pdfMake.createPdf({
+        pageOrientation: 'landscape',
+        pageMargins: [24, 24, 24, 24],
+        content,
+        styles: {
+          title: { fontSize: 14, bold: true },
+          sectionTitle: { fontSize: 11, bold: true, margin: [0, 10, 0, 6] },
+          tableHeader: { bold: true, fillColor: '#f1f5f9' },
+        },
+      }).download(`actuaciones-preventivos-${startDate}-${endDate}.pdf`);
+    } catch (error) {
+      console.error(error);
+      emitToast({ variant: 'danger', message: 'No se pudo generar el PDF del informe.' });
+    }
+  };
+
   return (
     <section className="py-3 d-grid gap-3">
       <Card className="shadow-sm">
@@ -297,10 +435,18 @@ export default function ActuacionesPreventivosDashboardPage() {
               </Form.Group>
             </Col>
             <Col xs={12} lg={3}>
-              <div className="d-flex flex-wrap gap-2">
+              <div className="d-flex flex-wrap gap-2 align-items-center">
                 <Badge bg="success">Informes: {informes.length}</Badge>
                 <Badge bg="primary">Partes: {totals.partes}</Badge>
                 <Badge bg="danger">Asistencias: {totals.asistencias}</Badge>
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={handleDownloadPdf}
+                  disabled={informesQuery.isLoading || informes.length === 0}
+                >
+                  Descargar en PDF
+                </Button>
               </div>
             </Col>
           </Row>
