@@ -5,7 +5,7 @@ import { fetchUsers, type UserSummary } from '../../api/users';
 import { exportToExcel } from '../../shared/export/exportToExcel';
 
 type ShiftSlot = 'Mañana' | 'Tarde';
-type ShiftType = 'ORDINARIO' | 'ESPECIAL';
+type ShiftType = 'ORDINARIO' | 'ESPECIAL' | 'DOMINGO_LUNES';
 
 type Firefighter = {
   code: string;
@@ -21,6 +21,8 @@ type DayPlan = {
   rotatingMorning: Firefighter | null;
   rotatingAfternoon: Firefighter | null;
   hoursPerService: number;
+  morningWindow: string;
+  afternoonWindow: string;
 };
 
 type YearSummaryRow = {
@@ -45,6 +47,9 @@ const SERVICES_PER_SHIFT = 3;
 const ORDINARY_SERVICE_HOURS = 12;
 const SPECIAL_SERVICE_HOURS = 10;
 const CLOSE_THRESHOLD = TARGET_ANNUAL_HOURS * 0.95;
+const SUNDAY_MONDAY_SERVICE_HOURS = 12.5;
+const SUNDAY_MONDAY_MORNING_WINDOW = '05:45 - 18:15';
+const SUNDAY_MONDAY_AFTERNOON_WINDOW = '17:45 - 06:15';
 
 function buildDefaultFirefighters(): Firefighter[] {
   return [
@@ -68,6 +73,11 @@ function buildDefaultFirefighters(): Firefighter[] {
 function isSpecialDay(date: Date): boolean {
   const day = date.getDay();
   return day === 5 || day === 6;
+}
+
+function isSundayMondayDay(date: Date): boolean {
+  const day = date.getDay();
+  return day === 0 || day === 1;
 }
 
 function formatDate(date: Date): string {
@@ -181,7 +191,15 @@ export default function UsersPlanningPage() {
     for (let cursor = new Date(startDate); cursor <= endDate; cursor.setDate(cursor.getDate() + 1)) {
       const date = new Date(cursor);
       const special = isSpecialDay(date);
-      const hours = special ? SPECIAL_SERVICE_HOURS : ORDINARY_SERVICE_HOURS;
+      const sundayMonday = isSundayMondayDay(date);
+      const hours = sundayMonday
+        ? SUNDAY_MONDAY_SERVICE_HOURS
+        : special
+          ? SPECIAL_SERVICE_HOURS
+          : ORDINARY_SERVICE_HOURS;
+      const morningWindow = sundayMonday ? SUNDAY_MONDAY_MORNING_WINDOW : '—';
+      const afternoonWindow = sundayMonday ? SUNDAY_MONDAY_AFTERNOON_WINDOW : '—';
+
       const morningMembers = pickServiceMembers(shifts.Mañana, date, hours);
       const afternoonMembers = pickServiceMembers(shifts.Tarde, date, hours);
 
@@ -197,12 +215,14 @@ export default function UsersPlanningPage() {
 
       days.push({
         date,
-        dayType: special ? 'ESPECIAL' : 'ORDINARIO',
+        dayType: sundayMonday ? 'DOMINGO_LUNES' : special ? 'ESPECIAL' : 'ORDINARIO',
         morningMembers,
         afternoonMembers,
         rotatingMorning,
         rotatingAfternoon,
         hoursPerService: hours,
+        morningWindow,
+        afternoonWindow,
       });
     }
 
@@ -298,7 +318,8 @@ export default function UsersPlanningPage() {
         <Card.Body className="d-flex flex-column gap-2">
           <Alert variant="info" className="mb-0">
             <strong>Condiciones aplicadas:</strong> máximo {WEEKLY_MAX_SERVICES} servicios semanales por bombero (≈40h),
-            {` `}{SERVICES_PER_SHIFT} bomberos por servicio y rotación diaria del 7º bombero de cada turno.
+            {` `}{SERVICES_PER_SHIFT} bomberos por servicio, rotación diaria del 7º bombero de cada turno y turnos de domingo
+            y lunes de {SUNDAY_MONDAY_SERVICE_HOURS.toLocaleString('es-ES')}h (05:45-18:15 / 17:45-06:15).
           </Alert>
           <Alert variant="secondary" className="mb-0">
             Calendario base sin vacaciones ({TARGET_ANNUAL_HOURS.toLocaleString('es-ES')} h/año). Las vacaciones se cubrirán posteriormente.
@@ -394,17 +415,32 @@ export default function UsersPlanningPage() {
                 <tr key={day.date.toISOString()}>
                   <td>{formatDate(day.date)}</td>
                   <td>
-                    <Badge bg={day.dayType === 'ESPECIAL' ? 'warning' : 'info'} text={day.dayType === 'ESPECIAL' ? 'dark' : undefined}>
+                    <Badge
+                      bg={day.dayType === 'ESPECIAL' ? 'warning' : day.dayType === 'DOMINGO_LUNES' ? 'primary' : 'info'}
+                      text={day.dayType === 'ESPECIAL' ? 'dark' : undefined}
+                    >
                       {day.dayType}
                     </Badge>
                   </td>
                   <td>
                     <strong>Servicio:</strong> {day.morningMembers.map(displayName).join(', ')} · {day.hoursPerService}h
+                    {day.dayType === 'DOMINGO_LUNES' && (
+                      <>
+                        <br />
+                        <span className="text-muted small">Horario: {day.morningWindow}</span>
+                      </>
+                    )}
                     <br />
                     <span className="text-muted small">Rotación 7º: {day.rotatingMorning ? displayName(day.rotatingMorning) : '—'}</span>
                   </td>
                   <td>
                     <strong>Servicio:</strong> {day.afternoonMembers.map(displayName).join(', ')} · {day.hoursPerService}h
+                    {day.dayType === 'DOMINGO_LUNES' && (
+                      <>
+                        <br />
+                        <span className="text-muted small">Horario: {day.afternoonWindow}</span>
+                      </>
+                    )}
                     <br />
                     <span className="text-muted small">Rotación 7º: {day.rotatingAfternoon ? displayName(day.rotatingAfternoon) : '—'}</span>
                   </td>
@@ -511,8 +547,10 @@ export default function UsersPlanningPage() {
           <div>
             <h6 className="mb-1">Tipos de día y cómputo de horas</h6>
             <p className="mb-0 text-muted">
-              Los días ordinarios computan {ORDINARY_SERVICE_HOURS} horas por servicio y los especiales (viernes y sábado) computan{' '}
-              {SPECIAL_SERVICE_HOURS} horas. Este ajuste permite estimar el impacto real mensual y anual de la planificación.
+              Los días ordinarios computan {ORDINARY_SERVICE_HOURS} horas por servicio, los especiales (viernes y sábado)
+              computan {SPECIAL_SERVICE_HOURS} horas y los turnos de domingo/lunes computan
+              {` `}{SUNDAY_MONDAY_SERVICE_HOURS.toLocaleString('es-ES')} horas con horario 05:45-18:15 (mañana) y
+              17:45-06:15 (tarde). Este ajuste permite estimar el impacto real mensual y anual de la planificación.
             </p>
           </div>
           <div>
