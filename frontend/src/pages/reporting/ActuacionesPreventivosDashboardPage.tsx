@@ -649,7 +649,7 @@ export default function ActuacionesPreventivosDashboardPage() {
 
       pdfMake.createPdf({
         pageOrientation: 'landscape',
-        pageMargins: [24, 72, 24, 24],
+        pageMargins: [24, 108, 24, 24],
         header: () => ({ image: headerDataUrl, width: 479, alignment: 'center', margin: [0, 12, 0, 0] }),
         content,
         styles: {
