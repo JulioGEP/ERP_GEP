@@ -588,7 +588,7 @@ export default function ActuacionesPreventivosDashboardPage() {
         {
           table: {
             headerRows: 1,
-            widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto'],
+            widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
             body: selectedWeekRows,
           },
           layout: 'lightHorizontalLines',
