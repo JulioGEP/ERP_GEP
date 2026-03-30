@@ -33,6 +33,7 @@ export default function ActuacionesPreventivosReportPage() {
     turno: 'Mañana',
     partesTrabajo: '',
     asistenciasSanitarias: '',
+    derivaronMutua: '',
     observaciones: '',
     responsable: '',
   });
@@ -109,6 +110,7 @@ export default function ActuacionesPreventivosReportPage() {
           turno: form.turno,
           partesTrabajo: form.partesTrabajo,
           asistenciasSanitarias: form.asistenciasSanitarias,
+          derivaronMutua: form.derivaronMutua,
           observaciones: form.observaciones,
           responsable: form.responsable,
         }),
@@ -156,15 +158,15 @@ export default function ActuacionesPreventivosReportPage() {
             </div>
 
             <div className="row g-3">
-              <div className="col-12 col-lg-4">
+              <div className="col-12 col-lg-3">
                 <label className="form-label" htmlFor="cliente">Cliente</label>
                 <input id="cliente" className="form-control" value={form.cliente} readOnly />
               </div>
-              <div className="col-12 col-lg-4">
+              <div className="col-12 col-lg-3">
                 <label className="form-label" htmlFor="persona-contacto">Persona de contacto</label>
                 <input id="persona-contacto" className="form-control" value={form.personaContacto} readOnly />
               </div>
-              <div className="col-12 col-lg-4">
+              <div className="col-12 col-lg-3">
                 <label className="form-label" htmlFor="responsable">Responsable</label>
                 <input
                   id="responsable"
@@ -211,7 +213,7 @@ export default function ActuacionesPreventivosReportPage() {
             <h3 className="h5 mb-0">Actuaciones</h3>
 
             <div className="row g-3">
-              <div className="col-12 col-lg-4">
+              <div className="col-12 col-lg-3">
                 <label className="form-label" htmlFor="turno">Turno</label>
                 <select
                   id="turno"
@@ -224,7 +226,7 @@ export default function ActuacionesPreventivosReportPage() {
                   ))}
                 </select>
               </div>
-              <div className="col-12 col-lg-4">
+              <div className="col-12 col-lg-3">
                 <label className="form-label" htmlFor="partes-trabajo">Partes de trabajo</label>
                 <input
                   id="partes-trabajo"
@@ -235,7 +237,7 @@ export default function ActuacionesPreventivosReportPage() {
                   onChange={(event) => updateField('partesTrabajo', event.target.value)}
                 />
               </div>
-              <div className="col-12 col-lg-4">
+              <div className="col-12 col-lg-3">
                 <label className="form-label" htmlFor="asistencias-sanitarias">Asistencias Sanitarias</label>
                 <input
                   id="asistencias-sanitarias"
@@ -244,6 +246,17 @@ export default function ActuacionesPreventivosReportPage() {
                   min={0}
                   value={form.asistenciasSanitarias}
                   onChange={(event) => updateField('asistenciasSanitarias', event.target.value)}
+                />
+              </div>
+              <div className="col-12 col-lg-3">
+                <label className="form-label" htmlFor="derivaron-mutua">Derivaron a Mútua</label>
+                <input
+                  id="derivaron-mutua"
+                  className="form-control"
+                  type="number"
+                  min={0}
+                  value={form.derivaronMutua}
+                  onChange={(event) => updateField('derivaronMutua', event.target.value)}
                 />
               </div>
               <div className="col-12">
