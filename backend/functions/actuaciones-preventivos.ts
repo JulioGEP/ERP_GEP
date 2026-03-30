@@ -60,6 +60,7 @@ export const handler = createHttpHandler<any>(async (request) => {
           turno,
           partes_trabajo,
           asistencias_sanitarias,
+          derivaron_mutua,
           observaciones,
           responsable,
           created_by_user_id,
@@ -114,6 +115,16 @@ export const handler = createHttpHandler<any>(async (request) => {
     return errorResponse('VALIDATION_ERROR', 'El campo asistenciasSanitarias debe ser numérico y mayor o igual que 0.', 400);
   }
 
+  const derivaronMutua = parseOptionalInteger(body.derivaronMutua);
+  if (
+    body.derivaronMutua !== null &&
+    body.derivaronMutua !== undefined &&
+    body.derivaronMutua !== '' &&
+    derivaronMutua === null
+  ) {
+    return errorResponse('VALIDATION_ERROR', 'El campo derivaronMutua debe ser numérico y mayor o igual que 0.', 400);
+  }
+
   const turno = trimToNull(body.turno) ?? 'Mañana';
   if (!ALLOWED_TURNO_VALUES.includes(turno as (typeof ALLOWED_TURNO_VALUES)[number])) {
     return errorResponse('VALIDATION_ERROR', 'El campo turno debe ser Mañana o Noche.', 400);
@@ -133,11 +144,12 @@ export const handler = createHttpHandler<any>(async (request) => {
         turno,
         partes_trabajo,
         asistencias_sanitarias,
+        derivaron_mutua,
         observaciones,
         responsable,
         created_by_user_id
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
       )
       RETURNING
         id,
@@ -150,6 +162,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         turno,
         partes_trabajo,
         asistencias_sanitarias,
+        derivaron_mutua,
         observaciones,
         responsable,
         created_by_user_id,
@@ -165,6 +178,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     turno,
     partesTrabajo,
     asistenciasSanitarias,
+    derivaronMutua,
     trimToNull(body.observaciones),
     trimToNull(body.responsable),
     auth.user.id,

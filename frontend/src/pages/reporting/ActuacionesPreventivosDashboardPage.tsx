@@ -18,6 +18,7 @@ type KpiRow = {
   actividadTotal: number;
   partesTrabajo: number;
   asistenciasSanitarias: number;
+  derivaronMutua: number;
   promedioActividadDiaria: number;
   actividadTurnoManana: number;
   actividadTurnoNoche: number;
@@ -30,6 +31,7 @@ type LineChartPoint = {
   month: string;
   partes: number;
   asistencias: number;
+  derivaronMutua: number;
 };
 
 type WeekDayDetail = {
@@ -37,6 +39,7 @@ type WeekDayDetail = {
   actividad: number;
   partes: number;
   asistencias: number;
+  derivaronMutua: number;
   actividadTurnoManana: number;
   actividadTurnoNoche: number;
 };
@@ -142,6 +145,7 @@ function buildKpiRows(informes: ActuacionesPreventivosInforme[], granularity: Gr
     days: Set<string>;
     partes: number;
     asistencias: number;
+    derivaronMutua: number;
     actividadTurnoManana: number;
     actividadTurnoNoche: number;
   }>();
@@ -173,15 +177,17 @@ function buildKpiRows(informes: ActuacionesPreventivosInforme[], granularity: Gr
       days: new Set<string>(),
       partes: 0,
       asistencias: 0,
+      derivaronMutua: 0,
       actividadTurnoManana: 0,
       actividadTurnoNoche: 0,
     };
 
-    const actividad = informe.partesTrabajo + informe.asistenciasSanitarias;
+    const actividad = informe.partesTrabajo + informe.asistenciasSanitarias + informe.derivaronMutua;
     const turno = normalizeTurno(informe.turno);
     current.days.add(dayKey);
     current.partes += informe.partesTrabajo;
     current.asistencias += informe.asistenciasSanitarias;
+    current.derivaronMutua += informe.derivaronMutua;
     if (turno === 'manana') current.actividadTurnoManana += actividad;
     if (turno === 'noche') current.actividadTurnoNoche += actividad;
 
@@ -191,12 +197,13 @@ function buildKpiRows(informes: ActuacionesPreventivosInforme[], granularity: Gr
   return Array.from(grouped.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, value]) => {
-      const actividadTotal = value.partes + value.asistencias;
+      const actividadTotal = value.partes + value.asistencias + value.derivaronMutua;
       return {
         periodo: value.label,
         actividadTotal,
         partesTrabajo: value.partes,
         asistenciasSanitarias: value.asistencias,
+        derivaronMutua: value.derivaronMutua,
         promedioActividadDiaria: value.days.size ? actividadTotal / value.days.size : 0,
         actividadTurnoManana: value.actividadTurnoManana,
         actividadTurnoNoche: value.actividadTurnoNoche,
@@ -234,16 +241,17 @@ export default function ActuacionesPreventivosDashboardPage() {
       (acc, informe) => {
         acc.partes += informe.partesTrabajo;
         acc.asistencias += informe.asistenciasSanitarias;
+        acc.derivaronMutua += informe.derivaronMutua;
         return acc;
       },
-      { partes: 0, asistencias: 0 },
+      { partes: 0, asistencias: 0, derivaronMutua: 0 },
     );
   }, [informes]);
 
   const lineChartData = useMemo<LineChartPoint[]>(() => {
-    const grouped = new Map<number, { partes: number; asistencias: number }>();
+    const grouped = new Map<number, { partes: number; asistencias: number; derivaronMutua: number }>();
     for (let month = 0; month < 12; month += 1) {
-      grouped.set(month, { partes: 0, asistencias: 0 });
+      grouped.set(month, { partes: 0, asistencias: 0, derivaronMutua: 0 });
     }
 
     for (const informe of informes) {
@@ -254,12 +262,14 @@ export default function ActuacionesPreventivosDashboardPage() {
       if (!current) continue;
       current.partes += informe.partesTrabajo;
       current.asistencias += informe.asistenciasSanitarias;
+      current.derivaronMutua += informe.derivaronMutua;
     }
 
     return MONTH_LABELS.map((month, index) => ({
       month,
       partes: grouped.get(index)?.partes ?? 0,
       asistencias: grouped.get(index)?.asistencias ?? 0,
+      derivaronMutua: grouped.get(index)?.derivaronMutua ?? 0,
     }));
   }, [informes, selectedWeekOfMonth]);
 
@@ -286,6 +296,7 @@ export default function ActuacionesPreventivosDashboardPage() {
       actividad: 0,
       partes: 0,
       asistencias: 0,
+      derivaronMutua: 0,
       actividadTurnoManana: 0,
       actividadTurnoNoche: 0,
     }));
@@ -298,10 +309,11 @@ export default function ActuacionesPreventivosDashboardPage() {
       const key = `${week.year}-W${String(week.week).padStart(2, '0')}`;
       if (!isAccumulatedWeek && key !== activeWeekKey) continue;
       const dayIndex = toDayIndex(date);
-      const actividad = informe.partesTrabajo + informe.asistenciasSanitarias;
+      const actividad = informe.partesTrabajo + informe.asistenciasSanitarias + informe.derivaronMutua;
       const turno = normalizeTurno(informe.turno);
       byDay[dayIndex].partes += informe.partesTrabajo;
       byDay[dayIndex].asistencias += informe.asistenciasSanitarias;
+      byDay[dayIndex].derivaronMutua += informe.derivaronMutua;
       byDay[dayIndex].actividad += actividad;
       if (turno === 'manana') byDay[dayIndex].actividadTurnoManana += actividad;
       if (turno === 'noche') byDay[dayIndex].actividadTurnoNoche += actividad;
@@ -318,7 +330,7 @@ export default function ActuacionesPreventivosDashboardPage() {
       if (heatMapShift !== 'todos' && normalizeTurno(informe.turno) !== heatMapShift) continue;
       const weekNumber = getIsoWeek(date).week;
       const current = grouped.get(weekNumber) ?? Array(7).fill(0);
-      current[toDayIndex(date)] += informe.partesTrabajo + informe.asistenciasSanitarias;
+      current[toDayIndex(date)] += informe.partesTrabajo + informe.asistenciasSanitarias + informe.derivaronMutua;
       grouped.set(weekNumber, current);
     }
 
@@ -332,7 +344,7 @@ export default function ActuacionesPreventivosDashboardPage() {
   }, [heatMapRows]);
 
   const maxLineValue = useMemo(() => {
-    return lineChartData.reduce((max, row) => Math.max(max, row.partes, row.asistencias), 0);
+    return lineChartData.reduce((max, row) => Math.max(max, row.partes, row.asistencias, row.derivaronMutua), 0);
   }, [lineChartData]);
 
   const handleDownloadPdf = () => {
@@ -350,6 +362,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: 'Actividad total', style: 'tableHeader', alignment: 'right' },
           { text: 'Partes trabajo', style: 'tableHeader', alignment: 'right' },
           { text: 'Asistencias sanitarias', style: 'tableHeader', alignment: 'right' },
+          { text: 'Derivaron a Mútua', style: 'tableHeader', alignment: 'right' },
           { text: 'Promedio actividad/día', style: 'tableHeader', alignment: 'right' },
           { text: 'Turno Mañana', style: 'tableHeader', alignment: 'right' },
           { text: 'Turno Noche', style: 'tableHeader', alignment: 'right' },
@@ -359,6 +372,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: row.actividadTotal.toString(), alignment: 'right' as const },
           { text: row.partesTrabajo.toString(), alignment: 'right' as const },
           { text: row.asistenciasSanitarias.toString(), alignment: 'right' as const },
+          { text: row.derivaronMutua.toString(), alignment: 'right' as const },
           { text: row.promedioActividadDiaria.toFixed(2), alignment: 'right' as const },
           { text: row.actividadTurnoManana.toString(), alignment: 'right' as const },
           { text: row.actividadTurnoNoche.toString(), alignment: 'right' as const },
@@ -376,6 +390,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: 'Turno', style: 'tableHeader' },
           { text: 'Partes', style: 'tableHeader', alignment: 'right' },
           { text: 'Asistencias', style: 'tableHeader', alignment: 'right' },
+          { text: 'Derivaron a Mútua', style: 'tableHeader', alignment: 'right' },
           { text: 'Observaciones', style: 'tableHeader' },
           { text: 'Responsable', style: 'tableHeader' },
         ],
@@ -389,6 +404,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           informe.turno ?? '—',
           { text: informe.partesTrabajo.toString(), alignment: 'right' as const },
           { text: informe.asistenciasSanitarias.toString(), alignment: 'right' as const },
+          { text: informe.derivaronMutua.toString(), alignment: 'right' as const },
           informe.observaciones ?? '—',
           informe.responsable ?? '—',
         ])),
@@ -401,7 +417,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           margin: [0, 0, 0, 4],
         },
         {
-          text: `Informes: ${informes.length}   |   Partes: ${totals.partes}   |   Asistencias: ${totals.asistencias}`,
+          text: `Informes: ${informes.length}   |   Partes: ${totals.partes}   |   Asistencias: ${totals.asistencias}   |   Derivaron a Mútua: ${totals.derivaronMutua}`,
           margin: [0, 0, 0, 14],
         },
       ];
@@ -412,7 +428,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           {
             table: {
               headerRows: 1,
-              widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
+              widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
               body: kpiRows,
             },
             layout: 'lightHorizontalLines',
@@ -428,6 +444,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: 'Actividad', style: 'tableHeader', alignment: 'right' },
           { text: 'Partes', style: 'tableHeader', alignment: 'right' },
           { text: 'Asistencias', style: 'tableHeader', alignment: 'right' },
+          { text: 'Derivaron a Mútua', style: 'tableHeader', alignment: 'right' },
           { text: 'Turno Mañana', style: 'tableHeader', alignment: 'right' },
           { text: 'Turno Noche', style: 'tableHeader', alignment: 'right' },
         ],
@@ -436,6 +453,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: row.actividad.toString(), alignment: 'right' as const },
           { text: row.partes.toString(), alignment: 'right' as const },
           { text: row.asistencias.toString(), alignment: 'right' as const },
+          { text: row.derivaronMutua.toString(), alignment: 'right' as const },
           { text: row.actividadTurnoManana.toString(), alignment: 'right' as const },
           { text: row.actividadTurnoNoche.toString(), alignment: 'right' as const },
         ])),
@@ -457,18 +475,22 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: 'Mes', style: 'tableHeader' },
           { text: 'Partes', style: 'tableHeader', alignment: 'right' },
           { text: 'Asistencias', style: 'tableHeader', alignment: 'right' },
+          { text: 'Derivaron a Mútua', style: 'tableHeader', alignment: 'right' },
           { text: 'Visual', style: 'tableHeader' },
         ],
         ...lineChartData.map((row) => {
           const partesWidth = maxLineValue ? Math.round((row.partes / maxLineValue) * 18) : 0;
           const asistenciasWidth = maxLineValue ? Math.round((row.asistencias / maxLineValue) * 18) : 0;
+          const derivaronMutuaWidth = maxLineValue ? Math.round((row.derivaronMutua / maxLineValue) * 18) : 0;
           const partesBar = '█'.repeat(partesWidth);
           const asistenciasBar = '█'.repeat(asistenciasWidth);
-          const visual = `P ${partesBar || '·'} | A ${asistenciasBar || '·'}`;
+          const derivaronMutuaBar = '█'.repeat(derivaronMutuaWidth);
+          const visual = `P ${partesBar || '·'} | A ${asistenciasBar || '·'} | D ${derivaronMutuaBar || '·'}`;
           return [
             row.month,
             { text: row.partes.toString(), alignment: 'right' as const },
             { text: row.asistencias.toString(), alignment: 'right' as const },
+            { text: row.derivaronMutua.toString(), alignment: 'right' as const },
             { text: visual, fontSize: 8 },
           ];
         }),
@@ -521,7 +543,7 @@ export default function ActuacionesPreventivosDashboardPage() {
         {
           table: {
             headerRows: 1,
-            widths: ['*', 'auto', 'auto', '*'],
+              widths: ['*', 'auto', 'auto', 'auto', '*'],
             body: lineChartPdfRows,
           },
           layout: 'lightHorizontalLines',
@@ -535,7 +557,7 @@ export default function ActuacionesPreventivosDashboardPage() {
         {
           table: {
             headerRows: 1,
-            widths: [58, 38, 58, 52, 66, 50, 30, 28, 35, '*', 52],
+            widths: [58, 38, 58, 52, 66, 50, 30, 28, 35, 42, '*', 52],
             body: logRows,
           },
           layout: 'lightHorizontalLines',
@@ -592,6 +614,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                 <Badge bg="success">Informes: {informes.length}</Badge>
                 <Badge bg="primary">Partes: {totals.partes}</Badge>
                 <Badge bg="danger">Asistencias: {totals.asistencias}</Badge>
+                <Badge bg="secondary">Derivaron a Mútua: {totals.derivaronMutua}</Badge>
                 <Button
                   variant="outline-secondary"
                   size="sm"
@@ -639,6 +662,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                     <th>Actividad</th>
                     <th>Partes</th>
                     <th>Asistencias</th>
+                    <th>Derivaron a Mútua</th>
                     <th>Turno Mañana</th>
                     <th>Turno Noche</th>
                   </tr>
@@ -650,6 +674,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                       <td>{row.actividad}</td>
                       <td>{row.partes}</td>
                       <td>{row.asistencias}</td>
+                      <td>{row.derivaronMutua}</td>
                       <td>{row.actividadTurnoManana}</td>
                       <td>{row.actividadTurnoNoche}</td>
                     </tr>
@@ -758,6 +783,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                       <th>Mes</th>
                       <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Partes</th>
                       <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Asistencias</th>
+                      <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Derivaron a Mútua</th>
                       <th style={{ minWidth: 280 }}>Comparativa visual</th>
                     </tr>
                   </thead>
@@ -765,14 +791,17 @@ export default function ActuacionesPreventivosDashboardPage() {
                     {lineChartData.map((row) => {
                       const partesWidth = maxLineValue ? (row.partes / maxLineValue) * 100 : 0;
                       const asistenciasWidth = maxLineValue ? (row.asistencias / maxLineValue) * 100 : 0;
-                      const monthTotal = row.partes + row.asistencias;
+                      const derivaronMutuaWidth = maxLineValue ? (row.derivaronMutua / maxLineValue) * 100 : 0;
+                      const monthTotal = row.partes + row.asistencias + row.derivaronMutua;
                       const partesShare = monthTotal > 0 ? Math.round((row.partes / monthTotal) * 100) : 0;
                       const asistenciasShare = monthTotal > 0 ? Math.round((row.asistencias / monthTotal) * 100) : 0;
+                      const derivaronMutuaShare = monthTotal > 0 ? Math.round((row.derivaronMutua / monthTotal) * 100) : 0;
                       return (
                         <tr key={row.month}>
                           <td>{row.month}</td>
                           <td className="text-end" style={{ whiteSpace: 'nowrap' }}>{row.partes}</td>
                           <td className="text-end" style={{ whiteSpace: 'nowrap' }}>{row.asistencias}</td>
+                          <td className="text-end" style={{ whiteSpace: 'nowrap' }}>{row.derivaronMutua}</td>
                           <td>
                             <div className="d-grid gap-2">
                               <div className="d-flex justify-content-between align-items-center gap-2">
@@ -799,6 +828,16 @@ export default function ActuacionesPreventivosDashboardPage() {
                                     />
                                   </div>
                                   <small className="text-muted fw-semibold" style={{ width: 72, textAlign: 'right' }}>{asistenciasShare}%</small>
+                                </div>
+                                <div className="d-flex align-items-center gap-2">
+                                  <small className="text-secondary fw-semibold" style={{ width: 96, whiteSpace: 'nowrap' }}>Derivaron a Mútua</small>
+                                  <div className="bg-body-tertiary rounded-pill overflow-hidden flex-grow-1" style={{ height: 10 }}>
+                                    <div
+                                      className="bg-secondary rounded-pill"
+                                      style={{ width: `${derivaronMutuaWidth}%`, height: '100%', minWidth: derivaronMutuaWidth > 0 ? 6 : 0 }}
+                                    />
+                                  </div>
+                                  <small className="text-muted fw-semibold" style={{ width: 72, textAlign: 'right' }}>{derivaronMutuaShare}%</small>
                                 </div>
                               </div>
                             </div>
@@ -838,6 +877,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                     <th>Actividad total</th>
                     <th>Partes trabajo</th>
                     <th>Asistencias sanitarias</th>
+                    <th>Derivaron a Mútua</th>
                     <th>Promedio actividad/día</th>
                     <th>Turno Mañana</th>
                     <th>Turno Noche</th>
@@ -850,6 +890,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                       <td>{row.actividadTotal}</td>
                       <td>{row.partesTrabajo}</td>
                       <td>{row.asistenciasSanitarias}</td>
+                      <td>{row.derivaronMutua}</td>
                       <td>{row.promedioActividadDiaria.toFixed(2)}</td>
                       <td>{row.actividadTurnoManana}</td>
                       <td>{row.actividadTurnoNoche}</td>
@@ -891,6 +932,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                     <th>Turno</th>
                     <th>Partes</th>
                     <th>Asistencias</th>
+                    <th>Derivaron a Mútua</th>
                     <th>Observaciones</th>
                     <th>Responsable</th>
                   </tr>
@@ -907,6 +949,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                       <td>{informe.turno ?? '—'}</td>
                       <td>{informe.partesTrabajo}</td>
                       <td>{informe.asistenciasSanitarias}</td>
+                      <td>{informe.derivaronMutua}</td>
                       <td>{informe.observaciones ?? '—'}</td>
                       <td>{informe.responsable ?? '—'}</td>
                     </tr>

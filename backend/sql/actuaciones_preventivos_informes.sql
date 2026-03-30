@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS actuaciones_preventivos_informes (
   turno TEXT NOT NULL DEFAULT 'Mañana',
   partes_trabajo INTEGER,
   asistencias_sanitarias INTEGER,
+  derivaron_mutua INTEGER,
   observaciones TEXT,
   responsable TEXT,
   created_by_user_id TEXT,
@@ -18,6 +19,8 @@ CREATE TABLE IF NOT EXISTS actuaciones_preventivos_informes (
     CHECK (partes_trabajo IS NULL OR partes_trabajo >= 0),
   CONSTRAINT actuaciones_preventivos_informes_asistencias_sanitarias_check
     CHECK (asistencias_sanitarias IS NULL OR asistencias_sanitarias >= 0),
+  CONSTRAINT actuaciones_preventivos_informes_derivaron_mutua_check
+    CHECK (derivaron_mutua IS NULL OR derivaron_mutua >= 0),
   CONSTRAINT actuaciones_preventivos_informes_turno_check
     CHECK (turno IN ('Mañana', 'Noche'))
 );
