@@ -805,7 +805,6 @@ export default function ActuacionesPreventivosDashboardPage() {
                           <td>
                             <div className="d-grid gap-2">
                               <div className="d-flex justify-content-between align-items-center gap-2">
-                                <small className="text-muted fw-semibold">Comparado con el pico mensual ({maxLineValue})</small>
                                 <Badge bg="secondary">Total: {monthTotal}</Badge>
                               </div>
                               <div className="d-grid gap-1">
