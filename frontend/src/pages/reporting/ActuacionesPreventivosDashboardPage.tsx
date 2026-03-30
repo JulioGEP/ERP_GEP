@@ -692,27 +692,48 @@ export default function ActuacionesPreventivosDashboardPage() {
                       <th>Mes</th>
                       <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Partes</th>
                       <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Asistencias</th>
-                      <th>Visual</th>
+                      <th style={{ minWidth: 280 }}>Comparativa visual</th>
                     </tr>
                   </thead>
                   <tbody>
                     {lineChartData.map((row) => {
                       const partesWidth = maxLineValue ? (row.partes / maxLineValue) * 100 : 0;
                       const asistenciasWidth = maxLineValue ? (row.asistencias / maxLineValue) * 100 : 0;
+                      const monthTotal = row.partes + row.asistencias;
+                      const partesShare = monthTotal > 0 ? Math.round((row.partes / monthTotal) * 100) : 0;
+                      const asistenciasShare = monthTotal > 0 ? Math.round((row.asistencias / monthTotal) * 100) : 0;
                       return (
                         <tr key={row.month}>
                           <td>{row.month}</td>
                           <td className="text-end" style={{ whiteSpace: 'nowrap' }}>{row.partes}</td>
                           <td className="text-end" style={{ whiteSpace: 'nowrap' }}>{row.asistencias}</td>
-                          <td style={{ minWidth: 220 }}>
-                            <div className="d-grid gap-1">
-                              <div className="d-flex align-items-center gap-2">
-                                <small className="text-primary fw-semibold" style={{ whiteSpace: 'nowrap' }}>Partes</small>
-                                <div className="bg-primary rounded" style={{ height: 8, width: `${partesWidth}%`, minWidth: partesWidth > 0 ? 4 : 0 }} />
+                          <td>
+                            <div className="d-grid gap-2">
+                              <div className="d-flex justify-content-between align-items-center gap-2">
+                                <small className="text-muted fw-semibold">Comparado con el pico mensual ({maxLineValue})</small>
+                                <Badge bg="secondary">Total: {monthTotal}</Badge>
                               </div>
-                              <div className="d-flex align-items-center gap-2">
-                                <small className="text-danger fw-semibold" style={{ whiteSpace: 'nowrap' }}>Asistencias</small>
-                                <div className="bg-danger rounded" style={{ height: 8, width: `${asistenciasWidth}%`, minWidth: asistenciasWidth > 0 ? 4 : 0 }} />
+                              <div className="d-grid gap-1">
+                                <div className="d-flex align-items-center gap-2">
+                                  <small className="text-primary fw-semibold" style={{ width: 96, whiteSpace: 'nowrap' }}>Partes</small>
+                                  <div className="bg-body-tertiary rounded-pill overflow-hidden flex-grow-1" style={{ height: 10 }}>
+                                    <div
+                                      className="bg-primary rounded-pill"
+                                      style={{ width: `${partesWidth}%`, height: '100%', minWidth: partesWidth > 0 ? 6 : 0 }}
+                                    />
+                                  </div>
+                                  <small className="text-muted fw-semibold" style={{ width: 72, textAlign: 'right' }}>{partesShare}%</small>
+                                </div>
+                                <div className="d-flex align-items-center gap-2">
+                                  <small className="text-danger fw-semibold" style={{ width: 96, whiteSpace: 'nowrap' }}>Asistencias</small>
+                                  <div className="bg-body-tertiary rounded-pill overflow-hidden flex-grow-1" style={{ height: 10 }}>
+                                    <div
+                                      className="bg-danger rounded-pill"
+                                      style={{ width: `${asistenciasWidth}%`, height: '100%', minWidth: asistenciasWidth > 0 ? 6 : 0 }}
+                                    />
+                                  </div>
+                                  <small className="text-muted fw-semibold" style={{ width: 72, textAlign: 'right' }}>{asistenciasShare}%</small>
+                                </div>
                               </div>
                             </div>
                           </td>
