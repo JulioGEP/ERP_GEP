@@ -15,6 +15,7 @@ type Granularity = 'dia' | 'semana' | 'mes';
 
 type KpiRow = {
   periodo: string;
+  turnos: number;
   actividadTotal: number;
   partesTrabajo: number;
   asistenciasSanitarias: number;
@@ -26,12 +27,14 @@ const MONTH_LABELS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Ju
 
 type LineChartPoint = {
   month: string;
+  turnos: number;
   partes: number;
   asistencias: number;
 };
 
 type WeekDayDetail = {
   day: (typeof WEEK_DAYS)[number];
+  turnos: number;
   actividad: number;
   partes: number;
   asistencias: number;
@@ -124,7 +127,7 @@ function getIsoWeek(date: Date): { year: number; week: number } {
 }
 
 function buildKpiRows(informes: ActuacionesPreventivosInforme[], granularity: Granularity): KpiRow[] {
-  const grouped = new Map<string, { label: string; days: Set<string>; partes: number; asistencias: number }>();
+  const grouped = new Map<string, { label: string; days: Set<string>; turnos: number; partes: number; asistencias: number }>();
 
   for (const informe of informes) {
     const date = parseDateSafe(informe.fechaEjercicio);
@@ -151,11 +154,13 @@ function buildKpiRows(informes: ActuacionesPreventivosInforme[], granularity: Gr
     const current = grouped.get(key) ?? {
       label,
       days: new Set<string>(),
+      turnos: 0,
       partes: 0,
       asistencias: 0,
     };
 
     current.days.add(dayKey);
+    current.turnos += 1;
     current.partes += informe.partesTrabajo;
     current.asistencias += informe.asistenciasSanitarias;
 
@@ -168,6 +173,7 @@ function buildKpiRows(informes: ActuacionesPreventivosInforme[], granularity: Gr
       const actividadTotal = value.partes + value.asistencias;
       return {
         periodo: value.label,
+        turnos: value.turnos,
         actividadTotal,
         partesTrabajo: value.partes,
         asistenciasSanitarias: value.asistencias,
@@ -178,6 +184,7 @@ function buildKpiRows(informes: ActuacionesPreventivosInforme[], granularity: Gr
 
 export default function ActuacionesPreventivosDashboardPage() {
   const today = useMemo(() => new Date(), []);
+  const [selectedTurno, setSelectedTurno] = useState<string>('todos');
   const [granularity, setGranularity] = useState<Granularity>('mes');
   const [startDate, setStartDate] = useState<string>(() => formatDateInput(new Date(today.getFullYear(), today.getMonth(), 1)));
   const [endDate, setEndDate] = useState<string>(() => formatDateInput(new Date(today.getFullYear(), today.getMonth() + 1, 0)));
@@ -186,11 +193,12 @@ export default function ActuacionesPreventivosDashboardPage() {
   const [heatMapMonth, setHeatMapMonth] = useState<number>(0);
 
   const informesQuery = useQuery({
-    queryKey: ['reporting', 'actuaciones-preventivos', startDate, endDate],
+    queryKey: ['reporting', 'actuaciones-preventivos', startDate, endDate, selectedTurno],
     queryFn: () =>
       fetchActuacionesPreventivosInformes({
         startDate,
         endDate,
+        turno: selectedTurno === 'todos' ? undefined : selectedTurno,
       }),
     placeholderData: keepPreviousData,
     staleTime: 60_000,
@@ -203,18 +211,19 @@ export default function ActuacionesPreventivosDashboardPage() {
   const totals = useMemo(() => {
     return informes.reduce(
       (acc, informe) => {
+        acc.turnos += 1;
         acc.partes += informe.partesTrabajo;
         acc.asistencias += informe.asistenciasSanitarias;
         return acc;
       },
-      { partes: 0, asistencias: 0 },
+      { turnos: 0, partes: 0, asistencias: 0 },
     );
   }, [informes]);
 
   const lineChartData = useMemo<LineChartPoint[]>(() => {
-    const grouped = new Map<number, { partes: number; asistencias: number }>();
+    const grouped = new Map<number, { turnos: number; partes: number; asistencias: number }>();
     for (let month = 0; month < 12; month += 1) {
-      grouped.set(month, { partes: 0, asistencias: 0 });
+      grouped.set(month, { turnos: 0, partes: 0, asistencias: 0 });
     }
 
     for (const informe of informes) {
@@ -223,12 +232,14 @@ export default function ActuacionesPreventivosDashboardPage() {
       if (selectedWeekOfMonth !== ACCUMULATED_WEEK_KEY && getWeekOfMonth(date).toString() !== selectedWeekOfMonth) continue;
       const current = grouped.get(date.getMonth());
       if (!current) continue;
+      current.turnos += 1;
       current.partes += informe.partesTrabajo;
       current.asistencias += informe.asistenciasSanitarias;
     }
 
     return MONTH_LABELS.map((month, index) => ({
       month,
+      turnos: grouped.get(index)?.turnos ?? 0,
       partes: grouped.get(index)?.partes ?? 0,
       asistencias: grouped.get(index)?.asistencias ?? 0,
     }));
@@ -252,7 +263,7 @@ export default function ActuacionesPreventivosDashboardPage() {
   }, [selectedWeekKey, weekOptions]);
 
   const selectedWeekDetails = useMemo<WeekDayDetail[]>(() => {
-    const byDay = WEEK_DAYS.map((day) => ({ day, actividad: 0, partes: 0, asistencias: 0 }));
+    const byDay = WEEK_DAYS.map((day) => ({ day, turnos: 0, actividad: 0, partes: 0, asistencias: 0 }));
     const isAccumulatedWeek = activeWeekKey === ACCUMULATED_WEEK_KEY;
 
     for (const informe of informes) {
@@ -262,6 +273,7 @@ export default function ActuacionesPreventivosDashboardPage() {
       const key = `${week.year}-W${String(week.week).padStart(2, '0')}`;
       if (!isAccumulatedWeek && key !== activeWeekKey) continue;
       const dayIndex = toDayIndex(date);
+      byDay[dayIndex].turnos += 1;
       byDay[dayIndex].partes += informe.partesTrabajo;
       byDay[dayIndex].asistencias += informe.asistenciasSanitarias;
       byDay[dayIndex].actividad += informe.partesTrabajo + informe.asistenciasSanitarias;
@@ -291,7 +303,7 @@ export default function ActuacionesPreventivosDashboardPage() {
   }, [heatMapRows]);
 
   const maxLineValue = useMemo(() => {
-    return lineChartData.reduce((max, row) => Math.max(max, row.partes, row.asistencias), 0);
+    return lineChartData.reduce((max, row) => Math.max(max, row.turnos, row.partes, row.asistencias), 0);
   }, [lineChartData]);
 
   const handleDownloadPdf = () => {
@@ -306,6 +318,7 @@ export default function ActuacionesPreventivosDashboardPage() {
       const kpiRows: TableCell[][] = [
         [
           { text: 'Periodo', style: 'tableHeader' },
+          { text: 'Turnos', style: 'tableHeader', alignment: 'right' },
           { text: 'Actividad total', style: 'tableHeader', alignment: 'right' },
           { text: 'Partes trabajo', style: 'tableHeader', alignment: 'right' },
           { text: 'Asistencias sanitarias', style: 'tableHeader', alignment: 'right' },
@@ -313,6 +326,7 @@ export default function ActuacionesPreventivosDashboardPage() {
         ],
         ...kpis.map((row) => ([
           row.periodo,
+          { text: row.turnos.toString(), alignment: 'right' as const },
           { text: row.actividadTotal.toString(), alignment: 'right' as const },
           { text: row.partesTrabajo.toString(), alignment: 'right' as const },
           { text: row.asistenciasSanitarias.toString(), alignment: 'right' as const },
@@ -356,7 +370,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           margin: [0, 0, 0, 4],
         },
         {
-          text: `Informes: ${informes.length}   |   Partes: ${totals.partes}   |   Asistencias: ${totals.asistencias}`,
+          text: `Informes: ${informes.length}   |   Turnos: ${totals.turnos}   |   Partes: ${totals.partes}   |   Asistencias: ${totals.asistencias}`,
           margin: [0, 0, 0, 14],
         },
       ];
@@ -367,7 +381,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           {
             table: {
               headerRows: 1,
-              widths: ['*', 'auto', 'auto', 'auto', 'auto'],
+              widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto'],
               body: kpiRows,
             },
             layout: 'lightHorizontalLines',
@@ -423,6 +437,16 @@ export default function ActuacionesPreventivosDashboardPage() {
               </Form.Group>
             </Col>
             <Col xs={12} md={4} lg={3}>
+              <Form.Group controlId="turnoFilter">
+                <Form.Label>Filtro por turno</Form.Label>
+                <Form.Select value={selectedTurno} onChange={(event) => setSelectedTurno(event.target.value)}>
+                  <option value="todos">Todos</option>
+                  <option value="Mañana">Mañana</option>
+                  <option value="Noche">Noche</option>
+                </Form.Select>
+              </Form.Group>
+            </Col>
+            <Col xs={12} md={4} lg={3}>
               <Form.Group controlId="startDate">
                 <Form.Label>Desde</Form.Label>
                 <Form.Control type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
@@ -437,6 +461,7 @@ export default function ActuacionesPreventivosDashboardPage() {
             <Col xs={12} lg={3}>
               <div className="d-flex flex-wrap gap-2 align-items-center">
                 <Badge bg="success">Informes: {informes.length}</Badge>
+                <Badge bg="dark">Turnos: {totals.turnos}</Badge>
                 <Badge bg="primary">Partes: {totals.partes}</Badge>
                 <Badge bg="danger">Asistencias: {totals.asistencias}</Badge>
                 <Button
@@ -483,6 +508,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                 <thead>
                   <tr>
                     <th>Día</th>
+                    <th>Turnos</th>
                     <th>Actividad</th>
                     <th>Partes</th>
                     <th>Asistencias</th>
@@ -492,6 +518,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                   {selectedWeekDetails.map((row) => (
                     <tr key={row.day}>
                       <td>{row.day}</td>
+                      <td>{row.turnos}</td>
                       <td>{row.actividad}</td>
                       <td>{row.partes}</td>
                       <td>{row.asistencias}</td>
@@ -586,6 +613,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                   <thead>
                     <tr>
                       <th>Mes</th>
+                      <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Turnos</th>
                       <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Partes</th>
                       <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Asistencias</th>
                       <th>Visual</th>
@@ -595,13 +623,19 @@ export default function ActuacionesPreventivosDashboardPage() {
                     {lineChartData.map((row) => {
                       const partesWidth = maxLineValue ? (row.partes / maxLineValue) * 100 : 0;
                       const asistenciasWidth = maxLineValue ? (row.asistencias / maxLineValue) * 100 : 0;
+                      const turnosWidth = maxLineValue ? (row.turnos / maxLineValue) * 100 : 0;
                       return (
                         <tr key={row.month}>
                           <td>{row.month}</td>
+                          <td className="text-end" style={{ whiteSpace: 'nowrap' }}>{row.turnos}</td>
                           <td className="text-end" style={{ whiteSpace: 'nowrap' }}>{row.partes}</td>
                           <td className="text-end" style={{ whiteSpace: 'nowrap' }}>{row.asistencias}</td>
                           <td style={{ minWidth: 220 }}>
                             <div className="d-grid gap-1">
+                              <div className="d-flex align-items-center gap-2">
+                                <small className="text-dark fw-semibold" style={{ whiteSpace: 'nowrap' }}>Turnos</small>
+                                <div className="bg-dark rounded" style={{ height: 8, width: `${turnosWidth}%`, minWidth: turnosWidth > 0 ? 4 : 0 }} />
+                              </div>
                               <div className="d-flex align-items-center gap-2">
                                 <small className="text-primary fw-semibold" style={{ whiteSpace: 'nowrap' }}>Partes</small>
                                 <div className="bg-primary rounded" style={{ height: 8, width: `${partesWidth}%`, minWidth: partesWidth > 0 ? 4 : 0 }} />
@@ -644,6 +678,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                 <thead>
                   <tr>
                     <th>Periodo</th>
+                    <th>Turnos</th>
                     <th>Actividad total</th>
                     <th>Partes trabajo</th>
                     <th>Asistencias sanitarias</th>
@@ -654,6 +689,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                   {kpis.map((row) => (
                     <tr key={row.periodo}>
                       <td>{row.periodo}</td>
+                      <td>{row.turnos}</td>
                       <td>{row.actividadTotal}</td>
                       <td>{row.partesTrabajo}</td>
                       <td>{row.asistenciasSanitarias}</td>

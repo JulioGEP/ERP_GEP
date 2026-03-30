@@ -34,8 +34,9 @@ export const handler = createHttpHandler<any>(async (request) => {
       return auth.error;
     }
 
-    const startDateParam = request.queryStringParameters?.startDate;
-    const endDateParam = request.queryStringParameters?.endDate;
+    const startDateParam = request.query.startDate;
+    const endDateParam = request.query.endDate;
+    const turnoParam = trimToNull(request.query.turno);
 
     const startDate = startDateParam ? new Date(startDateParam) : null;
     if (startDateParam && (startDate === null || Number.isNaN(startDate.getTime()))) {
@@ -45,6 +46,9 @@ export const handler = createHttpHandler<any>(async (request) => {
     const endDate = endDateParam ? new Date(endDateParam) : null;
     if (endDateParam && (endDate === null || Number.isNaN(endDate.getTime()))) {
       return errorResponse('VALIDATION_ERROR', 'El campo endDate no es válido.', 400);
+    }
+    if (turnoParam && !ALLOWED_TURNO_VALUES.includes(turnoParam as (typeof ALLOWED_TURNO_VALUES)[number])) {
+      return errorResponse('VALIDATION_ERROR', 'El campo turno debe ser Mañana o Noche.', 400);
     }
 
     const records = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
@@ -68,10 +72,12 @@ export const handler = createHttpHandler<any>(async (request) => {
         FROM actuaciones_preventivos_informes
         WHERE ($1::timestamptz IS NULL OR fecha_ejercicio >= $1::timestamptz)
           AND ($2::timestamptz IS NULL OR fecha_ejercicio <= $2::timestamptz)
+          AND ($3::text IS NULL OR turno = $3::text)
         ORDER BY fecha_ejercicio DESC, created_at DESC
       `,
       startDate,
       endDate,
+      turnoParam,
     );
 
     return successResponse({ informes: records });
