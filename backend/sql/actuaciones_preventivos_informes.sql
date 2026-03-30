@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS actuaciones_preventivos_informes (
   CONSTRAINT actuaciones_preventivos_informes_asistencias_sanitarias_check
     CHECK (asistencias_sanitarias IS NULL OR asistencias_sanitarias >= 0),
   CONSTRAINT actuaciones_preventivos_informes_turno_check
-    CHECK (turno IN ('Mañana', 'Tarde', 'Noche'))
+    CHECK (turno IN ('Mañana', 'Noche'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_actuaciones_preventivos_informes_deal_id

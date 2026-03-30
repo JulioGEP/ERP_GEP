@@ -5,6 +5,8 @@ import { errorResponse, successResponse } from './_shared/response';
 
 const METHOD_NOT_ALLOWED = errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
 
+const ALLOWED_TURNO_VALUES = ['Mañana', 'Noche'] as const;
+
 const trimToNull = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
@@ -112,6 +114,11 @@ export const handler = createHttpHandler<any>(async (request) => {
     return errorResponse('VALIDATION_ERROR', 'El campo asistenciasSanitarias debe ser numérico y mayor o igual que 0.', 400);
   }
 
+  const turno = trimToNull(body.turno) ?? 'Mañana';
+  if (!ALLOWED_TURNO_VALUES.includes(turno as (typeof ALLOWED_TURNO_VALUES)[number])) {
+    return errorResponse('VALIDATION_ERROR', 'El campo turno debe ser Mañana o Noche.', 400);
+  }
+
   const creatorName = [auth.user.first_name, auth.user.last_name].filter(Boolean).join(' ').trim() || auth.user.email;
 
   const record: any = await prisma.$queryRawUnsafe(
@@ -155,7 +162,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     trimToNull(body.direccionPreventivo),
     creatorName,
     fechaEjercicio,
-    trimToNull(body.turno) ?? 'Mañana',
+    turno,
     partesTrabajo,
     asistenciasSanitarias,
     trimToNull(body.observaciones),

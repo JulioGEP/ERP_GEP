@@ -12,7 +12,7 @@ type BudgetPrefillResponse = {
   };
 };
 
-const TURNO_OPTIONS = ['Mañana', 'Tarde', 'Noche'] as const;
+const TURNO_OPTIONS = ['Mañana', 'Noche'] as const;
 
 export default function ActuacionesPreventivosReportPage() {
   const { user } = useAuth();
