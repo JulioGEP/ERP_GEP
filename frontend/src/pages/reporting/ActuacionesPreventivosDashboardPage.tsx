@@ -830,7 +830,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                                   <small className="text-muted fw-semibold" style={{ width: 72, textAlign: 'right' }}>{asistenciasShare}%</small>
                                 </div>
                                 <div className="d-flex align-items-center gap-2">
-                                  <small className="text-secondary fw-semibold" style={{ width: 96, whiteSpace: 'nowrap' }}>Derivaron a Mútua</small>
+                                  <small className="text-secondary fw-semibold" style={{ width: 96, whiteSpace: 'nowrap' }}>Mutua</small>
                                   <div className="bg-body-tertiary rounded-pill overflow-hidden flex-grow-1" style={{ height: 10 }}>
                                     <div
                                       className="bg-secondary rounded-pill"
