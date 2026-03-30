@@ -19,6 +19,8 @@ type KpiRow = {
   partesTrabajo: number;
   asistenciasSanitarias: number;
   promedioActividadDiaria: number;
+  actividadTurnoManana: number;
+  actividadTurnoNoche: number;
 };
 
 const WEEK_DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'] as const;
@@ -35,9 +37,12 @@ type WeekDayDetail = {
   actividad: number;
   partes: number;
   asistencias: number;
+  actividadTurnoManana: number;
+  actividadTurnoNoche: number;
 };
 
 const ACCUMULATED_WEEK_KEY = '__acumulada__';
+type ShiftFilter = 'todos' | 'manana' | 'noche';
 
 type PdfMakeWithVfs = typeof pdfMake & {
   vfs?: Record<string, string>;
@@ -123,8 +128,23 @@ function getIsoWeek(date: Date): { year: number; week: number } {
   return { year: utcDate.getUTCFullYear(), week };
 }
 
+function normalizeTurno(turno: string | null): Exclude<ShiftFilter, 'todos'> | null {
+  if (!turno) return null;
+  const normalized = turno.normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
+  if (normalized === 'manana') return 'manana';
+  if (normalized === 'noche') return 'noche';
+  return null;
+}
+
 function buildKpiRows(informes: ActuacionesPreventivosInforme[], granularity: Granularity): KpiRow[] {
-  const grouped = new Map<string, { label: string; days: Set<string>; partes: number; asistencias: number }>();
+  const grouped = new Map<string, {
+    label: string;
+    days: Set<string>;
+    partes: number;
+    asistencias: number;
+    actividadTurnoManana: number;
+    actividadTurnoNoche: number;
+  }>();
 
   for (const informe of informes) {
     const date = parseDateSafe(informe.fechaEjercicio);
@@ -153,11 +173,17 @@ function buildKpiRows(informes: ActuacionesPreventivosInforme[], granularity: Gr
       days: new Set<string>(),
       partes: 0,
       asistencias: 0,
+      actividadTurnoManana: 0,
+      actividadTurnoNoche: 0,
     };
 
+    const actividad = informe.partesTrabajo + informe.asistenciasSanitarias;
+    const turno = normalizeTurno(informe.turno);
     current.days.add(dayKey);
     current.partes += informe.partesTrabajo;
     current.asistencias += informe.asistenciasSanitarias;
+    if (turno === 'manana') current.actividadTurnoManana += actividad;
+    if (turno === 'noche') current.actividadTurnoNoche += actividad;
 
     grouped.set(key, current);
   }
@@ -172,6 +198,8 @@ function buildKpiRows(informes: ActuacionesPreventivosInforme[], granularity: Gr
         partesTrabajo: value.partes,
         asistenciasSanitarias: value.asistencias,
         promedioActividadDiaria: value.days.size ? actividadTotal / value.days.size : 0,
+        actividadTurnoManana: value.actividadTurnoManana,
+        actividadTurnoNoche: value.actividadTurnoNoche,
       };
     });
 }
@@ -184,6 +212,7 @@ export default function ActuacionesPreventivosDashboardPage() {
   const [selectedWeekOfMonth, setSelectedWeekOfMonth] = useState<string>(ACCUMULATED_WEEK_KEY);
   const [selectedWeekKey, setSelectedWeekKey] = useState<string>(ACCUMULATED_WEEK_KEY);
   const [heatMapMonth, setHeatMapMonth] = useState<number>(0);
+  const [heatMapShift, setHeatMapShift] = useState<ShiftFilter>('todos');
 
   const informesQuery = useQuery({
     queryKey: ['reporting', 'actuaciones-preventivos', startDate, endDate],
@@ -252,7 +281,14 @@ export default function ActuacionesPreventivosDashboardPage() {
   }, [selectedWeekKey, weekOptions]);
 
   const selectedWeekDetails = useMemo<WeekDayDetail[]>(() => {
-    const byDay = WEEK_DAYS.map((day) => ({ day, actividad: 0, partes: 0, asistencias: 0 }));
+    const byDay = WEEK_DAYS.map((day) => ({
+      day,
+      actividad: 0,
+      partes: 0,
+      asistencias: 0,
+      actividadTurnoManana: 0,
+      actividadTurnoNoche: 0,
+    }));
     const isAccumulatedWeek = activeWeekKey === ACCUMULATED_WEEK_KEY;
 
     for (const informe of informes) {
@@ -262,9 +298,13 @@ export default function ActuacionesPreventivosDashboardPage() {
       const key = `${week.year}-W${String(week.week).padStart(2, '0')}`;
       if (!isAccumulatedWeek && key !== activeWeekKey) continue;
       const dayIndex = toDayIndex(date);
+      const actividad = informe.partesTrabajo + informe.asistenciasSanitarias;
+      const turno = normalizeTurno(informe.turno);
       byDay[dayIndex].partes += informe.partesTrabajo;
       byDay[dayIndex].asistencias += informe.asistenciasSanitarias;
-      byDay[dayIndex].actividad += informe.partesTrabajo + informe.asistenciasSanitarias;
+      byDay[dayIndex].actividad += actividad;
+      if (turno === 'manana') byDay[dayIndex].actividadTurnoManana += actividad;
+      if (turno === 'noche') byDay[dayIndex].actividadTurnoNoche += actividad;
     }
     return byDay;
   }, [activeWeekKey, informes]);
@@ -275,6 +315,7 @@ export default function ActuacionesPreventivosDashboardPage() {
       const date = parseDateSafe(informe.fechaEjercicio);
       if (!date) continue;
       if (heatMapMonth !== 0 && date.getMonth() + 1 !== heatMapMonth) continue;
+      if (heatMapShift !== 'todos' && normalizeTurno(informe.turno) !== heatMapShift) continue;
       const weekNumber = getIsoWeek(date).week;
       const current = grouped.get(weekNumber) ?? Array(7).fill(0);
       current[toDayIndex(date)] += informe.partesTrabajo + informe.asistenciasSanitarias;
@@ -284,7 +325,7 @@ export default function ActuacionesPreventivosDashboardPage() {
     return Array.from(grouped.entries())
       .sort(([a], [b]) => a - b)
       .map(([week, values]) => ({ week, values }));
-  }, [heatMapMonth, informes]);
+  }, [heatMapMonth, heatMapShift, informes]);
 
   const maxHeatValue = useMemo(() => {
     return heatMapRows.reduce((max, row) => Math.max(max, ...row.values), 0);
@@ -310,6 +351,8 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: 'Partes trabajo', style: 'tableHeader', alignment: 'right' },
           { text: 'Asistencias sanitarias', style: 'tableHeader', alignment: 'right' },
           { text: 'Promedio actividad/día', style: 'tableHeader', alignment: 'right' },
+          { text: 'Turno Mañana', style: 'tableHeader', alignment: 'right' },
+          { text: 'Turno Noche', style: 'tableHeader', alignment: 'right' },
         ],
         ...kpis.map((row) => ([
           row.periodo,
@@ -317,6 +360,8 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: row.partesTrabajo.toString(), alignment: 'right' as const },
           { text: row.asistenciasSanitarias.toString(), alignment: 'right' as const },
           { text: row.promedioActividadDiaria.toFixed(2), alignment: 'right' as const },
+          { text: row.actividadTurnoManana.toString(), alignment: 'right' as const },
+          { text: row.actividadTurnoNoche.toString(), alignment: 'right' as const },
         ])),
       ];
 
@@ -367,7 +412,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           {
             table: {
               headerRows: 1,
-              widths: ['*', 'auto', 'auto', 'auto', 'auto'],
+              widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
               body: kpiRows,
             },
             layout: 'lightHorizontalLines',
@@ -383,12 +428,16 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: 'Actividad', style: 'tableHeader', alignment: 'right' },
           { text: 'Partes', style: 'tableHeader', alignment: 'right' },
           { text: 'Asistencias', style: 'tableHeader', alignment: 'right' },
+          { text: 'Turno Mañana', style: 'tableHeader', alignment: 'right' },
+          { text: 'Turno Noche', style: 'tableHeader', alignment: 'right' },
         ],
         ...selectedWeekDetails.map((row) => ([
           row.day,
           { text: row.actividad.toString(), alignment: 'right' as const },
           { text: row.partes.toString(), alignment: 'right' as const },
           { text: row.asistencias.toString(), alignment: 'right' as const },
+          { text: row.actividadTurnoManana.toString(), alignment: 'right' as const },
+          { text: row.actividadTurnoNoche.toString(), alignment: 'right' as const },
         ])),
       ];
 
@@ -435,7 +484,7 @@ export default function ActuacionesPreventivosDashboardPage() {
         {
           table: {
             headerRows: 1,
-            widths: ['*', 'auto', 'auto', 'auto'],
+            widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto'],
             body: selectedWeekRows,
           },
           layout: 'lightHorizontalLines',
@@ -443,7 +492,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           margin: [0, 0, 0, 10],
         },
         {
-          text: `Heat map semanal${heatMapMonth === 0 ? ' (visión total)' : ` (mes: ${MONTH_LABELS[heatMapMonth - 1]})`}`,
+          text: `Heat map semanal${heatMapMonth === 0 ? ' (visión total)' : ` (mes: ${MONTH_LABELS[heatMapMonth - 1]})`} · Turno: ${heatMapShift === 'todos' ? 'Todos' : heatMapShift === 'manana' ? 'Mañana' : 'Noche'}`,
           margin: [0, 0, 0, 4],
           fontSize: 9,
         },
@@ -590,6 +639,8 @@ export default function ActuacionesPreventivosDashboardPage() {
                     <th>Actividad</th>
                     <th>Partes</th>
                     <th>Asistencias</th>
+                    <th>Turno Mañana</th>
+                    <th>Turno Noche</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -599,6 +650,8 @@ export default function ActuacionesPreventivosDashboardPage() {
                       <td>{row.actividad}</td>
                       <td>{row.partes}</td>
                       <td>{row.asistencias}</td>
+                      <td>{row.actividadTurnoManana}</td>
+                      <td>{row.actividadTurnoNoche}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -620,6 +673,19 @@ export default function ActuacionesPreventivosDashboardPage() {
                     {MONTH_LABELS.map((month, index) => (
                       <option key={month} value={index + 1}>{month}</option>
                     ))}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+              <Col xs={12} md={4}>
+                <Form.Group controlId="heatMapShift">
+                  <Form.Label>Filtro por turno</Form.Label>
+                  <Form.Select
+                    value={heatMapShift}
+                    onChange={(event) => setHeatMapShift(event.target.value as ShiftFilter)}
+                  >
+                    <option value="todos">Todos los turnos</option>
+                    <option value="manana">Turno Mañana</option>
+                    <option value="noche">Turno Noche</option>
                   </Form.Select>
                 </Form.Group>
               </Col>
@@ -752,6 +818,8 @@ export default function ActuacionesPreventivosDashboardPage() {
                     <th>Partes trabajo</th>
                     <th>Asistencias sanitarias</th>
                     <th>Promedio actividad/día</th>
+                    <th>Turno Mañana</th>
+                    <th>Turno Noche</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -762,6 +830,8 @@ export default function ActuacionesPreventivosDashboardPage() {
                       <td>{row.partesTrabajo}</td>
                       <td>{row.asistenciasSanitarias}</td>
                       <td>{row.promedioActividadDiaria.toFixed(2)}</td>
+                      <td>{row.actividadTurnoManana}</td>
+                      <td>{row.actividadTurnoNoche}</td>
                     </tr>
                   ))}
                 </tbody>
