@@ -391,6 +391,110 @@ export default function ActuacionesPreventivosDashboardPage() {
         );
       }
 
+      const selectedWeekRows: TableCell[][] = [
+        [
+          { text: 'Día', style: 'tableHeader' },
+          { text: 'Actividad', style: 'tableHeader', alignment: 'right' },
+          { text: 'Partes', style: 'tableHeader', alignment: 'right' },
+          { text: 'Asistencias', style: 'tableHeader', alignment: 'right' },
+        ],
+        ...selectedWeekDetails.map((row) => ([
+          row.day,
+          { text: row.actividad.toString(), alignment: 'right' as const },
+          { text: row.partes.toString(), alignment: 'right' as const },
+          { text: row.asistencias.toString(), alignment: 'right' as const },
+        ])),
+      ];
+
+      const heatMapPdfRows: TableCell[][] = [
+        [
+          { text: 'Semana', style: 'tableHeader' },
+          ...WEEK_DAYS.map((day) => ({ text: day, style: 'tableHeader', alignment: 'right' as const })),
+        ],
+        ...heatMapRows.map((row) => [
+          { text: row.week.toString(), bold: true },
+          ...row.values.map((value) => ({ text: value.toString(), alignment: 'right' as const })),
+        ]),
+      ];
+
+      const lineChartPdfRows: TableCell[][] = [
+        [
+          { text: 'Mes', style: 'tableHeader' },
+          { text: 'Partes', style: 'tableHeader', alignment: 'right' },
+          { text: 'Asistencias', style: 'tableHeader', alignment: 'right' },
+          { text: 'Visual', style: 'tableHeader' },
+        ],
+        ...lineChartData.map((row) => {
+          const partesWidth = maxLineValue ? Math.round((row.partes / maxLineValue) * 18) : 0;
+          const asistenciasWidth = maxLineValue ? Math.round((row.asistencias / maxLineValue) * 18) : 0;
+          const partesBar = '█'.repeat(partesWidth);
+          const asistenciasBar = '█'.repeat(asistenciasWidth);
+          const visual = `P ${partesBar || '·'} | A ${asistenciasBar || '·'}`;
+          return [
+            row.month,
+            { text: row.partes.toString(), alignment: 'right' as const },
+            { text: row.asistencias.toString(), alignment: 'right' as const },
+            { text: visual, fontSize: 8 },
+          ];
+        }),
+      ];
+
+      content.push(
+        { text: 'Evolución mensual (según filtro de semana)', style: 'sectionTitle' },
+        {
+          text: `Semana ISO seleccionada: ${activeWeekKey === ACCUMULATED_WEEK_KEY ? 'Semana acumulada (todas)' : activeWeekKey}`,
+          margin: [0, 0, 0, 4],
+          fontSize: 9,
+        },
+        {
+          table: {
+            headerRows: 1,
+            widths: ['*', 'auto', 'auto', 'auto'],
+            body: selectedWeekRows,
+          },
+          layout: 'lightHorizontalLines',
+          fontSize: 9,
+          margin: [0, 0, 0, 10],
+        },
+        {
+          text: `Heat map semanal${heatMapMonth === 0 ? ' (visión total)' : ` (mes: ${MONTH_LABELS[heatMapMonth - 1]})`}`,
+          margin: [0, 0, 0, 4],
+          fontSize: 9,
+        },
+        heatMapRows.length > 0
+          ? {
+            table: {
+              headerRows: 1,
+              widths: [46, ...WEEK_DAYS.map(() => '*')],
+              body: heatMapPdfRows,
+            },
+            layout: 'lightHorizontalLines',
+            fontSize: 8,
+            margin: [0, 0, 0, 10],
+          }
+          : {
+            text: 'No hay datos para construir el heat map semanal.',
+            italics: true,
+            margin: [0, 0, 0, 10],
+            fontSize: 9,
+          },
+        {
+          text: `Evolución mensual (filtro semana del mes: ${selectedWeekOfMonth === ACCUMULATED_WEEK_KEY ? 'Semana acumulada' : `Semana ${selectedWeekOfMonth}`})`,
+          margin: [0, 0, 0, 4],
+          fontSize: 9,
+        },
+        {
+          table: {
+            headerRows: 1,
+            widths: ['*', 'auto', 'auto', '*'],
+            body: lineChartPdfRows,
+          },
+          layout: 'lightHorizontalLines',
+          fontSize: 9,
+          margin: [0, 0, 0, 12],
+        },
+      );
+
       content.push(
         { text: 'Logs de informes', style: 'sectionTitle' },
         {
