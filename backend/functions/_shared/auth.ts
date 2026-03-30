@@ -4,7 +4,7 @@ import { setRefreshSessionCookie, type HttpRequest } from './http';
 import { errorResponse } from './response';
 
 export const SESSION_COOKIE_NAME = 'erp_session';
-const SESSION_DURATION_MS = 3 * 60 * 60 * 1000; // 3 horas
+const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 horas
 const RESET_TOKEN_DURATION_MS = 60 * 60 * 1000; // 1 hora
 
 // Exportado por si otros módulos necesitan el mapping
