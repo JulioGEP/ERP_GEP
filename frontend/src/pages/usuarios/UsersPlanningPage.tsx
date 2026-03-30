@@ -4,59 +4,64 @@ import { Alert, Badge, Button, ButtonGroup, Card, Col, Form, Row, Table } from '
 import { fetchUsers, type UserSummary } from '../../api/users';
 import { exportToExcel } from '../../shared/export/exportToExcel';
 
-type TeamCode = 'A' | 'B' | 'C' | 'D' | 'AP';
+type ShiftSlot = 'Mañana' | 'Tarde';
 type ShiftType = 'ORDINARIO' | 'ESPECIAL';
-type ShiftSlot = 'Mañana' | 'Noche';
 
 type Firefighter = {
   code: string;
   name: string;
-  team: TeamCode;
+  shift: ShiftSlot;
 };
 
 type DayPlan = {
   date: Date;
   dayType: ShiftType;
-  morningTeam: TeamCode;
-  nightTeam: TeamCode;
-  hoursPerShift: number;
+  morningMembers: Firefighter[];
+  afternoonMembers: Firefighter[];
+  rotatingMorning: Firefighter | null;
+  rotatingAfternoon: Firefighter | null;
+  hoursPerService: number;
 };
 
 type YearSummaryRow = {
   firefighterCode: string;
   firefighterName: string;
-  team: TeamCode;
+  shift: ShiftSlot;
   totalHours: number;
-  status: 'OK' | 'ALTO' | 'SOBRECARGA';
+  totalServices: number;
+  status: 'OBJETIVO' | 'CERCA' | 'ALTO';
 };
 
-const TARGET_ANNUAL_HOURS = 1794;
-const HIGH_THRESHOLD = TARGET_ANNUAL_HOURS * 0.95;
-const ORDINARY_SHIFT_HOURS = 12.5;
-const SPECIAL_SHIFT_HOURS = 8.5;
-const SHIFT_CYCLE: ReadonlyArray<{ morning: TeamCode; night: TeamCode }> = [
-  { morning: 'A', night: 'B' },
-  { morning: 'C', night: 'D' },
-  { morning: 'B', night: 'A' },
-  { morning: 'D', night: 'C' },
-];
+type FirefighterStats = {
+  totalHours: number;
+  totalServices: number;
+  weeklyServices: Map<string, number>;
+};
+
+const TARGET_ANNUAL_HOURS = 1986;
+const TARGET_MONTHLY_HOURS = 160;
+const WEEKLY_MAX_SERVICES = 3;
+const SERVICES_PER_SHIFT = 3;
+const ORDINARY_SERVICE_HOURS = 12;
+const SPECIAL_SERVICE_HOURS = 10;
+const CLOSE_THRESHOLD = TARGET_ANNUAL_HOURS * 0.95;
 
 function buildDefaultFirefighters(): Firefighter[] {
   return [
-    { code: 'B01', name: '', team: 'A' },
-    { code: 'B02', name: '', team: 'A' },
-    { code: 'B03', name: '', team: 'A' },
-    { code: 'B04', name: '', team: 'B' },
-    { code: 'B05', name: '', team: 'B' },
-    { code: 'B06', name: '', team: 'B' },
-    { code: 'B07', name: '', team: 'C' },
-    { code: 'B08', name: '', team: 'C' },
-    { code: 'B09', name: '', team: 'C' },
-    { code: 'B10', name: '', team: 'D' },
-    { code: 'B11', name: '', team: 'D' },
-    { code: 'B12', name: '', team: 'D' },
-    { code: 'B13', name: '', team: 'AP' },
-    { code: 'B14', name: '', team: 'AP' },
+    { code: 'B01', name: '', shift: 'Mañana' },
+    { code: 'B02', name: '', shift: 'Mañana' },
+    { code: 'B03', name: '', shift: 'Mañana' },
+    { code: 'B04', name: '', shift: 'Mañana' },
+    { code: 'B05', name: '', shift: 'Mañana' },
+    { code: 'B06', name: '', shift: 'Mañana' },
+    { code: 'B07', name: '', shift: 'Mañana' },
+    { code: 'B08', name: '', shift: 'Tarde' },
+    { code: 'B09', name: '', shift: 'Tarde' },
+    { code: 'B10', name: '', shift: 'Tarde' },
+    { code: 'B11', name: '', shift: 'Tarde' },
+    { code: 'B12', name: '', shift: 'Tarde' },
+    { code: 'B13', name: '', shift: 'Tarde' },
+    { code: 'B14', name: '', shift: 'Tarde' },
   ];
 }
 
@@ -77,15 +82,27 @@ function formatMonthYear(date: Date): string {
   return date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
 }
 
+function weekKey(date: Date): string {
+  const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
+  const dayOffset = Math.floor((date.getTime() - firstDayOfYear.getTime()) / 86400000);
+  const week = Math.floor((dayOffset + firstDayOfYear.getDay()) / 7) + 1;
+  return `${date.getFullYear()}-W${week}`;
+}
+
 function getStatus(totalHours: number): YearSummaryRow['status'] {
-  if (totalHours > TARGET_ANNUAL_HOURS) return 'SOBRECARGA';
-  if (totalHours >= HIGH_THRESHOLD) return 'ALTO';
-  return 'OK';
+  if (totalHours > TARGET_ANNUAL_HOURS) return 'ALTO';
+  if (totalHours >= CLOSE_THRESHOLD) return 'CERCA';
+  return 'OBJETIVO';
+}
+
+function displayName(firefighter: Firefighter): string {
+  return firefighter.name.trim() || firefighter.code;
 }
 
 export default function UsersPlanningPage() {
   const [firefighters, setFirefighters] = useState<Firefighter[]>(() => buildDefaultFirefighters());
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<number>(new Date().getMonth());
+
   const trainersQuery = useQuery({
     queryKey: ['users', 'planning', 'active-trainers'],
     queryFn: async () => {
@@ -99,90 +116,145 @@ export default function UsersPlanningPage() {
   });
   const activeTrainers = trainersQuery.data ?? [];
 
-  const planningDays = useMemo(() => {
+  const planningModel = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
     const startDate = new Date(year, now.getMonth(), 1);
     const endDate = new Date(year, 11, 31);
 
+    const shifts = {
+      'Mañana': firefighters.filter((firefighter) => firefighter.shift === 'Mañana'),
+      Tarde: firefighters.filter((firefighter) => firefighter.shift === 'Tarde'),
+    } as const;
+
+    const stats = new Map<string, FirefighterStats>();
+    firefighters.forEach((firefighter) => {
+      stats.set(firefighter.code, {
+        totalHours: 0,
+        totalServices: 0,
+        weeklyServices: new Map<string, number>(),
+      });
+    });
+
+    const rotationCursor: Record<ShiftSlot, number> = { Mañana: 0, Tarde: 0 };
+    const alerts: string[] = [];
     const days: DayPlan[] = [];
-    let cycleIndex = 0;
 
-    for (let cursor = new Date(startDate); cursor <= endDate; cursor.setDate(cursor.getDate() + 1)) {
-      const shiftPattern = SHIFT_CYCLE[cycleIndex % SHIFT_CYCLE.length];
-      const special = isSpecialDay(cursor);
-
-      days.push({
-        date: new Date(cursor),
-        dayType: special ? 'ESPECIAL' : 'ORDINARIO',
-        morningTeam: shiftPattern.morning,
-        nightTeam: shiftPattern.night,
-        hoursPerShift: special ? SPECIAL_SHIFT_HOURS : ORDINARY_SHIFT_HOURS,
+    const pickServiceMembers = (pool: Firefighter[], date: Date, hours: number): Firefighter[] => {
+      const key = weekKey(date);
+      const eligible = pool.filter((firefighter) => {
+        const firefighterStats = stats.get(firefighter.code);
+        return (firefighterStats?.weeklyServices.get(key) ?? 0) < WEEKLY_MAX_SERVICES;
       });
 
-      cycleIndex += 1;
+      const candidates = (eligible.length >= SERVICES_PER_SHIFT ? eligible : pool)
+        .slice()
+        .sort((a, b) => {
+          const aStats = stats.get(a.code);
+          const bStats = stats.get(b.code);
+          const aWeekly = aStats?.weeklyServices.get(key) ?? 0;
+          const bWeekly = bStats?.weeklyServices.get(key) ?? 0;
+          if (aWeekly !== bWeekly) return aWeekly - bWeekly;
+          if ((aStats?.totalHours ?? 0) !== (bStats?.totalHours ?? 0)) {
+            return (aStats?.totalHours ?? 0) - (bStats?.totalHours ?? 0);
+          }
+          return a.code.localeCompare(b.code);
+        })
+        .slice(0, SERVICES_PER_SHIFT);
+
+      if (eligible.length < SERVICES_PER_SHIFT) {
+        alerts.push(`Semana ${key}: no hay suficientes bomberos para mantener el tope de ${WEEKLY_MAX_SERVICES} servicios.`);
+      }
+
+      candidates.forEach((firefighter) => {
+        const firefighterStats = stats.get(firefighter.code);
+        if (!firefighterStats) return;
+        firefighterStats.totalHours += hours;
+        firefighterStats.totalServices += 1;
+        const previousWeekly = firefighterStats.weeklyServices.get(key) ?? 0;
+        firefighterStats.weeklyServices.set(key, previousWeekly + 1);
+      });
+
+      return candidates;
+    };
+
+    for (let cursor = new Date(startDate); cursor <= endDate; cursor.setDate(cursor.getDate() + 1)) {
+      const date = new Date(cursor);
+      const special = isSpecialDay(date);
+      const hours = special ? SPECIAL_SERVICE_HOURS : ORDINARY_SERVICE_HOURS;
+      const morningMembers = pickServiceMembers(shifts.Mañana, date, hours);
+      const afternoonMembers = pickServiceMembers(shifts.Tarde, date, hours);
+
+      const rotatingMorning = shifts.Mañana.length
+        ? shifts.Mañana[rotationCursor.Mañana % shifts.Mañana.length]
+        : null;
+      const rotatingAfternoon = shifts.Tarde.length
+        ? shifts.Tarde[rotationCursor.Tarde % shifts.Tarde.length]
+        : null;
+
+      rotationCursor.Mañana += 1;
+      rotationCursor.Tarde += 1;
+
+      days.push({
+        date,
+        dayType: special ? 'ESPECIAL' : 'ORDINARIO',
+        morningMembers,
+        afternoonMembers,
+        rotatingMorning,
+        rotatingAfternoon,
+        hoursPerService: hours,
+      });
     }
 
-    return days;
-  }, []);
+    return { days, stats, alerts };
+  }, [firefighters]);
 
   const planningMonths = useMemo(() => {
     const grouped = new Map<number, DayPlan[]>();
-
-    for (const day of planningDays) {
+    for (const day of planningModel.days) {
       const month = day.date.getMonth();
       const previous = grouped.get(month) ?? [];
       previous.push(day);
       grouped.set(month, previous);
     }
-
     return grouped;
-  }, [planningDays]);
+  }, [planningModel.days]);
 
   const selectedMonthDays = planningMonths.get(selectedMonthIndex) ?? [];
 
-  const firefightersByTeam = useMemo(() => {
-    const byTeam = new Map<TeamCode, Firefighter[]>();
-    for (const firefighter of firefighters) {
-      const bucket = byTeam.get(firefighter.team) ?? [];
-      bucket.push(firefighter);
-      byTeam.set(firefighter.team, bucket);
-    }
-    return byTeam;
-  }, [firefighters]);
-
   const yearlySummary = useMemo<YearSummaryRow[]>(() => {
-    const totalByTeam = new Map<TeamCode, number>([
-      ['A', 0],
-      ['B', 0],
-      ['C', 0],
-      ['D', 0],
-      ['AP', 0],
-    ]);
-
-    for (const day of planningDays) {
-      totalByTeam.set(day.morningTeam, (totalByTeam.get(day.morningTeam) ?? 0) + day.hoursPerShift);
-      totalByTeam.set(day.nightTeam, (totalByTeam.get(day.nightTeam) ?? 0) + day.hoursPerShift);
-    }
-
     return firefighters.map((firefighter) => {
-      const totalHours = Number((totalByTeam.get(firefighter.team) ?? 0).toFixed(1));
+      const firefighterStats = planningModel.stats.get(firefighter.code);
+      const totalHours = Number((firefighterStats?.totalHours ?? 0).toFixed(1));
       return {
         firefighterCode: firefighter.code,
         firefighterName: firefighter.name,
-        team: firefighter.team,
+        shift: firefighter.shift,
         totalHours,
+        totalServices: firefighterStats?.totalServices ?? 0,
         status: getStatus(totalHours),
       };
     });
-  }, [firefighters, planningDays]);
+  }, [firefighters, planningModel.stats]);
+
+  const monthlyBalance = useMemo(() => {
+    const monthly = new Map<number, number[]>();
+    planningModel.days.forEach((day) => {
+      const month = day.date.getMonth();
+      const current = monthly.get(month) ?? [];
+      const people = [...day.morningMembers, ...day.afternoonMembers];
+      current.push(people.length * day.hoursPerService);
+      monthly.set(month, current);
+    });
+    return monthly;
+  }, [planningModel.days]);
 
   const handleNameChange = (code: string, name: string) => {
     setFirefighters((previous) => previous.map((ff) => (ff.code === code ? { ...ff, name } : ff)));
   };
 
-  const handleTeamChange = (code: string, team: TeamCode) => {
-    setFirefighters((previous) => previous.map((ff) => (ff.code === code ? { ...ff, team } : ff)));
+  const handleShiftChange = (code: string, shift: ShiftSlot) => {
+    setFirefighters((previous) => previous.map((ff) => (ff.code === code ? { ...ff, shift } : ff)));
   };
 
   const allFirefightersAssigned = useMemo(
@@ -194,8 +266,8 @@ export default function UsersPlanningPage() {
     if (!allFirefightersAssigned) return;
 
     const rows: Array<Array<string | number>> = [
-      ['Código', 'Nombre', 'Equipo', 'Horas estimadas', 'Estado'],
-      ...yearlySummary.map((row) => [row.firefighterCode, row.firefighterName, row.team, row.totalHours, row.status]),
+      ['Código', 'Nombre', 'Turno base', 'Horas estimadas', 'Servicios', 'Estado'],
+      ...yearlySummary.map((row) => [row.firefighterCode, row.firefighterName, row.shift, row.totalHours, row.totalServices, row.status]),
     ];
 
     exportToExcel({
@@ -210,17 +282,32 @@ export default function UsersPlanningPage() {
     });
   };
 
+  const averageAnnualHours = yearlySummary.length
+    ? yearlySummary.reduce((acc, firefighter) => acc + firefighter.totalHours, 0) / yearlySummary.length
+    : 0;
+
   return (
     <div className="d-flex flex-column gap-3">
       <Card>
         <Card.Header className="d-flex flex-column gap-1">
           <strong>Planificación anual de turnos</strong>
-          <span className="text-muted small">Configura 14 bomberos en trinomios y genera turnos hasta el 31 de diciembre.</span>
+          <span className="text-muted small">
+            Rotación anual sin vacaciones: 14 bomberos (7 mañana / 7 tarde), objetivo de equilibrio en el total anual.
+          </span>
         </Card.Header>
-        <Card.Body>
+        <Card.Body className="d-flex flex-column gap-2">
           <Alert variant="info" className="mb-0">
-            Los equipos A, B, C y D participan en la rotación. El equipo AP ({'B13 / B14'}) queda como apoyo puntual.
+            <strong>Condiciones aplicadas:</strong> máximo {WEEKLY_MAX_SERVICES} servicios semanales por bombero (≈40h),
+            {` `}{SERVICES_PER_SHIFT} bomberos por servicio y rotación diaria del 7º bombero de cada turno.
           </Alert>
+          <Alert variant="secondary" className="mb-0">
+            Calendario base sin vacaciones ({TARGET_ANNUAL_HOURS.toLocaleString('es-ES')} h/año). Las vacaciones se cubrirán posteriormente.
+          </Alert>
+          {planningModel.alerts.length > 0 && (
+            <Alert variant="warning" className="mb-0">
+              {planningModel.alerts[0]}
+            </Alert>
+          )}
         </Card.Body>
       </Card>
 
@@ -230,52 +317,45 @@ export default function UsersPlanningPage() {
         </Card.Header>
         <Card.Body>
           <Row className="g-3">
-            {firefighters.map((firefighter) => {
-              const apSlot = firefighter.code === 'B13' || firefighter.code === 'B14';
-              return (
-                <Col md={6} lg={4} key={firefighter.code}>
-                  <Card className="h-100 border-light-subtle">
-                    <Card.Body className="d-flex flex-column gap-2">
-                      <div className="d-flex justify-content-between align-items-center">
-                        <strong>{firefighter.code}</strong>
-                        <Badge bg={firefighter.team === 'AP' ? 'secondary' : 'primary'}>{firefighter.team}</Badge>
-                      </div>
-                      <Form.Group>
-                        <Form.Label className="small text-muted mb-1">Nombre</Form.Label>
-                        <Form.Select
-                          value={firefighter.name}
-                          onChange={(event) => handleNameChange(firefighter.code, event.target.value)}
-                        >
-                          <option value="">Selecciona formador activo</option>
-                          {activeTrainers.map((trainer: UserSummary) => {
-                            const fullName = `${trainer.firstName} ${trainer.lastName}`.trim();
-                            return (
-                              <option key={trainer.id} value={fullName}>
-                                {fullName}
-                              </option>
-                            );
-                          })}
-                        </Form.Select>
-                      </Form.Group>
-                      <Form.Group>
-                        <Form.Label className="small text-muted mb-1">Equipo</Form.Label>
-                        <Form.Select
-                          value={firefighter.team}
-                          disabled={apSlot}
-                          onChange={(event) => handleTeamChange(firefighter.code, event.target.value as TeamCode)}
-                        >
-                          <option value="A">Trinomio A</option>
-                          <option value="B">Trinomio B</option>
-                          <option value="C">Trinomio C</option>
-                          <option value="D">Trinomio D</option>
-                          <option value="AP">Apoyo (AP)</option>
-                        </Form.Select>
-                      </Form.Group>
-                    </Card.Body>
-                  </Card>
-                </Col>
-              );
-            })}
+            {firefighters.map((firefighter) => (
+              <Col md={6} lg={4} key={firefighter.code}>
+                <Card className="h-100 border-light-subtle">
+                  <Card.Body className="d-flex flex-column gap-2">
+                    <div className="d-flex justify-content-between align-items-center">
+                      <strong>{firefighter.code}</strong>
+                      <Badge bg={firefighter.shift === 'Mañana' ? 'primary' : 'dark'}>{firefighter.shift}</Badge>
+                    </div>
+                    <Form.Group>
+                      <Form.Label className="small text-muted mb-1">Nombre</Form.Label>
+                      <Form.Select
+                        value={firefighter.name}
+                        onChange={(event) => handleNameChange(firefighter.code, event.target.value)}
+                      >
+                        <option value="">Selecciona formador activo</option>
+                        {activeTrainers.map((trainer: UserSummary) => {
+                          const fullName = `${trainer.firstName} ${trainer.lastName}`.trim();
+                          return (
+                            <option key={trainer.id} value={fullName}>
+                              {fullName}
+                            </option>
+                          );
+                        })}
+                      </Form.Select>
+                    </Form.Group>
+                    <Form.Group>
+                      <Form.Label className="small text-muted mb-1">Turno base</Form.Label>
+                      <Form.Select
+                        value={firefighter.shift}
+                        onChange={(event) => handleShiftChange(firefighter.code, event.target.value as ShiftSlot)}
+                      >
+                        <option value="Mañana">Mañana</option>
+                        <option value="Tarde">Tarde</option>
+                      </Form.Select>
+                    </Form.Group>
+                  </Card.Body>
+                </Card>
+              </Col>
+            ))}
           </Row>
         </Card.Body>
       </Card>
@@ -306,7 +386,7 @@ export default function UsersPlanningPage() {
                 <th>Fecha</th>
                 <th>Tipo</th>
                 <th>Turno mañana</th>
-                <th>Turno noche</th>
+                <th>Turno tarde</th>
               </tr>
             </thead>
             <tbody>
@@ -319,12 +399,14 @@ export default function UsersPlanningPage() {
                     </Badge>
                   </td>
                   <td>
-                    <strong>{day.morningTeam}</strong> · {day.hoursPerShift}h ·{' '}
-                    {(firefightersByTeam.get(day.morningTeam) ?? []).map((member) => member.name).join(', ')}
+                    <strong>Servicio:</strong> {day.morningMembers.map(displayName).join(', ')} · {day.hoursPerService}h
+                    <br />
+                    <span className="text-muted small">Rotación 7º: {day.rotatingMorning ? displayName(day.rotatingMorning) : '—'}</span>
                   </td>
                   <td>
-                    <strong>{day.nightTeam}</strong> · {day.hoursPerShift}h ·{' '}
-                    {(firefightersByTeam.get(day.nightTeam) ?? []).map((member) => member.name).join(', ')}
+                    <strong>Servicio:</strong> {day.afternoonMembers.map(displayName).join(', ')} · {day.hoursPerService}h
+                    <br />
+                    <span className="text-muted small">Rotación 7º: {day.rotatingAfternoon ? displayName(day.rotatingAfternoon) : '—'}</span>
                   </td>
                 </tr>
               ))}
@@ -342,17 +424,21 @@ export default function UsersPlanningPage() {
             const firstDate = days[0]?.date;
             const ordinary = days.filter((day) => day.dayType === 'ORDINARIO').length;
             const special = days.filter((day) => day.dayType === 'ESPECIAL').length;
+            const monthHours = (monthlyBalance.get(month) ?? []).reduce((acc, value) => acc + value, 0);
             if (!firstDate) return null;
             return (
               <Card
                 key={month}
                 className={`p-2 ${selectedMonthIndex === month ? 'border-primary' : 'border-light-subtle'}`}
-                style={{ minWidth: 180 }}
+                style={{ minWidth: 220 }}
               >
                 <div className="fw-semibold text-capitalize">{formatMonthYear(firstDate)}</div>
                 <div className="small text-muted">Ordinarios: {ordinary}</div>
                 <div className="small text-muted">Especiales: {special}</div>
                 <div className="small text-muted">Días planificados: {days.length}</div>
+                <div className="small text-muted">
+                  Carga total: {monthHours.toLocaleString('es-ES')} h (objetivo individual ≈ {TARGET_MONTHLY_HOURS} h)
+                </div>
               </Card>
             );
           })}
@@ -361,7 +447,10 @@ export default function UsersPlanningPage() {
 
       <Card>
         <Card.Header>
-          <strong>4) Resumen por bombero (objetivo {TARGET_ANNUAL_HOURS.toLocaleString('es-ES')} h)</strong>
+          <strong>
+            4) Resumen por bombero (objetivo {TARGET_ANNUAL_HOURS.toLocaleString('es-ES')} h, promedio actual{' '}
+            {averageAnnualHours.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h)
+          </strong>
         </Card.Header>
         <Card.Body className="table-responsive">
           <Table size="sm" hover>
@@ -369,8 +458,9 @@ export default function UsersPlanningPage() {
               <tr>
                 <th>Código</th>
                 <th>Nombre</th>
-                <th>Equipo</th>
+                <th>Turno</th>
                 <th>Horas estimadas</th>
+                <th>Servicios</th>
                 <th>Estado</th>
               </tr>
             </thead>
@@ -379,10 +469,11 @@ export default function UsersPlanningPage() {
                 <tr key={row.firefighterCode}>
                   <td>{row.firefighterCode}</td>
                   <td>{row.firefighterName}</td>
-                  <td>{row.team}</td>
+                  <td>{row.shift}</td>
                   <td>{row.totalHours.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</td>
+                  <td>{row.totalServices}</td>
                   <td>
-                    <Badge bg={row.status === 'SOBRECARGA' ? 'danger' : row.status === 'ALTO' ? 'warning' : 'success'} text={row.status === 'ALTO' ? 'dark' : undefined}>
+                    <Badge bg={row.status === 'ALTO' ? 'danger' : row.status === 'CERCA' ? 'warning' : 'success'} text={row.status === 'CERCA' ? 'dark' : undefined}>
                       {row.status}
                     </Badge>
                   </td>
