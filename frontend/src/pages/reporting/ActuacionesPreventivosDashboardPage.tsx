@@ -20,6 +20,7 @@ type KpiRow = {
   partesTrabajo: number;
   asistenciasSanitarias: number;
   derivaronMutua: number;
+  derivacionAmbulancia: number;
   promedioActividadDiaria: number;
   actividadTurnoManana: number;
   actividadTurnoNoche: number;
@@ -33,6 +34,7 @@ type LineChartPoint = {
   partes: number;
   asistencias: number;
   derivaronMutua: number;
+  derivacionAmbulancia: number;
 };
 
 type WeekDayDetail = {
@@ -41,6 +43,7 @@ type WeekDayDetail = {
   partes: number;
   asistencias: number;
   derivaronMutua: number;
+  derivacionAmbulancia: number;
   actividadTurnoManana: number;
   actividadTurnoNoche: number;
 };
@@ -190,6 +193,7 @@ function buildKpiRows(informes: ActuacionesPreventivosInforme[], granularity: Gr
     partes: number;
     asistencias: number;
     derivaronMutua: number;
+    derivacionAmbulancia: number;
     actividadTurnoManana: number;
     actividadTurnoNoche: number;
   }>();
@@ -222,16 +226,18 @@ function buildKpiRows(informes: ActuacionesPreventivosInforme[], granularity: Gr
       partes: 0,
       asistencias: 0,
       derivaronMutua: 0,
+      derivacionAmbulancia: 0,
       actividadTurnoManana: 0,
       actividadTurnoNoche: 0,
     };
 
-    const actividad = informe.partesTrabajo + informe.asistenciasSanitarias + informe.derivaronMutua;
+    const actividad = informe.partesTrabajo + informe.asistenciasSanitarias;
     const turno = normalizeTurno(informe.turno);
     current.days.add(dayKey);
     current.partes += informe.partesTrabajo;
     current.asistencias += informe.asistenciasSanitarias;
     current.derivaronMutua += informe.derivaronMutua;
+    current.derivacionAmbulancia += informe.derivacionAmbulancia;
     if (turno === 'manana') current.actividadTurnoManana += actividad;
     if (turno === 'noche') current.actividadTurnoNoche += actividad;
 
@@ -241,13 +247,14 @@ function buildKpiRows(informes: ActuacionesPreventivosInforme[], granularity: Gr
   return Array.from(grouped.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, value]) => {
-      const actividadTotal = value.partes + value.asistencias + value.derivaronMutua;
+      const actividadTotal = value.partes + value.asistencias;
       return {
         periodo: value.label,
         actividadTotal,
         partesTrabajo: value.partes,
         asistenciasSanitarias: value.asistencias,
         derivaronMutua: value.derivaronMutua,
+        derivacionAmbulancia: value.derivacionAmbulancia,
         promedioActividadDiaria: value.days.size ? actividadTotal / value.days.size : 0,
         actividadTurnoManana: value.actividadTurnoManana,
         actividadTurnoNoche: value.actividadTurnoNoche,
@@ -286,16 +293,17 @@ export default function ActuacionesPreventivosDashboardPage() {
         acc.partes += informe.partesTrabajo;
         acc.asistencias += informe.asistenciasSanitarias;
         acc.derivaronMutua += informe.derivaronMutua;
+        acc.derivacionAmbulancia += informe.derivacionAmbulancia;
         return acc;
       },
-      { partes: 0, asistencias: 0, derivaronMutua: 0 },
+      { partes: 0, asistencias: 0, derivaronMutua: 0, derivacionAmbulancia: 0 },
     );
   }, [informes]);
 
   const lineChartData = useMemo<LineChartPoint[]>(() => {
-    const grouped = new Map<number, { partes: number; asistencias: number; derivaronMutua: number }>();
+    const grouped = new Map<number, { partes: number; asistencias: number; derivaronMutua: number; derivacionAmbulancia: number }>();
     for (let month = 0; month < 12; month += 1) {
-      grouped.set(month, { partes: 0, asistencias: 0, derivaronMutua: 0 });
+      grouped.set(month, { partes: 0, asistencias: 0, derivaronMutua: 0, derivacionAmbulancia: 0 });
     }
 
     for (const informe of informes) {
@@ -307,6 +315,7 @@ export default function ActuacionesPreventivosDashboardPage() {
       current.partes += informe.partesTrabajo;
       current.asistencias += informe.asistenciasSanitarias;
       current.derivaronMutua += informe.derivaronMutua;
+      current.derivacionAmbulancia += informe.derivacionAmbulancia;
     }
 
     return MONTH_LABELS.map((month, index) => ({
@@ -314,6 +323,7 @@ export default function ActuacionesPreventivosDashboardPage() {
       partes: grouped.get(index)?.partes ?? 0,
       asistencias: grouped.get(index)?.asistencias ?? 0,
       derivaronMutua: grouped.get(index)?.derivaronMutua ?? 0,
+      derivacionAmbulancia: grouped.get(index)?.derivacionAmbulancia ?? 0,
     }));
   }, [informes, selectedWeekOfMonth]);
 
@@ -341,6 +351,7 @@ export default function ActuacionesPreventivosDashboardPage() {
       partes: 0,
       asistencias: 0,
       derivaronMutua: 0,
+      derivacionAmbulancia: 0,
       actividadTurnoManana: 0,
       actividadTurnoNoche: 0,
     }));
@@ -353,11 +364,12 @@ export default function ActuacionesPreventivosDashboardPage() {
       const key = `${week.year}-W${String(week.week).padStart(2, '0')}`;
       if (!isAccumulatedWeek && key !== activeWeekKey) continue;
       const dayIndex = toDayIndex(date);
-      const actividad = informe.partesTrabajo + informe.asistenciasSanitarias + informe.derivaronMutua;
+      const actividad = informe.partesTrabajo + informe.asistenciasSanitarias;
       const turno = normalizeTurno(informe.turno);
       byDay[dayIndex].partes += informe.partesTrabajo;
       byDay[dayIndex].asistencias += informe.asistenciasSanitarias;
       byDay[dayIndex].derivaronMutua += informe.derivaronMutua;
+      byDay[dayIndex].derivacionAmbulancia += informe.derivacionAmbulancia;
       byDay[dayIndex].actividad += actividad;
       if (turno === 'manana') byDay[dayIndex].actividadTurnoManana += actividad;
       if (turno === 'noche') byDay[dayIndex].actividadTurnoNoche += actividad;
@@ -374,7 +386,7 @@ export default function ActuacionesPreventivosDashboardPage() {
       if (heatMapShift !== 'todos' && normalizeTurno(informe.turno) !== heatMapShift) continue;
       const weekNumber = getIsoWeek(date).week;
       const current = grouped.get(weekNumber) ?? Array(7).fill(0);
-      current[toDayIndex(date)] += informe.partesTrabajo + informe.asistenciasSanitarias + informe.derivaronMutua;
+      current[toDayIndex(date)] += informe.partesTrabajo + informe.asistenciasSanitarias;
       grouped.set(weekNumber, current);
     }
 
@@ -388,7 +400,7 @@ export default function ActuacionesPreventivosDashboardPage() {
   }, [heatMapRows]);
 
   const maxLineValue = useMemo(() => {
-    return lineChartData.reduce((max, row) => Math.max(max, row.partes, row.asistencias, row.derivaronMutua), 0);
+    return lineChartData.reduce((max, row) => Math.max(max, row.partes, row.asistencias, row.derivaronMutua, row.derivacionAmbulancia), 0);
   }, [lineChartData]);
 
   const handleDownloadPdf = async () => {
@@ -408,6 +420,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: 'Partes trabajo', style: 'tableHeader', alignment: 'right' },
           { text: 'Asistencias sanitarias', style: 'tableHeader', alignment: 'right' },
           { text: 'a Mútua', style: 'tableHeader', alignment: 'right' },
+          { text: 'a Ambulancia', style: 'tableHeader', alignment: 'right' },
           { text: 'Promedio actividad/día', style: 'tableHeader', alignment: 'right' },
           { text: 'Turno Mañana', style: 'tableHeader', alignment: 'right' },
           { text: 'Turno Noche', style: 'tableHeader', alignment: 'right' },
@@ -418,6 +431,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: row.partesTrabajo.toString(), alignment: 'right' as const },
           { text: row.asistenciasSanitarias.toString(), alignment: 'right' as const },
           { text: row.derivaronMutua.toString(), alignment: 'right' as const },
+          { text: row.derivacionAmbulancia.toString(), alignment: 'right' as const },
           { text: row.promedioActividadDiaria.toFixed(2), alignment: 'right' as const },
           { text: row.actividadTurnoManana.toString(), alignment: 'right' as const },
           { text: row.actividadTurnoNoche.toString(), alignment: 'right' as const },
@@ -436,6 +450,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: 'Partes', style: 'tableHeader', alignment: 'right' },
           { text: 'Asistencias', style: 'tableHeader', alignment: 'right' },
           { text: 'a Mútua', style: 'tableHeader', alignment: 'right' },
+          { text: 'a Ambulancia', style: 'tableHeader', alignment: 'right' },
           { text: 'Observaciones', style: 'tableHeader' },
           { text: 'Responsable', style: 'tableHeader' },
         ],
@@ -450,6 +465,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: informe.partesTrabajo.toString(), alignment: 'right' as const },
           { text: informe.asistenciasSanitarias.toString(), alignment: 'right' as const },
           { text: informe.derivaronMutua.toString(), alignment: 'right' as const },
+          { text: informe.derivacionAmbulancia.toString(), alignment: 'right' as const },
           informe.observaciones ?? '—',
           informe.responsable ?? '—',
         ])),
@@ -462,7 +478,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           margin: [0, 0, 0, 4],
         },
         {
-          text: `Informes: ${informes.length}   |   Partes: ${totals.partes}   |   Asistencias: ${totals.asistencias}   |   a Mútua: ${totals.derivaronMutua}`,
+          text: `Informes: ${informes.length}   |   Partes: ${totals.partes}   |   Asistencias: ${totals.asistencias}   |   a Mútua: ${totals.derivaronMutua}   |   a Ambulancia: ${totals.derivacionAmbulancia}`,
           margin: [0, 0, 0, 14],
         },
       ];
@@ -473,7 +489,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           {
             table: {
               headerRows: 1,
-              widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
+              widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
               body: kpiRows,
             },
             layout: 'lightHorizontalLines',
@@ -490,6 +506,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: 'Partes', style: 'tableHeader', alignment: 'right' },
           { text: 'Asistencias', style: 'tableHeader', alignment: 'right' },
           { text: 'a Mútua', style: 'tableHeader', alignment: 'right' },
+          { text: 'a Ambulancia', style: 'tableHeader', alignment: 'right' },
           { text: 'Turno Mañana', style: 'tableHeader', alignment: 'right' },
           { text: 'Turno Noche', style: 'tableHeader', alignment: 'right' },
         ],
@@ -499,6 +516,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: row.partes.toString(), alignment: 'right' as const },
           { text: row.asistencias.toString(), alignment: 'right' as const },
           { text: row.derivaronMutua.toString(), alignment: 'right' as const },
+          { text: row.derivacionAmbulancia.toString(), alignment: 'right' as const },
           { text: row.actividadTurnoManana.toString(), alignment: 'right' as const },
           { text: row.actividadTurnoNoche.toString(), alignment: 'right' as const },
         ])),
@@ -525,16 +543,19 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: 'Partes', style: 'tableHeader', alignment: 'right' },
           { text: 'Asistencias', style: 'tableHeader', alignment: 'right' },
           { text: 'a Mútua', style: 'tableHeader', alignment: 'right' },
+          { text: 'a Ambulancia', style: 'tableHeader', alignment: 'right' },
           { text: 'Visual', style: 'tableHeader' },
         ],
         ...lineChartData.map((row) => {
           const partesWidth = maxLineValue ? Math.round((row.partes / maxLineValue) * 140) : 0;
           const asistenciasWidth = maxLineValue ? Math.round((row.asistencias / maxLineValue) * 140) : 0;
           const derivaronMutuaWidth = maxLineValue ? Math.round((row.derivaronMutua / maxLineValue) * 140) : 0;
-          const monthTotal = row.partes + row.asistencias + row.derivaronMutua;
+          const derivacionAmbulanciaWidth = maxLineValue ? Math.round((row.derivacionAmbulancia / maxLineValue) * 140) : 0;
+          const monthTotal = row.partes + row.asistencias;
           const partesShare = monthTotal > 0 ? Math.round((row.partes / monthTotal) * 100) : 0;
           const asistenciasShare = monthTotal > 0 ? Math.round((row.asistencias / monthTotal) * 100) : 0;
-          const derivaronMutuaShare = monthTotal > 0 ? Math.round((row.derivaronMutua / monthTotal) * 100) : 0;
+          const derivaronMutuaShare = row.asistencias > 0 ? Math.round((row.derivaronMutua / row.asistencias) * 100) : 0;
+          const derivacionAmbulanciaShare = row.asistencias > 0 ? Math.round((row.derivacionAmbulancia / row.asistencias) * 100) : 0;
 
           const buildBarRow = (label: string, color: string, barWidth: number, share: number): Content => ({
             columns: [
@@ -565,6 +586,7 @@ export default function ActuacionesPreventivosDashboardPage() {
               buildBarRow('Partes', '#0d6efd', partesWidth, partesShare),
               buildBarRow('Asistencias', '#dc3545', asistenciasWidth, asistenciasShare),
               buildBarRow('Mutua', '#6c757d', derivaronMutuaWidth, derivaronMutuaShare),
+              buildBarRow('Ambulancia', '#198754', derivacionAmbulanciaWidth, derivacionAmbulanciaShare),
             ],
           };
 
@@ -573,6 +595,7 @@ export default function ActuacionesPreventivosDashboardPage() {
             { text: row.partes.toString(), alignment: 'right' as const },
             { text: row.asistencias.toString(), alignment: 'right' as const },
             { text: row.derivaronMutua.toString(), alignment: 'right' as const },
+            { text: row.derivacionAmbulancia.toString(), alignment: 'right' as const },
             visualCell,
           ];
         }),
@@ -588,7 +611,7 @@ export default function ActuacionesPreventivosDashboardPage() {
         {
           table: {
             headerRows: 1,
-            widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
+            widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
             body: selectedWeekRows,
           },
           layout: 'lightHorizontalLines',
@@ -625,7 +648,7 @@ export default function ActuacionesPreventivosDashboardPage() {
         {
           table: {
             headerRows: 1,
-              widths: ['*', 'auto', 'auto', 'auto', '*'],
+              widths: ['*', 'auto', 'auto', 'auto', 'auto', '*'],
             body: lineChartPdfRows,
           },
           layout: 'lightHorizontalLines',
@@ -639,7 +662,7 @@ export default function ActuacionesPreventivosDashboardPage() {
         {
           table: {
             headerRows: 1,
-            widths: [58, 38, 58, 52, 66, 50, 30, 28, 35, 42, '*', 52],
+            widths: [52, 38, 58, 52, 66, 50, 30, 28, 35, 38, 48, '*', 52],
             body: logRows,
           },
           layout: 'lightHorizontalLines',
@@ -698,6 +721,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                 <Badge bg="primary">Partes: {totals.partes}</Badge>
                 <Badge bg="danger">Asistencias: {totals.asistencias}</Badge>
                 <Badge bg="secondary">a Mútua: {totals.derivaronMutua}</Badge>
+                <Badge bg="success">a Ambulancia: {totals.derivacionAmbulancia}</Badge>
                 <Button
                   variant="outline-secondary"
                   size="sm"
@@ -746,6 +770,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                     <th>Partes</th>
                     <th>Asistencias</th>
                     <th>a Mútua</th>
+                    <th>a Ambulancia</th>
                     <th>Turno Mañana</th>
                     <th>Turno Noche</th>
                   </tr>
@@ -758,6 +783,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                       <td>{row.partes}</td>
                       <td>{row.asistencias}</td>
                       <td>{row.derivaronMutua}</td>
+                      <td>{row.derivacionAmbulancia}</td>
                       <td>{row.actividadTurnoManana}</td>
                       <td>{row.actividadTurnoNoche}</td>
                     </tr>
@@ -867,6 +893,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                       <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Partes</th>
                       <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Asistencias</th>
                       <th style={{ width: '1%', whiteSpace: 'nowrap' }}>a Mútua</th>
+                      <th style={{ width: '1%', whiteSpace: 'nowrap' }}>a Ambulancia</th>
                       <th style={{ minWidth: 280 }}>Comparativa visual</th>
                     </tr>
                   </thead>
@@ -875,16 +902,19 @@ export default function ActuacionesPreventivosDashboardPage() {
                       const partesWidth = maxLineValue ? (row.partes / maxLineValue) * 100 : 0;
                       const asistenciasWidth = maxLineValue ? (row.asistencias / maxLineValue) * 100 : 0;
                       const derivaronMutuaWidth = maxLineValue ? (row.derivaronMutua / maxLineValue) * 100 : 0;
-                      const monthTotal = row.partes + row.asistencias + row.derivaronMutua;
+                      const derivacionAmbulanciaWidth = maxLineValue ? (row.derivacionAmbulancia / maxLineValue) * 100 : 0;
+                      const monthTotal = row.partes + row.asistencias;
                       const partesShare = monthTotal > 0 ? Math.round((row.partes / monthTotal) * 100) : 0;
                       const asistenciasShare = monthTotal > 0 ? Math.round((row.asistencias / monthTotal) * 100) : 0;
-                      const derivaronMutuaShare = monthTotal > 0 ? Math.round((row.derivaronMutua / monthTotal) * 100) : 0;
+                      const derivaronMutuaShare = row.asistencias > 0 ? Math.round((row.derivaronMutua / row.asistencias) * 100) : 0;
+                      const derivacionAmbulanciaShare = row.asistencias > 0 ? Math.round((row.derivacionAmbulancia / row.asistencias) * 100) : 0;
                       return (
                         <tr key={row.month}>
                           <td>{row.month}</td>
                           <td className="text-end" style={{ whiteSpace: 'nowrap' }}>{row.partes}</td>
                           <td className="text-end" style={{ whiteSpace: 'nowrap' }}>{row.asistencias}</td>
                           <td className="text-end" style={{ whiteSpace: 'nowrap' }}>{row.derivaronMutua}</td>
+                          <td className="text-end" style={{ whiteSpace: 'nowrap' }}>{row.derivacionAmbulancia}</td>
                           <td>
                             <div className="d-grid gap-2">
                               <div className="d-flex justify-content-between align-items-center gap-2">
@@ -920,6 +950,16 @@ export default function ActuacionesPreventivosDashboardPage() {
                                     />
                                   </div>
                                   <small className="text-muted fw-semibold" style={{ width: 72, textAlign: 'right' }}>{derivaronMutuaShare}%</small>
+                                </div>
+                                <div className="d-flex align-items-center gap-2">
+                                  <small className="text-success fw-semibold" style={{ width: 96, whiteSpace: 'nowrap' }}>Ambulancia</small>
+                                  <div className="bg-body-tertiary rounded-pill overflow-hidden flex-grow-1" style={{ height: 10 }}>
+                                    <div
+                                      className="bg-success rounded-pill"
+                                      style={{ width: `${derivacionAmbulanciaWidth}%`, height: '100%', minWidth: derivacionAmbulanciaWidth > 0 ? 6 : 0 }}
+                                    />
+                                  </div>
+                                  <small className="text-muted fw-semibold" style={{ width: 72, textAlign: 'right' }}>{derivacionAmbulanciaShare}%</small>
                                 </div>
                               </div>
                             </div>
@@ -960,6 +1000,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                     <th>Partes trabajo</th>
                     <th>Asistencias sanitarias</th>
                     <th>a Mútua</th>
+                    <th>a Ambulancia</th>
                     <th>Promedio actividad/día</th>
                     <th>Turno Mañana</th>
                     <th>Turno Noche</th>
@@ -973,6 +1014,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                       <td>{row.partesTrabajo}</td>
                       <td>{row.asistenciasSanitarias}</td>
                       <td>{row.derivaronMutua}</td>
+                      <td>{row.derivacionAmbulancia}</td>
                       <td>{row.promedioActividadDiaria.toFixed(2)}</td>
                       <td>{row.actividadTurnoManana}</td>
                       <td>{row.actividadTurnoNoche}</td>
@@ -1015,6 +1057,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                     <th>Partes</th>
                     <th>Asistencias</th>
                     <th>a Mútua</th>
+                    <th>a Ambulancia</th>
                     <th>Observaciones</th>
                     <th>Responsable</th>
                   </tr>
@@ -1032,6 +1075,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                       <td>{informe.partesTrabajo}</td>
                       <td>{informe.asistenciasSanitarias}</td>
                       <td>{informe.derivaronMutua}</td>
+                      <td>{informe.derivacionAmbulancia}</td>
                       <td>{informe.observaciones ?? '—'}</td>
                       <td>{informe.responsable ?? '—'}</td>
                     </tr>
