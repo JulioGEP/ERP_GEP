@@ -34,6 +34,7 @@ export default function ActuacionesPreventivosReportPage() {
     partesTrabajo: '',
     asistenciasSanitarias: '',
     derivaronMutua: '',
+    derivacionAmbulancia: '',
     observaciones: '',
     responsable: '',
   });
@@ -41,6 +42,8 @@ export default function ActuacionesPreventivosReportPage() {
   const updateField = <K extends keyof typeof form>(field: K, value: (typeof form)[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
+
+  const hasAsistenciasSanitarias = Number(form.asistenciasSanitarias || 0) > 0;
 
   const handleLoadBudget = async () => {
     const presupuesto = form.presupuesto.trim();
@@ -111,6 +114,7 @@ export default function ActuacionesPreventivosReportPage() {
           partesTrabajo: form.partesTrabajo,
           asistenciasSanitarias: form.asistenciasSanitarias,
           derivaronMutua: form.derivaronMutua,
+          derivacionAmbulancia: form.derivacionAmbulancia,
           observaciones: form.observaciones,
           responsable: form.responsable,
         }),
@@ -245,20 +249,44 @@ export default function ActuacionesPreventivosReportPage() {
                   type="number"
                   min={0}
                   value={form.asistenciasSanitarias}
-                  onChange={(event) => updateField('asistenciasSanitarias', event.target.value)}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    const hasAsistencias = Number(value || 0) > 0;
+                    setForm((current) => ({
+                      ...current,
+                      asistenciasSanitarias: value,
+                      derivaronMutua: hasAsistencias ? current.derivaronMutua : '',
+                      derivacionAmbulancia: hasAsistencias ? current.derivacionAmbulancia : '',
+                    }));
+                  }}
                 />
               </div>
-              <div className="col-12 col-lg-3">
-                <label className="form-label" htmlFor="derivaron-mutua">Derivaron a Mútua</label>
-                <input
-                  id="derivaron-mutua"
-                  className="form-control"
-                  type="number"
-                  min={0}
-                  value={form.derivaronMutua}
-                  onChange={(event) => updateField('derivaronMutua', event.target.value)}
-                />
-              </div>
+              {hasAsistenciasSanitarias ? (
+                <>
+                  <div className="col-12 col-lg-3">
+                    <label className="form-label" htmlFor="derivaron-mutua">Derivación a Mútua</label>
+                    <input
+                      id="derivaron-mutua"
+                      className="form-control"
+                      type="number"
+                      min={0}
+                      value={form.derivaronMutua}
+                      onChange={(event) => updateField('derivaronMutua', event.target.value)}
+                    />
+                  </div>
+                  <div className="col-12 col-lg-3">
+                    <label className="form-label" htmlFor="derivacion-ambulancia">Derivación a ambulancia</label>
+                    <input
+                      id="derivacion-ambulancia"
+                      className="form-control"
+                      type="number"
+                      min={0}
+                      value={form.derivacionAmbulancia}
+                      onChange={(event) => updateField('derivacionAmbulancia', event.target.value)}
+                    />
+                  </div>
+                </>
+              ) : null}
               <div className="col-12">
                 <label className="form-label" htmlFor="observaciones">Observaciones</label>
                 <textarea
