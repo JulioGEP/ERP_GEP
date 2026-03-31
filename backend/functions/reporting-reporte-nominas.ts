@@ -7,34 +7,34 @@ import { errorResponse, successResponse } from './_shared/response';
 
 type DecimalLike = { toNumber?: () => number; toString?: () => string };
 
-type CategoryKey = 'fixedTrainers' | 'fixedStaff' | 'discontinuousTrainers';
+type CategoryKey = 'fixedTrainers' | 'fixedStaff' | 'discontinuousTraining' | 'discontinuousPreventive' | 'discontinuousTrainers';
 
 type MetricKey =
   | 'salarioBruto'
-  | 'salarioBrutoTotal'
-  | 'salarioLimpio'
-  | 'contingenciasComunes'
-  | 'aportacionSsIrpf'
-  | 'totalEmpresa'
-  | 'costeServicioFormacion'
-  | 'costeServicioPreventivo'
-  | 'dietas'
-  | 'kilometraje'
-  | 'pernocta'
-  | 'nocturnidad'
-  | 'festivo'
-  | 'horasExtras'
-  | 'gastosExtras'
-  | 'variable';
+  | 'extrasBruto'
+  | 'aportacionTrabajadorSs'
+  | 'retencionIrpf'
+  | 'dietasKilometraje'
+  | 'salarioNeto'
+  | 'aportacionEmpresarialSs'
+  | 'costeTotal';
 
 type MetricTotals = Record<MetricKey, number>;
 
 type CategoryTotals = {
   metrics: MetricTotals;
   totalCost: number;
+  serviceCost: number;
 };
 
-type AggregatedPeriod = Record<CategoryKey | 'overall', CategoryTotals>;
+type AggregatedPeriod = {
+  fixedTrainers: CategoryTotals;
+  fixedStaff: CategoryTotals;
+  discontinuousTraining: CategoryTotals;
+  discontinuousPreventive: CategoryTotals;
+  discontinuousTrainers: CategoryTotals;
+  overall: CategoryTotals;
+};
 
 type ComparisonMetric = {
   current: number;
@@ -50,22 +50,17 @@ type ComparisonResult = {
 
 const METRIC_KEYS: MetricKey[] = [
   'salarioBruto',
-  'salarioBrutoTotal',
-  'salarioLimpio',
-  'contingenciasComunes',
-  'aportacionSsIrpf',
-  'totalEmpresa',
-  'costeServicioFormacion',
-  'costeServicioPreventivo',
-  'dietas',
-  'kilometraje',
-  'pernocta',
-  'nocturnidad',
-  'festivo',
-  'horasExtras',
-  'gastosExtras',
-  'variable',
+  'extrasBruto',
+  'aportacionTrabajadorSs',
+  'retencionIrpf',
+  'dietasKilometraje',
+  'salarioNeto',
+  'aportacionEmpresarialSs',
+  'costeTotal',
 ];
+
+const EMPLOYEE_SS_RATE = 0.065;
+const EMPLOYER_SS_RATE = 0.3425;
 
 function decimalToNumber(value: DecimalLike | number | string | null | undefined): number {
   if (value === null || value === undefined) return 0;
@@ -89,42 +84,62 @@ function roundToTwo(value: number): number {
 function emptyMetrics(): MetricTotals {
   return {
     salarioBruto: 0,
-    salarioBrutoTotal: 0,
-    salarioLimpio: 0,
-    contingenciasComunes: 0,
-    aportacionSsIrpf: 0,
-    totalEmpresa: 0,
-    costeServicioFormacion: 0,
-    costeServicioPreventivo: 0,
-    dietas: 0,
-    kilometraje: 0,
-    pernocta: 0,
-    nocturnidad: 0,
-    festivo: 0,
-    horasExtras: 0,
-    gastosExtras: 0,
-    variable: 0,
+    extrasBruto: 0,
+    aportacionTrabajadorSs: 0,
+    retencionIrpf: 0,
+    dietasKilometraje: 0,
+    salarioNeto: 0,
+    aportacionEmpresarialSs: 0,
+    costeTotal: 0,
   };
 }
 
 function emptyCategoryTotals(): CategoryTotals {
-  return { metrics: emptyMetrics(), totalCost: 0 };
+  return { metrics: emptyMetrics(), totalCost: 0, serviceCost: 0 };
 }
 
-function computeTotalCost(metrics: MetricTotals): number {
-  return roundToTwo(
-    metrics.totalEmpresa
-      + metrics.costeServicioFormacion
-      + metrics.costeServicioPreventivo
-      + metrics.dietas
-      + metrics.kilometraje
-      + metrics.pernocta
-      + metrics.nocturnidad
-      + metrics.festivo
-      + metrics.horasExtras
-      + metrics.gastosExtras
-      + metrics.variable,
-  );
+function computePayrollDerivedMetrics(metrics: MetricTotals): MetricTotals {
+  const salarioBruto = roundToTwo(metrics.salarioBruto);
+  const extrasBruto = roundToTwo(metrics.extrasBruto);
+  const dietasKilometraje = roundToTwo(metrics.dietasKilometraje);
+  const aportacionTrabajadorSs = roundToTwo(salarioBruto * EMPLOYEE_SS_RATE);
+  const retencionIrpf = roundToTwo(Math.max(metrics.retencionIrpf, 0));
+  const salarioNeto = roundToTwo(salarioBruto - aportacionTrabajadorSs - retencionIrpf + dietasKilometraje);
+  const aportacionEmpresarialSs = roundToTwo(salarioBruto * EMPLOYER_SS_RATE);
+  const costeTotal = roundToTwo(salarioNeto + aportacionEmpresarialSs);
+
+  return {
+    salarioBruto,
+    extrasBruto,
+    aportacionTrabajadorSs,
+    retencionIrpf,
+    dietasKilometraje,
+    salarioNeto,
+    aportacionEmpresarialSs,
+    costeTotal,
+  };
+}
+
+function computeDiscontinuousDerivedMetrics(metrics: MetricTotals, serviceCost: number): MetricTotals {
+  const salarioBruto = 0;
+  const extrasBruto = roundToTwo(metrics.extrasBruto);
+  const dietasKilometraje = roundToTwo(metrics.dietasKilometraje);
+  const aportacionTrabajadorSs = 0;
+  const retencionIrpf = 0;
+  const salarioNeto = roundToTwo(extrasBruto + dietasKilometraje);
+  const aportacionEmpresarialSs = 0;
+  const costeTotal = roundToTwo(salarioNeto + serviceCost);
+
+  return {
+    salarioBruto,
+    extrasBruto,
+    aportacionTrabajadorSs,
+    retencionIrpf,
+    dietasKilometraje,
+    salarioNeto,
+    aportacionEmpresarialSs,
+    costeTotal,
+  };
 }
 
 function computeSessionHours(start: Date | null, end: Date | null, breakHours = 0): number {
@@ -214,15 +229,18 @@ function isPreventivePipeline(
   return (
     normalizedLabel === 'gep services'
     || normalizedLabel === 'preventivos'
+    || normalizedLabel === 'pci'
     || normalizedId === 'gep services'
     || normalizedId === 'preventivos'
+    || normalizedId === 'pci'
   );
 }
 
 async function applyDiscontinuousServiceCosts(
   prisma: ReturnType<typeof getPrisma>,
   monthRange: { start: Date; end: Date },
-  target: MetricTotals,
+  trainingTarget: CategoryTotals,
+  preventiveTarget: CategoryTotals,
 ): Promise<void> {
   const sesionTrainers = await prisma.sesion_trainers.findMany({
     where: {
@@ -355,12 +373,12 @@ async function applyDiscontinuousServiceCosts(
 
     if (isPreventive) {
       const rate = Math.max(decimalToNumber(extraCost?.precio_coste_preventivo), 0) || DEFAULT_SERVICE_COSTS.preventivo;
-      target.costeServicioPreventivo += hours * rate;
+      preventiveTarget.serviceCost += hours * rate;
       return;
     }
 
     const rate = Math.max(decimalToNumber(extraCost?.precio_coste_formacion), 0) || DEFAULT_SERVICE_COSTS.formacion;
-    target.costeServicioFormacion += hours * rate;
+    trainingTarget.serviceCost += hours * rate;
   });
 
   variants.forEach((variant) => {
@@ -368,46 +386,53 @@ async function applyDiscontinuousServiceCosts(
     const hours = computeVariantHours(variant.date, variant.products ?? { hora_inicio: null, hora_fin: null });
     const extraCost = extraCostMap.get(`variant:${variant.id}:${variant.trainer_id}`) ?? null;
     const rate = Math.max(decimalToNumber(extraCost?.precio_coste_formacion), 0) || DEFAULT_SERVICE_COSTS.formacion;
-    target.costeServicioFormacion += hours * rate;
+    trainingTarget.serviceCost += hours * rate;
   });
 }
 
 
 function applyOfficePayrollMetrics(target: MetricTotals, payroll: office_payrolls): void {
-  target.salarioBruto += decimalToNumber(payroll.salario_bruto);
-  target.salarioBrutoTotal += decimalToNumber(payroll.salario_bruto_total);
-  target.salarioLimpio += decimalToNumber(payroll.salario_limpio);
-  target.contingenciasComunes += decimalToNumber(payroll.contingencias_comunes);
-  target.aportacionSsIrpf += decimalToNumber(payroll.aportacion_ss_irpf);
-  target.totalEmpresa += decimalToNumber(payroll.total_empresa);
-  target.dietas += decimalToNumber(payroll.dietas);
-  target.kilometraje += decimalToNumber(payroll.kilometrajes);
-  target.pernocta += decimalToNumber(payroll.pernocta);
-  target.nocturnidad += decimalToNumber(payroll.nocturnidad);
-  target.festivo += decimalToNumber(payroll.festivo);
-  target.horasExtras += decimalToNumber(payroll.horas_extras);
-  target.gastosExtras += decimalToNumber(payroll.otros_gastos);
-  target.variable += decimalToNumber(payroll.variable);
+  const baseSalary = decimalToNumber(payroll.salario_bruto);
+  const extrasBruto = decimalToNumber(payroll.pernocta)
+    + decimalToNumber(payroll.nocturnidad)
+    + decimalToNumber(payroll.festivo)
+    + decimalToNumber(payroll.horas_extras)
+    + decimalToNumber(payroll.otros_gastos)
+    + decimalToNumber(payroll.variable);
+  const salarioBrutoTotal = decimalToNumber(payroll.salario_bruto_total) || (baseSalary + extrasBruto);
+  const deductionAmount = Math.abs(decimalToNumber(payroll.aportacion_ss_irpf));
+  const aportacionTrabajador = salarioBrutoTotal * EMPLOYEE_SS_RATE;
+  const retencionIrpf = Math.max(deductionAmount - aportacionTrabajador, 0);
+
+  target.salarioBruto += salarioBrutoTotal;
+  target.extrasBruto += extrasBruto;
+  target.dietasKilometraje += decimalToNumber(payroll.dietas) + decimalToNumber(payroll.kilometrajes);
+  target.retencionIrpf += retencionIrpf;
 }
 
 function applyTrainerExtraCostMetrics(target: MetricTotals, extraCost: trainer_extra_costs): void {
-  target.dietas += decimalToNumber(extraCost.dietas);
-  target.kilometraje += decimalToNumber(extraCost.kilometraje);
-  target.pernocta += decimalToNumber(extraCost.pernocta);
-  target.nocturnidad += decimalToNumber(extraCost.nocturnidad);
-  target.festivo += decimalToNumber(extraCost.festivo);
-  target.horasExtras += decimalToNumber(extraCost.horas_extras);
-  target.gastosExtras += decimalToNumber(extraCost.gastos_extras);
+  target.dietasKilometraje += decimalToNumber(extraCost.dietas) + decimalToNumber(extraCost.kilometraje);
+  target.extrasBruto += decimalToNumber(extraCost.pernocta)
+    + decimalToNumber(extraCost.nocturnidad)
+    + decimalToNumber(extraCost.festivo)
+    + decimalToNumber(extraCost.horas_extras)
+    + decimalToNumber(extraCost.gastos_extras);
 }
 
-function finalizeCategoryTotals(category: CategoryTotals): CategoryTotals {
-  const roundedMetrics = emptyMetrics();
-  METRIC_KEYS.forEach((key) => {
-    roundedMetrics[key] = roundToTwo(category.metrics[key]);
-  });
+function finalizeCategoryTotals(category: CategoryTotals, mode: 'payroll' | 'discontinuous' | 'precomputed'): CategoryTotals {
+  const roundedMetrics = mode === 'payroll'
+    ? computePayrollDerivedMetrics(category.metrics)
+    : mode === 'discontinuous'
+      ? computeDiscontinuousDerivedMetrics(category.metrics, roundToTwo(category.serviceCost))
+      : METRIC_KEYS.reduce((acc, key) => {
+          acc[key] = roundToTwo(category.metrics[key]);
+          return acc;
+        }, emptyMetrics());
+
   return {
     metrics: roundedMetrics,
-    totalCost: computeTotalCost(roundedMetrics),
+    totalCost: roundedMetrics.costeTotal,
+    serviceCost: roundToTwo(category.serviceCost),
   };
 }
 
@@ -579,7 +604,8 @@ export const handler = createHttpHandler(async (request) => {
 
     const fixedTrainers = emptyCategoryTotals();
     const fixedStaff = emptyCategoryTotals();
-    const discontinuousTrainers = emptyCategoryTotals();
+    const discontinuousTraining = emptyCategoryTotals();
+    const discontinuousPreventive = emptyCategoryTotals();
 
     officePayrolls.forEach((payroll) => {
       const isFixedTrainer = Boolean(payroll.user?.trainer?.contrato_fijo) && !Boolean(payroll.user?.can_deliver_training);
@@ -600,14 +626,32 @@ export const handler = createHttpHandler(async (request) => {
         return;
       }
 
-      applyTrainerExtraCostMetrics(discontinuousTrainers.metrics, cost);
+      const isPreventiveCost = isPreventiveService(cost.sesion?.deals?.tipo_servicio)
+        || isPreventivePipeline(cost.sesion?.deals?.pipeline_label, cost.sesion?.deals?.pipeline_id);
+      if (isPreventiveCost) {
+        applyTrainerExtraCostMetrics(discontinuousPreventive.metrics, cost);
+        return;
+      }
+
+      applyTrainerExtraCostMetrics(discontinuousTraining.metrics, cost);
     });
 
-    await applyDiscontinuousServiceCosts(prisma, monthRange, discontinuousTrainers.metrics);
+    await applyDiscontinuousServiceCosts(prisma, monthRange, discontinuousTraining, discontinuousPreventive);
 
-    const finalizedFixedTrainers = finalizeCategoryTotals(fixedTrainers);
-    const finalizedFixedStaff = finalizeCategoryTotals(fixedStaff);
-    const finalizedDiscontinuous = finalizeCategoryTotals(discontinuousTrainers);
+    const finalizedFixedTrainers = finalizeCategoryTotals(fixedTrainers, 'payroll');
+    const finalizedFixedStaff = finalizeCategoryTotals(fixedStaff, 'payroll');
+    const finalizedDiscontinuousTraining = finalizeCategoryTotals(discontinuousTraining, 'discontinuous');
+    const finalizedDiscontinuousPreventive = finalizeCategoryTotals(discontinuousPreventive, 'discontinuous');
+    const discontinuousCombined = emptyCategoryTotals();
+    METRIC_KEYS.forEach((key) => {
+      discontinuousCombined.metrics[key] = roundToTwo(
+        finalizedDiscontinuousTraining.metrics[key] + finalizedDiscontinuousPreventive.metrics[key],
+      );
+    });
+    discontinuousCombined.serviceCost = roundToTwo(
+      finalizedDiscontinuousTraining.serviceCost + finalizedDiscontinuousPreventive.serviceCost,
+    );
+    const finalizedDiscontinuous = finalizeCategoryTotals(discontinuousCombined, 'discontinuous');
 
     const overallMetrics = emptyMetrics();
     [finalizedFixedTrainers, finalizedFixedStaff, finalizedDiscontinuous].forEach((category) => {
@@ -618,12 +662,19 @@ export const handler = createHttpHandler(async (request) => {
 
     const overall: CategoryTotals = {
       metrics: overallMetrics,
-      totalCost: computeTotalCost(overallMetrics),
+      totalCost: roundToTwo(overallMetrics.costeTotal),
+      serviceCost: roundToTwo(
+        finalizedFixedTrainers.serviceCost
+        + finalizedFixedStaff.serviceCost
+        + finalizedDiscontinuous.serviceCost,
+      ),
     };
 
     return {
       fixedTrainers: finalizedFixedTrainers,
       fixedStaff: finalizedFixedStaff,
+      discontinuousTraining: finalizedDiscontinuousTraining,
+      discontinuousPreventive: finalizedDiscontinuousPreventive,
       discontinuousTrainers: finalizedDiscontinuous,
       overall,
     };
@@ -636,23 +687,39 @@ export const handler = createHttpHandler(async (request) => {
     const result: AggregatedPeriod = {
       fixedTrainers: emptyCategoryTotals(),
       fixedStaff: emptyCategoryTotals(),
+      discontinuousTraining: emptyCategoryTotals(),
+      discontinuousPreventive: emptyCategoryTotals(),
       discontinuousTrainers: emptyCategoryTotals(),
       overall: emptyCategoryTotals(),
     };
+    const categoryKeys: Array<keyof AggregatedPeriod> = [
+      'fixedTrainers',
+      'fixedStaff',
+      'discontinuousTraining',
+      'discontinuousPreventive',
+      'discontinuousTrainers',
+      'overall',
+    ];
 
     monthAggregates.forEach((aggregate) => {
-      (Object.keys(result) as Array<keyof AggregatedPeriod>).forEach((categoryKey) => {
+      categoryKeys.forEach((categoryKey) => {
         METRIC_KEYS.forEach((metricKey) => {
           result[categoryKey].metrics[metricKey] = roundToTwo(
             result[categoryKey].metrics[metricKey] + aggregate[categoryKey].metrics[metricKey],
           );
         });
+        result[categoryKey].serviceCost = roundToTwo(
+          result[categoryKey].serviceCost + aggregate[categoryKey].serviceCost,
+        );
       });
     });
 
-    (Object.keys(result) as Array<keyof AggregatedPeriod>).forEach((categoryKey) => {
-      result[categoryKey] = finalizeCategoryTotals(result[categoryKey]);
-    });
+    result.fixedTrainers = finalizeCategoryTotals(result.fixedTrainers, 'precomputed');
+    result.fixedStaff = finalizeCategoryTotals(result.fixedStaff, 'precomputed');
+    result.discontinuousTraining = finalizeCategoryTotals(result.discontinuousTraining, 'precomputed');
+    result.discontinuousPreventive = finalizeCategoryTotals(result.discontinuousPreventive, 'precomputed');
+    result.discontinuousTrainers = finalizeCategoryTotals(result.discontinuousTrainers, 'precomputed');
+    result.overall = finalizeCategoryTotals(result.overall, 'precomputed');
 
     return result;
   };
@@ -671,23 +738,39 @@ export const handler = createHttpHandler(async (request) => {
     const result: AggregatedPeriod = {
       fixedTrainers: emptyCategoryTotals(),
       fixedStaff: emptyCategoryTotals(),
+      discontinuousTraining: emptyCategoryTotals(),
+      discontinuousPreventive: emptyCategoryTotals(),
       discontinuousTrainers: emptyCategoryTotals(),
       overall: emptyCategoryTotals(),
     };
+    const categoryKeys: Array<keyof AggregatedPeriod> = [
+      'fixedTrainers',
+      'fixedStaff',
+      'discontinuousTraining',
+      'discontinuousPreventive',
+      'discontinuousTrainers',
+      'overall',
+    ];
 
     monthAggregates.forEach((aggregate) => {
-      (Object.keys(result) as Array<keyof AggregatedPeriod>).forEach((categoryKey) => {
+      categoryKeys.forEach((categoryKey) => {
         METRIC_KEYS.forEach((metricKey) => {
           result[categoryKey].metrics[metricKey] = roundToTwo(
             result[categoryKey].metrics[metricKey] + aggregate[categoryKey].metrics[metricKey],
           );
         });
+        result[categoryKey].serviceCost = roundToTwo(
+          result[categoryKey].serviceCost + aggregate[categoryKey].serviceCost,
+        );
       });
     });
 
-    (Object.keys(result) as Array<keyof AggregatedPeriod>).forEach((categoryKey) => {
-      result[categoryKey] = finalizeCategoryTotals(result[categoryKey]);
-    });
+    result.fixedTrainers = finalizeCategoryTotals(result.fixedTrainers, 'precomputed');
+    result.fixedStaff = finalizeCategoryTotals(result.fixedStaff, 'precomputed');
+    result.discontinuousTraining = finalizeCategoryTotals(result.discontinuousTraining, 'precomputed');
+    result.discontinuousPreventive = finalizeCategoryTotals(result.discontinuousPreventive, 'precomputed');
+    result.discontinuousTrainers = finalizeCategoryTotals(result.discontinuousTrainers, 'precomputed');
+    result.overall = finalizeCategoryTotals(result.overall, 'precomputed');
 
     return result;
   };
@@ -719,8 +802,26 @@ export const handler = createHttpHandler(async (request) => {
       quarter,
       period: `${year}-${String(month).padStart(2, '0')}`,
     },
-    totals: currentMonth,
-    quarterTotals: currentQuarter,
+    totals: {
+      fixedTrainers: currentMonth.fixedTrainers,
+      fixedStaff: currentMonth.fixedStaff,
+      discontinuousTrainers: currentMonth.discontinuousTrainers,
+      discontinuousByService: {
+        training: currentMonth.discontinuousTraining,
+        preventive: currentMonth.discontinuousPreventive,
+      },
+      overall: currentMonth.overall,
+    },
+    quarterTotals: {
+      fixedTrainers: currentQuarter.fixedTrainers,
+      fixedStaff: currentQuarter.fixedStaff,
+      discontinuousTrainers: currentQuarter.discontinuousTrainers,
+      discontinuousByService: {
+        training: currentQuarter.discontinuousTraining,
+        preventive: currentQuarter.discontinuousPreventive,
+      },
+      overall: currentQuarter.overall,
+    },
     comparisons: {
       monthVsPreviousMonth: buildComparison(currentMonth.overall, monthBefore.overall),
       monthVsSameMonthLastYear: buildComparison(currentMonth.overall, sameMonthLastYear.overall),

@@ -1384,21 +1384,13 @@ export async function saveOfficePayroll(
 
 export type PayrollReportMetricKey =
   | 'salarioBruto'
-  | 'salarioBrutoTotal'
-  | 'salarioLimpio'
-  | 'contingenciasComunes'
-  | 'aportacionSsIrpf'
-  | 'totalEmpresa'
-  | 'costeServicioFormacion'
-  | 'costeServicioPreventivo'
-  | 'dietas'
-  | 'kilometraje'
-  | 'pernocta'
-  | 'nocturnidad'
-  | 'festivo'
-  | 'horasExtras'
-  | 'gastosExtras'
-  | 'variable';
+  | 'extrasBruto'
+  | 'aportacionTrabajadorSs'
+  | 'retencionIrpf'
+  | 'dietasKilometraje'
+  | 'salarioNeto'
+  | 'aportacionEmpresarialSs'
+  | 'costeTotal';
 
 export type PayrollReportTotals = {
   metrics: Record<PayrollReportMetricKey, number>;
@@ -1423,12 +1415,20 @@ export type PayrollReportResponse = {
     fixedTrainers: PayrollReportTotals;
     fixedStaff: PayrollReportTotals;
     discontinuousTrainers: PayrollReportTotals;
+    discontinuousByService: {
+      training: PayrollReportTotals;
+      preventive: PayrollReportTotals;
+    };
     overall: PayrollReportTotals;
   };
   quarterTotals: {
     fixedTrainers: PayrollReportTotals;
     fixedStaff: PayrollReportTotals;
     discontinuousTrainers: PayrollReportTotals;
+    discontinuousByService: {
+      training: PayrollReportTotals;
+      preventive: PayrollReportTotals;
+    };
     overall: PayrollReportTotals;
   };
   comparisons: {
