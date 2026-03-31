@@ -8,6 +8,7 @@ import {
   type PayrollReportMetricKey,
 } from '../../features/reporting/api';
 import { ApiError } from '../../api/client';
+import { getCurrentPayrollPeriod } from '../../utils/payrollPeriod';
 
 const METRIC_LABELS: Record<PayrollReportMetricKey, string> = {
   salarioBruto: 'Salario bruto',
@@ -41,11 +42,6 @@ const METRIC_COLORS: Record<PayrollReportMetricKey, string> = {
   aportacionEmpresarialSs: '#e377c2',
   costeTotal: '#17becf',
 };
-
-function buildCurrentMonthPeriod(): string {
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-}
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('es-ES', {
@@ -192,9 +188,9 @@ function AccumulatedComparisonTable({
 }
 
 export default function ReporteNominasPage() {
-  const [period, setPeriod] = useState<string>(buildCurrentMonthPeriod());
-  const [trendEndPeriod, setTrendEndPeriod] = useState<string>(buildCurrentMonthPeriod());
-  const [trendStartPeriod, setTrendStartPeriod] = useState<string>(shiftPeriod(buildCurrentMonthPeriod(), -11));
+  const [period, setPeriod] = useState<string>(getCurrentPayrollPeriod);
+  const [trendEndPeriod, setTrendEndPeriod] = useState<string>(getCurrentPayrollPeriod());
+  const [trendStartPeriod, setTrendStartPeriod] = useState<string>(shiftPeriod(getCurrentPayrollPeriod(), -11));
   const [showPreviousRange, setShowPreviousRange] = useState<boolean>(false);
   const [selectedMetrics, setSelectedMetrics] = useState<PayrollReportMetricKey[]>([
     'salarioBruto',
