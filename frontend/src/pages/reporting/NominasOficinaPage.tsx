@@ -1348,6 +1348,7 @@ export default function NominasOficinaPage({
         'festivo',
         'horas_extras',
         'gastos_extras',
+        'variable',
         'observaciones',
       ],
       ...entriesToExport.map((entry) => [
@@ -1370,6 +1371,7 @@ export default function NominasOficinaPage({
         entry.festivo,
         entry.horasExtras,
         entry.otrosGastos,
+        entry.variable,
         entry.commentPayroll ?? '',
       ]),
     ];
@@ -1379,9 +1381,9 @@ export default function NominasOficinaPage({
       fileName: `nominas_${selectedExportPeriod}.xlsx`,
       sheetName: 'Nóminas',
       formatting: {
-        currencyColumns: [5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
+        currencyColumns: [5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
         percentColumns: [7],
-        sumColumns: [5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
+        sumColumns: [5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
         headerStyle: {
           font: { bold: true, color: { rgb: 'FFFFFF' } },
           fill: { patternType: 'solid', fgColor: { rgb: '800000' } },

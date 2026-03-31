@@ -622,7 +622,8 @@ export const handler = createHttpHandler(async (request) => {
       }
       const isFixedTrainer = Boolean(cost.trainer?.contrato_fijo);
       if (isFixedTrainer) {
-        applyTrainerExtraCostMetrics(fixedTrainers.metrics, cost);
+        // Para formadores fijos, los extras ya se consolidan en office_payrolls
+        // desde reporting-costes-extra. Evitamos doble conteo en reporte_nominas.
         return;
       }
 
