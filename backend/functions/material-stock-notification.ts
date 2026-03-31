@@ -67,6 +67,8 @@ export const handler = createHttpHandler(async (request) => {
 
   const budgetId = normalizeString((request.body as { budgetId?: unknown } | null)?.budgetId);
   const products = normalizeProducts((request.body as { products?: unknown } | null)?.products);
+  const shippingAddress = normalizeString((request.body as { shippingAddress?: unknown } | null)?.shippingAddress);
+  const contact = normalizeString((request.body as { contact?: unknown } | null)?.contact);
 
   if (!budgetId) {
     return errorResponse('VALIDATION_ERROR', 'El presupuesto es obligatorio', 400);
@@ -80,7 +82,7 @@ export const handler = createHttpHandler(async (request) => {
 
   const body = `Hola Logistica\n\nNº de pedido: ${budgetId}\nDesde el Sales necesitamos un nuevo pedido\n${productLines.join(
     '\n',
-  )}\n- ${products.length} productos\n\nActualizar el pedido cuando tengáis numero de orden o de seguimiento\n\nSino hay Stock y hay que hacer pedido, crearlo desde la ruta https://erpgep.netlify.app/materiales/materiales`;
+  )}\n\nDirección de envío: ${shippingAddress ?? 'No informada'}\nContacto: ${contact ?? 'No informado'}\n\nActualizar el pedido cuando tengáis numero de orden o de seguimiento\n\nSino hay Stock y hay que hacer pedido, crearlo desde la ruta https://erpgep.netlify.app/materiales/materiales`;
 
   await sendEmail({
     to: LOGISTICS_EMAIL,

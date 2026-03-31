@@ -29,6 +29,8 @@ export type MaterialStockNotificationProduct = {
 export type SendMaterialStockNotificationPayload = {
   budgetId: string;
   products: MaterialStockNotificationProduct[];
+  shippingAddress?: string | null;
+  contact?: string | null;
 };
 
 export async function fetchMaterialOrders() {
