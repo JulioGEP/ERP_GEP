@@ -51,17 +51,13 @@ function formatCurrency(value: number): string {
   return new Intl.NumberFormat('es-ES', {
     style: 'currency',
     currency: 'EUR',
-    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value ?? 0);
 }
 
 function formatPercentage(value: number | null): string {
   if (value === null) return 'N/A';
-  return new Intl.NumberFormat('es-ES', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value) + '%';
+  return `${value.toFixed(2)}%`;
 }
 
 function parsePeriod(period: string): { year: number; month: number } {
