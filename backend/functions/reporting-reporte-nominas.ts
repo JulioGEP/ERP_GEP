@@ -508,6 +508,23 @@ function getPreviousQuarter(year: number, quarter: number): { year: number; quar
   return { year, quarter: quarter - 1 };
 }
 
+function getCurrentPayrollPeriodUtc(referenceDate = new Date()): string {
+  const reference = new Date(referenceDate);
+  if (Number.isNaN(reference.getTime())) {
+    const today = new Date();
+    return `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+
+  const periodYear = reference.getUTCFullYear();
+  const periodMonth = reference.getUTCDate() >= 26
+    ? reference.getUTCMonth() + 2
+    : reference.getUTCMonth() + 1;
+  const normalizedYear = periodMonth > 12 ? periodYear + 1 : periodYear;
+  const normalizedMonth = periodMonth > 12 ? 1 : periodMonth;
+
+  return `${normalizedYear}-${String(normalizedMonth).padStart(2, '0')}`;
+}
+
 export const handler = createHttpHandler(async (request) => {
   if (request.method !== 'GET') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
@@ -517,8 +534,7 @@ export const handler = createHttpHandler(async (request) => {
   const auth = await requireAuth(request, prisma, { requireRoles: ['Admin'] });
   if ('error' in auth) return auth.error;
 
-  const now = new Date();
-  const defaultPeriod = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+  const defaultPeriod = getCurrentPayrollPeriodUtc();
   const periodInput = request.query.period ?? defaultPeriod;
   const parsedPeriod = parseYearMonth(periodInput);
   if (!parsedPeriod) {
