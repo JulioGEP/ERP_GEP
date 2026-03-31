@@ -407,7 +407,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: 'Actividad total', style: 'tableHeader', alignment: 'right' },
           { text: 'Partes trabajo', style: 'tableHeader', alignment: 'right' },
           { text: 'Asistencias sanitarias', style: 'tableHeader', alignment: 'right' },
-          { text: 'Derivaron a Mútua', style: 'tableHeader', alignment: 'right' },
+          { text: 'a Mútua', style: 'tableHeader', alignment: 'right' },
           { text: 'Promedio actividad/día', style: 'tableHeader', alignment: 'right' },
           { text: 'Turno Mañana', style: 'tableHeader', alignment: 'right' },
           { text: 'Turno Noche', style: 'tableHeader', alignment: 'right' },
@@ -435,7 +435,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: 'Turno', style: 'tableHeader' },
           { text: 'Partes', style: 'tableHeader', alignment: 'right' },
           { text: 'Asistencias', style: 'tableHeader', alignment: 'right' },
-          { text: 'Derivaron a Mútua', style: 'tableHeader', alignment: 'right' },
+          { text: 'a Mútua', style: 'tableHeader', alignment: 'right' },
           { text: 'Observaciones', style: 'tableHeader' },
           { text: 'Responsable', style: 'tableHeader' },
         ],
@@ -462,7 +462,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           margin: [0, 0, 0, 4],
         },
         {
-          text: `Informes: ${informes.length}   |   Partes: ${totals.partes}   |   Asistencias: ${totals.asistencias}   |   Derivaron a Mútua: ${totals.derivaronMutua}`,
+          text: `Informes: ${informes.length}   |   Partes: ${totals.partes}   |   Asistencias: ${totals.asistencias}   |   a Mútua: ${totals.derivaronMutua}`,
           margin: [0, 0, 0, 14],
         },
       ];
@@ -489,7 +489,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: 'Actividad', style: 'tableHeader', alignment: 'right' },
           { text: 'Partes', style: 'tableHeader', alignment: 'right' },
           { text: 'Asistencias', style: 'tableHeader', alignment: 'right' },
-          { text: 'Derivaron a Mútua', style: 'tableHeader', alignment: 'right' },
+          { text: 'a Mútua', style: 'tableHeader', alignment: 'right' },
           { text: 'Turno Mañana', style: 'tableHeader', alignment: 'right' },
           { text: 'Turno Noche', style: 'tableHeader', alignment: 'right' },
         ],
@@ -524,7 +524,7 @@ export default function ActuacionesPreventivosDashboardPage() {
           { text: 'Mes', style: 'tableHeader' },
           { text: 'Partes', style: 'tableHeader', alignment: 'right' },
           { text: 'Asistencias', style: 'tableHeader', alignment: 'right' },
-          { text: 'Derivaron a Mútua', style: 'tableHeader', alignment: 'right' },
+          { text: 'a Mútua', style: 'tableHeader', alignment: 'right' },
           { text: 'Visual', style: 'tableHeader' },
         ],
         ...lineChartData.map((row) => {
@@ -697,7 +697,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                 <Badge bg="success">Informes: {informes.length}</Badge>
                 <Badge bg="primary">Partes: {totals.partes}</Badge>
                 <Badge bg="danger">Asistencias: {totals.asistencias}</Badge>
-                <Badge bg="secondary">Derivaron a Mútua: {totals.derivaronMutua}</Badge>
+                <Badge bg="secondary">a Mútua: {totals.derivaronMutua}</Badge>
                 <Button
                   variant="outline-secondary"
                   size="sm"
@@ -745,7 +745,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                     <th>Actividad</th>
                     <th>Partes</th>
                     <th>Asistencias</th>
-                    <th>Derivaron a Mútua</th>
+                    <th>a Mútua</th>
                     <th>Turno Mañana</th>
                     <th>Turno Noche</th>
                   </tr>
@@ -866,7 +866,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                       <th>Mes</th>
                       <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Partes</th>
                       <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Asistencias</th>
-                      <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Derivaron a Mútua</th>
+                      <th style={{ width: '1%', whiteSpace: 'nowrap' }}>a Mútua</th>
                       <th style={{ minWidth: 280 }}>Comparativa visual</th>
                     </tr>
                   </thead>
@@ -959,7 +959,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                     <th>Actividad total</th>
                     <th>Partes trabajo</th>
                     <th>Asistencias sanitarias</th>
-                    <th>Derivaron a Mútua</th>
+                    <th>a Mútua</th>
                     <th>Promedio actividad/día</th>
                     <th>Turno Mañana</th>
                     <th>Turno Noche</th>
@@ -1014,7 +1014,7 @@ export default function ActuacionesPreventivosDashboardPage() {
                     <th>Turno</th>
                     <th>Partes</th>
                     <th>Asistencias</th>
-                    <th>Derivaron a Mútua</th>
+                    <th>a Mútua</th>
                     <th>Observaciones</th>
                     <th>Responsable</th>
                   </tr>
