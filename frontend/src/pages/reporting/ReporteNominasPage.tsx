@@ -9,68 +9,37 @@ import {
 } from '../../features/reporting/api';
 import { ApiError } from '../../api/client';
 
-const CATEGORY_LABELS = {
-  fixedTrainers: 'Formadores fijos',
-  fixedStaff: 'Personal fijo',
-  discontinuousTrainers: 'Formadores discontinuos',
-  overall: 'Total',
-} as const;
-
 const METRIC_LABELS: Record<PayrollReportMetricKey, string> = {
   salarioBruto: 'Salario bruto',
-  salarioBrutoTotal: 'Salario bruto total',
-  salarioLimpio: 'Salario limpio',
-  contingenciasComunes: 'Contingencias comunes',
-  aportacionSsIrpf: 'Aportación SS/IRPF',
-  totalEmpresa: 'Total empresa',
-  costeServicioFormacion: 'Coste servicio formación',
-  costeServicioPreventivo: 'Coste servicio preventivos',
-  dietas: 'Dietas',
-  kilometraje: 'Kilometraje',
-  pernocta: 'Pernocta',
-  nocturnidad: 'Nocturnidad',
-  festivo: 'Festivo',
-  horasExtras: 'Horas extras',
-  gastosExtras: 'Gastos extras',
-  variable: 'Variable',
+  extrasBruto: 'Extras (desglose del salario bruto)',
+  aportacionTrabajadorSs: 'Aportación trabajador/a SS',
+  retencionIrpf: 'Retención IRPF',
+  dietasKilometraje: 'Dietas / kilometraje',
+  salarioNeto: 'Salario neto',
+  aportacionEmpresarialSs: 'Aportación empresarial SS',
+  costeTotal: 'Coste total',
 };
 
 const METRIC_ORDER: PayrollReportMetricKey[] = [
   'salarioBruto',
-  'salarioBrutoTotal',
-  'salarioLimpio',
-  'contingenciasComunes',
-  'aportacionSsIrpf',
-  'totalEmpresa',
-  'costeServicioFormacion',
-  'costeServicioPreventivo',
-  'dietas',
-  'kilometraje',
-  'pernocta',
-  'nocturnidad',
-  'festivo',
-  'horasExtras',
-  'gastosExtras',
-  'variable',
+  'extrasBruto',
+  'aportacionTrabajadorSs',
+  'retencionIrpf',
+  'dietasKilometraje',
+  'salarioNeto',
+  'aportacionEmpresarialSs',
+  'costeTotal',
 ];
 
 const METRIC_COLORS: Record<PayrollReportMetricKey, string> = {
   salarioBruto: '#1f77b4',
-  salarioBrutoTotal: '#ff7f0e',
-  salarioLimpio: '#2ca02c',
-  contingenciasComunes: '#d62728',
-  aportacionSsIrpf: '#9467bd',
-  totalEmpresa: '#8c564b',
-  costeServicioFormacion: '#e377c2',
-  costeServicioPreventivo: '#7f7f7f',
-  dietas: '#bcbd22',
-  kilometraje: '#17becf',
-  pernocta: '#005f73',
-  nocturnidad: '#6a4c93',
-  festivo: '#ef476f',
-  horasExtras: '#118ab2',
-  gastosExtras: '#f3722c',
-  variable: '#43aa8b',
+  extrasBruto: '#ff7f0e',
+  aportacionTrabajadorSs: '#2ca02c',
+  retencionIrpf: '#d62728',
+  dietasKilometraje: '#9467bd',
+  salarioNeto: '#8c564b',
+  aportacionEmpresarialSs: '#e377c2',
+  costeTotal: '#17becf',
 };
 
 function buildCurrentMonthPeriod(): string {
@@ -229,9 +198,8 @@ export default function ReporteNominasPage() {
   const [showPreviousRange, setShowPreviousRange] = useState<boolean>(false);
   const [selectedMetrics, setSelectedMetrics] = useState<PayrollReportMetricKey[]>([
     'salarioBruto',
-    'salarioLimpio',
-    'totalEmpresa',
-    'variable',
+    'salarioNeto',
+    'costeTotal',
   ]);
 
   const query = useQuery({
@@ -350,30 +318,28 @@ export default function ReporteNominasPage() {
               <Table bordered hover responsive className="align-middle mb-0" size="sm">
                 <thead>
                   <tr>
-                    <th>Línea</th>
-                    <th className="text-end">Formadores fijos</th>
-                    <th className="text-end">Personal fijo</th>
-                    <th className="text-end">Formadores discontinuos</th>
-                    <th className="text-end">Total</th>
+                    <th rowSpan={2}>Línea</th>
+                    <th className="text-end" rowSpan={2}>Personal fijo</th>
+                    <th className="text-end" rowSpan={2}>Formadores fijos</th>
+                    <th className="text-center" colSpan={2}>Formadores discontinuos</th>
+                    <th className="text-end" rowSpan={2}>Total</th>
+                  </tr>
+                  <tr>
+                    <th className="text-end">Formación</th>
+                    <th className="text-end">Preventivos</th>
                   </tr>
                 </thead>
                 <tbody>
                   {METRIC_ORDER.map((metricKey) => (
                     <tr key={metricKey}>
                       <td>{METRIC_LABELS[metricKey]}</td>
-                      <td className="text-end">{formatCurrency(query.data.totals.fixedTrainers.metrics[metricKey])}</td>
                       <td className="text-end">{formatCurrency(query.data.totals.fixedStaff.metrics[metricKey])}</td>
-                      <td className="text-end">{formatCurrency(query.data.totals.discontinuousTrainers.metrics[metricKey])}</td>
+                      <td className="text-end">{formatCurrency(query.data.totals.fixedTrainers.metrics[metricKey])}</td>
+                      <td className="text-end">{formatCurrency(query.data.totals.discontinuousByService.training.metrics[metricKey])}</td>
+                      <td className="text-end">{formatCurrency(query.data.totals.discontinuousByService.preventive.metrics[metricKey])}</td>
                       <td className="text-end">{formatCurrency(query.data.totals.overall.metrics[metricKey])}</td>
                     </tr>
                   ))}
-                  <tr className="table-primary">
-                    <td><strong>Coste total</strong></td>
-                    <td className="text-end"><strong>{formatCurrency(query.data.totals.fixedTrainers.totalCost)}</strong></td>
-                    <td className="text-end"><strong>{formatCurrency(query.data.totals.fixedStaff.totalCost)}</strong></td>
-                    <td className="text-end"><strong>{formatCurrency(query.data.totals.discontinuousTrainers.totalCost)}</strong></td>
-                    <td className="text-end"><strong>{formatCurrency(query.data.totals.overall.totalCost)}</strong></td>
-                  </tr>
                 </tbody>
               </Table>
             </Card.Body>
@@ -385,15 +351,26 @@ export default function ReporteNominasPage() {
               <Table bordered hover responsive className="align-middle mb-0" size="sm">
                 <thead>
                   <tr>
-                    <th>Grupo</th>
-                    <th className="text-end">Coste total</th>
+                    <th rowSpan={2}>Línea</th>
+                    <th className="text-end" rowSpan={2}>Personal fijo</th>
+                    <th className="text-end" rowSpan={2}>Formadores fijos</th>
+                    <th className="text-center" colSpan={2}>Formadores discontinuos</th>
+                    <th className="text-end" rowSpan={2}>Total</th>
+                  </tr>
+                  <tr>
+                    <th className="text-end">Formación</th>
+                    <th className="text-end">Preventivos</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(Object.keys(CATEGORY_LABELS) as Array<keyof typeof CATEGORY_LABELS>).map((categoryKey) => (
-                    <tr key={categoryKey}>
-                      <td>{CATEGORY_LABELS[categoryKey]}</td>
-                      <td className="text-end">{formatCurrency(query.data.quarterTotals[categoryKey].totalCost)}</td>
+                  {METRIC_ORDER.map((metricKey) => (
+                    <tr key={metricKey}>
+                      <td>{METRIC_LABELS[metricKey]}</td>
+                      <td className="text-end">{formatCurrency(query.data.quarterTotals.fixedStaff.metrics[metricKey])}</td>
+                      <td className="text-end">{formatCurrency(query.data.quarterTotals.fixedTrainers.metrics[metricKey])}</td>
+                      <td className="text-end">{formatCurrency(query.data.quarterTotals.discontinuousByService.training.metrics[metricKey])}</td>
+                      <td className="text-end">{formatCurrency(query.data.quarterTotals.discontinuousByService.preventive.metrics[metricKey])}</td>
+                      <td className="text-end">{formatCurrency(query.data.quarterTotals.overall.metrics[metricKey])}</td>
                     </tr>
                   ))}
                 </tbody>
