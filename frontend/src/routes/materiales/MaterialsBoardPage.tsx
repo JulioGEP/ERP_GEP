@@ -246,6 +246,18 @@ function getBudgetNotificationProducts(budget: DealSummary): Array<{ productName
     .filter((product): product is { productName: string; quantity: number } => product !== null);
 }
 
+function getBudgetNotificationContact(budget: DealSummary): string | null {
+  const personName = `${budget.person?.first_name ?? ''} ${budget.person?.last_name ?? ''}`.trim();
+  const personEmail = budget.person?.email?.trim() ?? '';
+  const personPhone = budget.person?.phone?.trim() ?? '';
+
+  const segments = [personName, personEmail, personPhone].filter((segment) => segment.length > 0);
+  if (segments.length > 0) return segments.join(' · ');
+
+  const fallbackOrganization = budget.organization?.name?.trim() ?? '';
+  return fallbackOrganization.length ? fallbackOrganization : null;
+}
+
 const ARCHIVED_MATERIAL_STATUS: MaterialDealStatus = 'Enviados al cliente';
 
 function isArchivedMaterialBudget(budget: DealSummary): boolean {
@@ -391,8 +403,17 @@ export function MaterialsBoardPage({
   });
 
   const notificationMutation = useMutation({
-    mutationFn: ({ budgetId, products }: { budgetId: string; products: Array<{ productName: string; quantity: number }> }) =>
-      sendMaterialStockNotification({ budgetId, products }),
+    mutationFn: ({
+      budgetId,
+      products,
+      shippingAddress,
+      contact,
+    }: {
+      budgetId: string;
+      products: Array<{ productName: string; quantity: number }>;
+      shippingAddress?: string | null;
+      contact?: string | null;
+    }) => sendMaterialStockNotification({ budgetId, products, shippingAddress, contact }),
     onError: () => {
       setUpdateError('No se pudo enviar el aviso a logística.');
     },
@@ -751,8 +772,15 @@ export function MaterialsBoardPage({
               const budget = budgetsById.get(pendingMove.budgetId);
               if (!budget) return;
               const products = getBudgetNotificationProducts(budget);
+              const shippingAddress = budget.direccion_envio?.trim() || null;
+              const contact = getBudgetNotificationContact(budget);
               try {
-                await notificationMutation.mutateAsync({ budgetId: pendingMove.budgetId, products });
+                await notificationMutation.mutateAsync({
+                  budgetId: pendingMove.budgetId,
+                  products,
+                  shippingAddress,
+                  contact,
+                });
                 handleStatusChange(budget, pendingMove.targetStatus);
               } catch {
                 // Error handled in mutation callback.
