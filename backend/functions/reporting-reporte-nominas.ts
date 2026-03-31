@@ -471,8 +471,8 @@ function buildComparison(current: CategoryTotals, previous: CategoryTotals): Com
 }
 
 function buildMonthRangeUtc(year: number, month: number): { start: Date; end: Date } {
-  const start = new Date(Date.UTC(year, month - 1, 1));
-  const end = new Date(Date.UTC(year, month, 1));
+  const start = new Date(Date.UTC(year, month - 2, 26, 0, 0, 0, 0));
+  const end = new Date(Date.UTC(year, month - 1, 26, 0, 0, 0, 0));
   return { start, end };
 }
 
