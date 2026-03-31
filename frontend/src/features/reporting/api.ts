@@ -1507,6 +1507,7 @@ export type ActuacionesPreventivosInforme = {
   partesTrabajo: number;
   asistenciasSanitarias: number;
   derivaronMutua: number;
+  derivacionAmbulancia: number;
   observaciones: string | null;
   responsable: string | null;
   createdByUserId: string | null;
@@ -1564,6 +1565,7 @@ export async function fetchActuacionesPreventivosInformes(
         partesTrabajo: sanitizeInteger(raw.partes_trabajo) ?? 0,
         asistenciasSanitarias: sanitizeInteger(raw.asistencias_sanitarias) ?? 0,
         derivaronMutua: sanitizeInteger(raw.derivaron_mutua) ?? 0,
+        derivacionAmbulancia: sanitizeInteger(raw.derivacion_ambulancia) ?? 0,
         observaciones: sanitizeText(raw.observaciones),
         responsable: sanitizeText(raw.responsable),
         createdByUserId: sanitizeText(raw.created_by_user_id),

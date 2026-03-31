@@ -61,6 +61,7 @@ export const handler = createHttpHandler<any>(async (request) => {
           partes_trabajo,
           asistencias_sanitarias,
           derivaron_mutua,
+          derivacion_ambulancia,
           observaciones,
           responsable,
           created_by_user_id,
@@ -125,6 +126,20 @@ export const handler = createHttpHandler<any>(async (request) => {
     return errorResponse('VALIDATION_ERROR', 'El campo derivaronMutua debe ser numérico y mayor o igual que 0.', 400);
   }
 
+  const derivacionAmbulancia = parseOptionalInteger(body.derivacionAmbulancia);
+  if (
+    body.derivacionAmbulancia !== null &&
+    body.derivacionAmbulancia !== undefined &&
+    body.derivacionAmbulancia !== '' &&
+    derivacionAmbulancia === null
+  ) {
+    return errorResponse('VALIDATION_ERROR', 'El campo derivacionAmbulancia debe ser numérico y mayor o igual que 0.', 400);
+  }
+
+  const hasAsistenciasSanitarias = (asistenciasSanitarias ?? 0) > 0;
+  const derivaronMutuaFinal = hasAsistenciasSanitarias ? derivaronMutua : null;
+  const derivacionAmbulanciaFinal = hasAsistenciasSanitarias ? derivacionAmbulancia : null;
+
   const turno = trimToNull(body.turno) ?? 'Mañana';
   if (!ALLOWED_TURNO_VALUES.includes(turno as (typeof ALLOWED_TURNO_VALUES)[number])) {
     return errorResponse('VALIDATION_ERROR', 'El campo turno debe ser Mañana o Noche.', 400);
@@ -145,11 +160,12 @@ export const handler = createHttpHandler<any>(async (request) => {
         partes_trabajo,
         asistencias_sanitarias,
         derivaron_mutua,
+        derivacion_ambulancia,
         observaciones,
         responsable,
         created_by_user_id
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
       )
       RETURNING
         id,
@@ -163,6 +179,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         partes_trabajo,
         asistencias_sanitarias,
         derivaron_mutua,
+        derivacion_ambulancia,
         observaciones,
         responsable,
         created_by_user_id,
@@ -178,7 +195,8 @@ export const handler = createHttpHandler<any>(async (request) => {
     turno,
     partesTrabajo,
     asistenciasSanitarias,
-    derivaronMutua,
+    derivaronMutuaFinal,
+    derivacionAmbulanciaFinal,
     trimToNull(body.observaciones),
     trimToNull(body.responsable),
     auth.user.id,
