@@ -19,6 +19,7 @@ import {
   type TrainerExtraCostSavePayload,
 } from '../../features/reporting/api';
 import { exportToExcel } from '../../shared/export/exportToExcel';
+import { getCurrentPayrollDateRange } from '../../utils/payrollPeriod';
 
 const COST_FIELD_DEFINITIONS: ReadonlyArray<{
   key: TrainerExtraCostFieldKey;
@@ -334,13 +335,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
         endDate,
       };
     }
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    return {
-      startDate: formatDateForInput(startOfMonth),
-      endDate: formatDateForInput(endOfMonth),
-    };
+    return getCurrentPayrollDateRange();
   }, [searchParams]);
 
   const [filters, setFilters] = useState<{ startDate: string; endDate: string }>(initialFilters);
