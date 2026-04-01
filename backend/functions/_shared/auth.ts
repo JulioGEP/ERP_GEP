@@ -214,6 +214,8 @@ export function getPermissionsForRole(role: string | null | undefined): readonly
 export function getPermissionsForUser(user: UserRecord): readonly string[] {
   const permissions = new Set(getPermissionsForRole(user.role));
   const normalizedEmail = user.email?.toLowerCase();
+  const isActuacionesPreventivosReportingUser =
+    normalizedEmail === 'manuela@gepgroup.es' || normalizedEmail === 'carles@gepgroup.es';
 
   if (normalizedEmail === 'carles@gepgroup.es') {
     permissions.add('/calendario/*');
@@ -227,6 +229,10 @@ export function getPermissionsForUser(user: UserRecord): readonly string[] {
     permissions.add('/usuarios/formadores_bomberos');
     permissions.add('/usuarios/control_horario_discontinuos');
     permissions.add('/usuarios/control_horario_fijos');
+  }
+
+  if (isActuacionesPreventivosReportingUser) {
+    permissions.add('/reporting/actuaciones_preventivos');
   }
 
   return Array.from(permissions);
