@@ -99,6 +99,9 @@ const TrainerReportsPreventivoPage = lazy(
 const TrainerReportsSimulacroPage = lazy(
   () => import('../pages/usuarios/trainer/informes/TrainerReportsSimulacroPage'),
 );
+const TrainerReportsActuacionesPreventivosPage = lazy(
+  () => import('../pages/usuarios/trainer/informes/TrainerReportsActuacionesPreventivosPage'),
+);
 const TrainerReportsRecursoPreventivoEbroPage = lazy(
   () => import('../pages/usuarios/trainer/informes/TrainerReportsRecursoPreventivoEbroPage'),
 );
@@ -644,6 +647,16 @@ export function AppRouter({
               path="/usuarios/trainer/informes/simulacro"
               roles={['Formador']}
               element={<TrainerReportsSimulacroPage />}
+            />
+          }
+        />
+        <Route
+          path="/usuarios/trainer/informes/actuaciones_preventivos"
+          element={
+            <GuardedRoute
+              path="/usuarios/trainer/informes/actuaciones_preventivos"
+              roles={['Formador']}
+              element={<TrainerReportsActuacionesPreventivosPage />}
             />
           }
         />
