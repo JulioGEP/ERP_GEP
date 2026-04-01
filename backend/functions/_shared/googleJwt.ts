@@ -52,17 +52,28 @@ function getScopes(): string[] {
     : ["https://www.googleapis.com/auth/gmail.send"];
 }
 
+function canReadGmailProfile(scopes: string[]): boolean {
+  return scopes.some((scope) =>
+    [
+      "https://www.googleapis.com/auth/gmail.readonly",
+      "https://www.googleapis.com/auth/gmail.metadata",
+      "https://mail.google.com/",
+    ].includes(scope)
+  );
+}
+
 export async function getGmailClient() {
   const { client_email, private_key: rawKey } = loadCreds();
   const subject = process.env.GMAIL_IMPERSONATE;
   if (!subject) throw new Error("GMAIL_IMPERSONATE no está definido");
+  const scopes = getScopes();
 
   const key = normalizeKey(rawKey); // ⬅️ normaliza SIEMPRE antes del JWT
 
   const jwt = new google.auth.JWT({
     email: client_email,
     key,
-    scopes: getScopes(),
+    scopes,
     subject, // Domain-wide delegation
   });
 
@@ -71,12 +82,16 @@ export async function getGmailClient() {
 
   // Log de verificación: a quién estamos suplantando
   const gmail = google.gmail({ version: "v1", auth: jwt });
-  try {
-    const profile = await gmail.users.getProfile({ userId: "me" });
-    console.info("[gmail] impersonating:", profile.data.emailAddress);
-  } catch (e) {
-    // No es crítico para enviar, pero ayuda a diagnosticar
-    console.warn("[gmail] getProfile failed (no bloqueante):", (e as any)?.message || e);
+  if (!canReadGmailProfile(scopes)) {
+    console.info("[gmail] getProfile omitido: scope actual no permite lectura de perfil.");
+  } else {
+    try {
+      const profile = await gmail.users.getProfile({ userId: "me" });
+      console.info("[gmail] impersonating:", profile.data.emailAddress);
+    } catch (e) {
+      // No es crítico para enviar, pero ayuda a diagnosticar
+      console.warn("[gmail] getProfile failed (no bloqueante):", (e as any)?.message || e);
+    }
   }
 
   return gmail;
