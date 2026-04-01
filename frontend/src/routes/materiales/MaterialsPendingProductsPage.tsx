@@ -733,9 +733,9 @@ export function MaterialsPendingProductsPage({
   const logisticsSubject = `Uso de stock para presupuesto ${budgetIdForSubject} (Pedido Nº ${orderNumberLabel})`;
   const supplierSubject = `Nuevo Pedido de GEP Group con Nº ${orderNumberLabel} para ${supplierName}`;
 
-  const emailBody = `Hola Administración\n\nNº de pedido: ${orderNumberLabel}\nDesde el Sales necesitamos un nuevo pedido\n${
+  const emailBody = `Hola\n\nNecesitamos precio de estos productos:\n${
     supplierProductLines || '- Sin productos para pedir (se cubrirá con stock disponible).'
-  }\n\nActualizar el pedido cuando tengáis numero de orden o de seguimiento`;
+  }\n\nNuestro numero de pedido es Nº de pedido: ${orderNumberLabel} porfavor si lo pueden incorporar en el documento de vuelta y en el documento de seguimiento de recepción. Sino tiene el número de pedido procederemos a la devolución del mismo.\n\n¡Muchas gracias!`;
 
   const hasStockUsage = productRequests.some((product) => product.stockQuantity > 0);
 
@@ -1232,7 +1232,7 @@ export function MaterialsPendingProductsPage({
                 Cancelar
               </Button>
               <Button variant="primary" onClick={openEmailModal}>
-                Generar mail a administración
+                Crear pedido
               </Button>
             </div>
           </div>
@@ -1396,7 +1396,7 @@ export function MaterialsPendingProductsPage({
                   Enviando correos…
                 </span>
               ) : (
-                'Enviar correo a administración'
+                'Enviar Mail'
               )}
             </Button>
             {hasStockUsage ? (
