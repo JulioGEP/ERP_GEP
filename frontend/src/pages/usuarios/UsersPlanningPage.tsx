@@ -4,8 +4,8 @@ import { Alert, Badge, Button, ButtonGroup, Card, Col, Form, Row, Table } from '
 import { fetchUsers, type UserSummary } from '../../api/users';
 import { exportToExcel } from '../../shared/export/exportToExcel';
 
-type ShiftSlot = 'Mañana' | 'Tarde';
-type ShiftType = 'ORDINARIO' | 'ESPECIAL' | 'DOMINGO_LUNES';
+type ShiftSlot = 'Mañana' | 'Noche';
+type ShiftType = 'DOMINGO_JUEVES' | 'VIERNES_SABADO';
 
 type Firefighter = {
   code: string;
@@ -44,12 +44,13 @@ const TARGET_ANNUAL_HOURS = 1986;
 const TARGET_MONTHLY_HOURS = 160;
 const WEEKLY_MAX_SERVICES = 3;
 const SERVICES_PER_SHIFT = 3;
-const ORDINARY_SERVICE_HOURS = 12;
-const SPECIAL_SERVICE_HOURS = 10;
 const CLOSE_THRESHOLD = TARGET_ANNUAL_HOURS * 0.95;
-const SUNDAY_MONDAY_SERVICE_HOURS = 12.5;
-const SUNDAY_MONDAY_MORNING_WINDOW = '05:45 - 18:15';
-const SUNDAY_MONDAY_AFTERNOON_WINDOW = '17:45 - 06:15';
+const SUNDAY_THURSDAY_SERVICE_HOURS = 12.5;
+const FRIDAY_SATURDAY_SERVICE_HOURS = 8.5;
+const SUNDAY_THURSDAY_MORNING_WINDOW = '05:45 - 18:15';
+const SUNDAY_THURSDAY_NIGHT_WINDOW = '17:45 - 06:15';
+const FRIDAY_SATURDAY_MORNING_WINDOW = '05:45 - 14:15';
+const FRIDAY_SATURDAY_NIGHT_WINDOW = '13:45 - 22:15';
 
 function buildDefaultFirefighters(): Firefighter[] {
   return [
@@ -60,24 +61,19 @@ function buildDefaultFirefighters(): Firefighter[] {
     { code: 'B05', name: '', shift: 'Mañana' },
     { code: 'B06', name: '', shift: 'Mañana' },
     { code: 'B07', name: '', shift: 'Mañana' },
-    { code: 'B08', name: '', shift: 'Tarde' },
-    { code: 'B09', name: '', shift: 'Tarde' },
-    { code: 'B10', name: '', shift: 'Tarde' },
-    { code: 'B11', name: '', shift: 'Tarde' },
-    { code: 'B12', name: '', shift: 'Tarde' },
-    { code: 'B13', name: '', shift: 'Tarde' },
-    { code: 'B14', name: '', shift: 'Tarde' },
+    { code: 'B08', name: '', shift: 'Noche' },
+    { code: 'B09', name: '', shift: 'Noche' },
+    { code: 'B10', name: '', shift: 'Noche' },
+    { code: 'B11', name: '', shift: 'Noche' },
+    { code: 'B12', name: '', shift: 'Noche' },
+    { code: 'B13', name: '', shift: 'Noche' },
+    { code: 'B14', name: '', shift: 'Noche' },
   ];
 }
 
-function isSpecialDay(date: Date): boolean {
+function isFridaySaturday(date: Date): boolean {
   const day = date.getDay();
   return day === 5 || day === 6;
-}
-
-function isSundayMondayDay(date: Date): boolean {
-  const day = date.getDay();
-  return day === 0 || day === 1;
 }
 
 function formatDate(date: Date): string {
@@ -134,7 +130,7 @@ export default function UsersPlanningPage() {
 
     const shifts = {
       'Mañana': firefighters.filter((firefighter) => firefighter.shift === 'Mañana'),
-      Tarde: firefighters.filter((firefighter) => firefighter.shift === 'Tarde'),
+      Noche: firefighters.filter((firefighter) => firefighter.shift === 'Noche'),
     } as const;
 
     const stats = new Map<string, FirefighterStats>();
@@ -146,7 +142,7 @@ export default function UsersPlanningPage() {
       });
     });
 
-    const rotationCursor: Record<ShiftSlot, number> = { Mañana: 0, Tarde: 0 };
+    const rotationCursor: Record<ShiftSlot, number> = { Mañana: 0, Noche: 0 };
     const alerts: string[] = [];
     const days: DayPlan[] = [];
 
@@ -190,32 +186,27 @@ export default function UsersPlanningPage() {
 
     for (let cursor = new Date(startDate); cursor <= endDate; cursor.setDate(cursor.getDate() + 1)) {
       const date = new Date(cursor);
-      const special = isSpecialDay(date);
-      const sundayMonday = isSundayMondayDay(date);
-      const hours = sundayMonday
-        ? SUNDAY_MONDAY_SERVICE_HOURS
-        : special
-          ? SPECIAL_SERVICE_HOURS
-          : ORDINARY_SERVICE_HOURS;
-      const morningWindow = sundayMonday ? SUNDAY_MONDAY_MORNING_WINDOW : '—';
-      const afternoonWindow = sundayMonday ? SUNDAY_MONDAY_AFTERNOON_WINDOW : '—';
+      const fridaySaturday = isFridaySaturday(date);
+      const hours = fridaySaturday ? FRIDAY_SATURDAY_SERVICE_HOURS : SUNDAY_THURSDAY_SERVICE_HOURS;
+      const morningWindow = fridaySaturday ? FRIDAY_SATURDAY_MORNING_WINDOW : SUNDAY_THURSDAY_MORNING_WINDOW;
+      const afternoonWindow = fridaySaturday ? FRIDAY_SATURDAY_NIGHT_WINDOW : SUNDAY_THURSDAY_NIGHT_WINDOW;
 
       const morningMembers = pickServiceMembers(shifts.Mañana, date, hours);
-      const afternoonMembers = pickServiceMembers(shifts.Tarde, date, hours);
+      const afternoonMembers = pickServiceMembers(shifts.Noche, date, hours);
 
       const rotatingMorning = shifts.Mañana.length
         ? shifts.Mañana[rotationCursor.Mañana % shifts.Mañana.length]
         : null;
-      const rotatingAfternoon = shifts.Tarde.length
-        ? shifts.Tarde[rotationCursor.Tarde % shifts.Tarde.length]
+      const rotatingAfternoon = shifts.Noche.length
+        ? shifts.Noche[rotationCursor.Noche % shifts.Noche.length]
         : null;
 
       rotationCursor.Mañana += 1;
-      rotationCursor.Tarde += 1;
+      rotationCursor.Noche += 1;
 
       days.push({
         date,
-        dayType: sundayMonday ? 'DOMINGO_LUNES' : special ? 'ESPECIAL' : 'ORDINARIO',
+        dayType: fridaySaturday ? 'VIERNES_SABADO' : 'DOMINGO_JUEVES',
         morningMembers,
         afternoonMembers,
         rotatingMorning,
@@ -312,14 +303,15 @@ export default function UsersPlanningPage() {
         <Card.Header className="d-flex flex-column gap-1">
           <strong>Planificación anual de turnos</strong>
           <span className="text-muted small">
-            Rotación anual sin vacaciones: 14 bomberos (7 mañana / 7 tarde), objetivo de equilibrio en el total anual.
+            Rotación anual sin vacaciones: 14 bomberos (7 mañana / 7 noche), objetivo de equilibrio en el total anual.
           </span>
         </Card.Header>
         <Card.Body className="d-flex flex-column gap-2">
           <Alert variant="info" className="mb-0">
             <strong>Condiciones aplicadas:</strong> máximo {WEEKLY_MAX_SERVICES} servicios semanales por bombero (≈40h),
             {` `}{SERVICES_PER_SHIFT} bomberos por servicio, rotación diaria del 7º bombero de cada turno y turnos de domingo
-            y lunes de {SUNDAY_MONDAY_SERVICE_HOURS.toLocaleString('es-ES')}h (05:45-18:15 / 17:45-06:15).
+            a jueves de {SUNDAY_THURSDAY_SERVICE_HOURS.toLocaleString('es-ES')}h (05:45-18:15 / 17:45-06:15), y viernes/sábado
+            de {FRIDAY_SATURDAY_SERVICE_HOURS.toLocaleString('es-ES')}h (05:45-14:15 / 13:45-22:15).
           </Alert>
           <Alert variant="secondary" className="mb-0">
             Calendario base sin vacaciones ({TARGET_ANNUAL_HOURS.toLocaleString('es-ES')} h/año). Las vacaciones se cubrirán posteriormente.
@@ -370,7 +362,7 @@ export default function UsersPlanningPage() {
                         onChange={(event) => handleShiftChange(firefighter.code, event.target.value as ShiftSlot)}
                       >
                         <option value="Mañana">Mañana</option>
-                        <option value="Tarde">Tarde</option>
+                        <option value="Noche">Noche</option>
                       </Form.Select>
                     </Form.Group>
                   </Card.Body>
@@ -407,7 +399,7 @@ export default function UsersPlanningPage() {
                 <th>Fecha</th>
                 <th>Tipo</th>
                 <th>Turno mañana</th>
-                <th>Turno tarde</th>
+                <th>Turno noche</th>
               </tr>
             </thead>
             <tbody>
@@ -416,31 +408,23 @@ export default function UsersPlanningPage() {
                   <td>{formatDate(day.date)}</td>
                   <td>
                     <Badge
-                      bg={day.dayType === 'ESPECIAL' ? 'warning' : day.dayType === 'DOMINGO_LUNES' ? 'primary' : 'info'}
-                      text={day.dayType === 'ESPECIAL' ? 'dark' : undefined}
+                      bg={day.dayType === 'VIERNES_SABADO' ? 'warning' : 'primary'}
+                      text={day.dayType === 'VIERNES_SABADO' ? 'dark' : undefined}
                     >
                       {day.dayType}
                     </Badge>
                   </td>
                   <td>
                     <strong>Servicio:</strong> {day.morningMembers.map(displayName).join(', ')} · {day.hoursPerService}h
-                    {day.dayType === 'DOMINGO_LUNES' && (
-                      <>
-                        <br />
-                        <span className="text-muted small">Horario: {day.morningWindow}</span>
-                      </>
-                    )}
+                    <br />
+                    <span className="text-muted small">Horario: {day.morningWindow}</span>
                     <br />
                     <span className="text-muted small">Rotación 7º: {day.rotatingMorning ? displayName(day.rotatingMorning) : '—'}</span>
                   </td>
                   <td>
                     <strong>Servicio:</strong> {day.afternoonMembers.map(displayName).join(', ')} · {day.hoursPerService}h
-                    {day.dayType === 'DOMINGO_LUNES' && (
-                      <>
-                        <br />
-                        <span className="text-muted small">Horario: {day.afternoonWindow}</span>
-                      </>
-                    )}
+                    <br />
+                    <span className="text-muted small">Horario: {day.afternoonWindow}</span>
                     <br />
                     <span className="text-muted small">Rotación 7º: {day.rotatingAfternoon ? displayName(day.rotatingAfternoon) : '—'}</span>
                   </td>
@@ -458,8 +442,8 @@ export default function UsersPlanningPage() {
         <Card.Body className="d-flex flex-wrap gap-2">
           {Array.from(planningMonths.entries()).map(([month, days]) => {
             const firstDate = days[0]?.date;
-            const ordinary = days.filter((day) => day.dayType === 'ORDINARIO').length;
-            const special = days.filter((day) => day.dayType === 'ESPECIAL').length;
+            const sundayThursday = days.filter((day) => day.dayType === 'DOMINGO_JUEVES').length;
+            const fridaySaturday = days.filter((day) => day.dayType === 'VIERNES_SABADO').length;
             const monthHours = (monthlyBalance.get(month) ?? []).reduce((acc, value) => acc + value, 0);
             if (!firstDate) return null;
             return (
@@ -469,8 +453,8 @@ export default function UsersPlanningPage() {
                 style={{ minWidth: 220 }}
               >
                 <div className="fw-semibold text-capitalize">{formatMonthYear(firstDate)}</div>
-                <div className="small text-muted">Ordinarios: {ordinary}</div>
-                <div className="small text-muted">Especiales: {special}</div>
+                <div className="small text-muted">Domingo/Jueves: {sundayThursday}</div>
+                <div className="small text-muted">Viernes/Sábado: {fridaySaturday}</div>
                 <div className="small text-muted">Días planificados: {days.length}</div>
                 <div className="small text-muted">
                   Carga total: {monthHours.toLocaleString('es-ES')} h (objetivo individual ≈ {TARGET_MONTHLY_HOURS} h)
@@ -547,10 +531,10 @@ export default function UsersPlanningPage() {
           <div>
             <h6 className="mb-1">Tipos de día y cómputo de horas</h6>
             <p className="mb-0 text-muted">
-              Los días ordinarios computan {ORDINARY_SERVICE_HOURS} horas por servicio, los especiales (viernes y sábado)
-              computan {SPECIAL_SERVICE_HOURS} horas y los turnos de domingo/lunes computan
-              {` `}{SUNDAY_MONDAY_SERVICE_HOURS.toLocaleString('es-ES')} horas con horario 05:45-18:15 (mañana) y
-              17:45-06:15 (tarde). Este ajuste permite estimar el impacto real mensual y anual de la planificación.
+              Los turnos de domingo/jueves computan {SUNDAY_THURSDAY_SERVICE_HOURS.toLocaleString('es-ES')} horas con horario
+              05:45-18:15 (mañana) y 17:45-06:15 (noche). Los turnos de viernes/sábado computan
+              {` `}{FRIDAY_SATURDAY_SERVICE_HOURS.toLocaleString('es-ES')} horas con horario 05:45-14:15 (mañana) y
+              13:45-22:15 (noche). Este ajuste permite estimar el impacto real mensual y anual de la planificación.
             </p>
           </div>
           <div>
