@@ -438,6 +438,8 @@ export function MaterialsPendingProductsPage({
   const [logisticsToEmails, setLogisticsToEmails] = useState<string[]>([defaultLogisticsEmail]);
   const [logisticsCcInput, setLogisticsCcInput] = useState('');
   const [logisticsCcEmails, setLogisticsCcEmails] = useState<string[]>([defaultCommercialEmail]);
+  const [supplierEmailBody, setSupplierEmailBody] = useState('');
+  const [logisticsBody, setLogisticsBody] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
   const [searchParams] = useSearchParams();
 
@@ -657,6 +659,8 @@ export function MaterialsPendingProductsPage({
   };
 
   const openEmailModal = () => {
+    setSupplierEmailBody(defaultSupplierEmailBody);
+    setLogisticsBody(defaultLogisticsEmailBody);
     setShowEmailModal(true);
   };
 
@@ -762,7 +766,7 @@ export function MaterialsPendingProductsPage({
   const logisticsSubject = `Uso de stock para presupuesto ${budgetIdForSubject} (Pedido Nº ${orderNumberLabel})`;
   const supplierSubject = `Nuevo Pedido de GEP Group con Nº ${orderNumberLabel} para ${supplierName}`;
 
-  const emailBody = `Hola\n\nNecesitamos precio de estos productos:\n${
+  const defaultSupplierEmailBody = `Hola\n\nNecesitamos precio de estos productos:\n${
     supplierProductLines || '- Sin productos para pedir (se cubrirá con stock disponible).'
   }\n\nNuestro numero de pedido es Nº de pedido: ${orderNumberLabel} porfavor si lo pueden incorporar en el documento de vuelta y en el documento de seguimiento de recepción. Sino tiene el número de pedido procederemos a la devolución del mismo.\n\n¡Muchas gracias!`;
 
@@ -778,7 +782,7 @@ export function MaterialsPendingProductsPage({
     .join(' ');
   const isSendingEmails = createOrderMutation.isPending;
 
-  const logisticsEmailBody = `Hola Logistica\n\nNº de pedido: ${orderNumberLabel}\nEl comercial asignado de este presupuesto es "${
+  const defaultLogisticsEmailBody = `Hola Logistica\n\nNº de pedido: ${orderNumberLabel}\nEl comercial asignado de este presupuesto es "${
     primaryBudget?.comercial ?? '—'
   }"\nNecesito utilizar inventario para enviar a cliente. \n${
     logisticsProductLines || '- Sin productos para descontar de stock.'
@@ -942,11 +946,11 @@ export function MaterialsPendingProductsPage({
         supplierEmail: supplierEmailAddress,
         supplierCc: ccEmails,
         supplierSubject,
-        supplierBody: emailBody,
+        supplierBody: supplierEmailBody,
         logisticsTo: hasStockUsage ? logisticsToEmails : [],
         logisticsCc: hasStockUsage ? logisticsCcEmails : [],
         logisticsSubject: hasStockUsage ? logisticsSubject : undefined,
-        logisticsBody: hasStockUsage ? logisticsEmailBody : undefined,
+        logisticsBody: hasStockUsage ? logisticsBody : undefined,
         logisticsAttachments:
           hasStockUsage && deliveryNoteAttachment ? [deliveryNoteAttachment] : undefined,
         products: productRequests,
@@ -1435,7 +1439,12 @@ export function MaterialsPendingProductsPage({
 
             <Form.Group>
               <Form.Label>Mensaje</Form.Label>
-              <Form.Control as="textarea" rows={6} readOnly value={emailBody} />
+              <Form.Control
+                as="textarea"
+                rows={6}
+                value={supplierEmailBody}
+                onChange={(event) => setSupplierEmailBody(event.target.value)}
+              />
             </Form.Group>
           </div>
 
@@ -1512,7 +1521,12 @@ export function MaterialsPendingProductsPage({
 
               <Form.Group>
                 <Form.Label>Mensaje</Form.Label>
-                <Form.Control as="textarea" rows={6} readOnly value={logisticsEmailBody} />
+                <Form.Control
+                  as="textarea"
+                  rows={6}
+                  value={logisticsBody}
+                  onChange={(event) => setLogisticsBody(event.target.value)}
+                />
               </Form.Group>
             </div>
           ) : null}
