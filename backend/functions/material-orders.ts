@@ -579,14 +579,31 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
   });
 
   if (logisticsEmailPayload) {
-    await sendEmail({
-      to: logisticsEmailPayload.to.join(', '),
-      cc: logisticsEmailPayload.cc,
-      subject: logisticsEmailPayload.subject,
-      text: logisticsEmailPayload.body,
-      attachments: logisticsEmailPayload.attachments,
-      from: senderFrom,
-    });
+    const logisticsRecipients = logisticsEmailPayload.to.join(', ');
+
+    try {
+      await sendEmail({
+        to: logisticsRecipients,
+        cc: logisticsEmailPayload.cc,
+        subject: logisticsEmailPayload.subject,
+        text: logisticsEmailPayload.body,
+        attachments: logisticsEmailPayload.attachments,
+        from: senderFrom,
+      });
+    } catch (error) {
+      if (logisticsEmailPayload.attachments.length === 0) {
+        throw error;
+      }
+
+      console.warn('[material-orders] Error enviando correo a logística con adjuntos. Reintentando sin adjuntos.');
+      await sendEmail({
+        to: logisticsRecipients,
+        cc: logisticsEmailPayload.cc,
+        subject: logisticsEmailPayload.subject,
+        text: logisticsEmailPayload.body,
+        from: senderFrom,
+      });
+    }
   }
 
   return successResponse({
