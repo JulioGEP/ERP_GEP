@@ -13,6 +13,11 @@ export type CreateMaterialOrderPayload = {
   logisticsCc?: string[];
   logisticsSubject?: string | null;
   logisticsBody?: string | null;
+  logisticsAttachments?: Array<{
+    filename: string;
+    contentType?: string;
+    contentBase64: string;
+  }>;
   products: MaterialOrderProduct[];
   sourceBudgetIds: string[];
   notes?: string | null;
