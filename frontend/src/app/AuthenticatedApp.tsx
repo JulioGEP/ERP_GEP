@@ -867,6 +867,11 @@ export default function AuthenticatedApp() {
             { key: 'Trainer/Reports/Preventivo', label: 'Preventivo', path: '/usuarios/trainer/informes/preventivo' },
             { key: 'Trainer/Reports/Simulacro', label: 'Simulacro', path: '/usuarios/trainer/informes/simulacro' },
             {
+              key: 'Trainer/Reports/ActuacionesPreventivos',
+              label: 'Actuaciones Preventivos',
+              path: '/usuarios/trainer/informes/actuaciones_preventivos',
+            },
+            {
               key: 'Trainer/Reports/RecursoPreventivoEbro',
               label: 'Recurso Preventivo EBRO',
               path: '/usuarios/trainer/informes/recurso_preventivo_ebro',
