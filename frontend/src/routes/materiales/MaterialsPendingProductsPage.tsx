@@ -3,6 +3,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
+import type { TDocumentDefinitions } from 'pdfmake/interfaces';
+import pdfMake from 'pdfmake/build/pdfmake';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
 import { isApiError } from '../../api/client';
 import type { MaterialOrder } from '../../types/materialOrder';
 import type { CreateMaterialOrderPayload } from '../../features/materials/orders.api';
@@ -63,6 +66,10 @@ type SelectedProduct = {
   handling: ProductHandling;
   hasStock: boolean;
   stockUsage: number;
+};
+
+type PdfMakeWithVfs = typeof pdfMake & {
+  vfs?: Record<string, string>;
 };
 
 function getUsedStockForProduct(
@@ -205,6 +212,28 @@ function buildErrorDetails(error: unknown): string[] {
   } catch {
     return ['Error inesperado: no se pudo serializar el detalle.'];
   }
+}
+
+function ensurePdfMakeFontsLoaded(): void {
+  const pdfMakeWithVfs = pdfMake as PdfMakeWithVfs;
+  if (pdfMakeWithVfs.vfs && Object.keys(pdfMakeWithVfs.vfs).length > 0) return;
+
+  const bundledFonts = pdfFonts as { pdfMake?: { vfs?: Record<string, string> } };
+  const bundledVfs = bundledFonts.pdfMake?.vfs;
+  if (bundledVfs && Object.keys(bundledVfs).length > 0) {
+    pdfMakeWithVfs.vfs = bundledVfs;
+  }
+}
+
+function toPdfBase64(docDefinition: TDocumentDefinitions): Promise<string> {
+  ensurePdfMakeFontsLoaded();
+  return new Promise((resolve, reject) => {
+    try {
+      pdfMake.createPdf(docDefinition).getBase64((content) => resolve(content));
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
 
 function getEstimatedDeliveryTimestamp(dateIso: string | null | undefined): number | null {
@@ -741,7 +770,7 @@ export function MaterialsPendingProductsPage({
 
   const logisticsProductLines = productRequests
     .filter((product) => product.stockQuantity > 0)
-    .map((product) => `- ${product.productName} ${formatQuantity(product.stockQuantity)}`)
+    .map((product) => `- ${product.productName} -> cantidad ${formatQuantity(product.stockQuantity)}`)
     .join('\n');
 
   const contactFullName = [primaryBudget?.person?.first_name, primaryBudget?.person?.last_name]
@@ -758,6 +787,82 @@ export function MaterialsPendingProductsPage({
   } a nombre de "${contactFullName || '—'}" de la empresa "${
     primaryBudget?.organization?.name ?? '—'
   }"\n\nEl telefono de contacto es "${primaryBudget?.person?.phone ?? '—'}"\n\n¡Gracias!`;
+
+  const buildDeliveryNoteAttachment = async () => {
+    if (!hasStockUsage) return null;
+
+    const currentDate = new Date().toLocaleDateString('es-ES');
+    const shippingAddress = primaryBudget?.direccion_envio ?? '—';
+    const dealProducts = selectedList
+      .filter(({ stockUsage }) => stockUsage > 0)
+      .map(({ row, stockUsage }) => [
+        formatQuantity(stockUsage),
+        row.idPipe ?? '—',
+        row.productName,
+        '—',
+        '—',
+      ]);
+
+    const docDefinition: TDocumentDefinitions = {
+      pageSize: 'A4',
+      pageMargins: [28, 30, 28, 34],
+      content: [
+        {
+          table: {
+            widths: ['*', '*', 60],
+            body: [[`ALBARÁN Nº ${orderNumberLabel}`, `FECHA ${currentDate}`, 'PÁG. 1']],
+          },
+          layout: 'lightHorizontalLines',
+        },
+        {
+          margin: [0, 10, 0, 0],
+          table: {
+            widths: ['*', 120],
+            body: [
+              ['CLIENTE', primaryBudget?.organization?.name ?? '—'],
+              ['N.I.F.', '—'],
+              ['DOMICILIO', shippingAddress],
+              ['POBLACIÓN / C.P.', '—'],
+            ],
+          },
+          layout: 'lightHorizontalLines',
+        },
+        {
+          margin: [0, 16, 0, 0],
+          table: {
+            headerRows: 1,
+            widths: [60, 70, '*', 70, 70],
+            body: [
+              ['CANTIDAD', 'CÓDIGO', 'DESCRIPCIÓN', 'PRECIO', 'IMPORTE'],
+              ...dealProducts,
+            ],
+          },
+          layout: 'lightHorizontalLines',
+        },
+        {
+          margin: [0, 16, 0, 0],
+          table: {
+            widths: ['*', 120],
+            body: [
+              ['OBSERVACIONES', `Pedido Nº ${orderNumberLabel}`],
+              ['TRANSPORTE', '—'],
+            ],
+          },
+          layout: 'lightHorizontalLines',
+        },
+      ],
+      defaultStyle: {
+        fontSize: 10,
+      },
+    };
+
+    const contentBase64 = await toPdfBase64(docDefinition);
+    return {
+      filename: `albaran-pedido-${orderNumberLabel}.pdf`,
+      contentType: 'application/pdf',
+      contentBase64,
+    };
+  };
 
   const sortedProducts = useMemo(() => {
     if (!sortConfig) return filteredProducts;
@@ -785,7 +890,7 @@ export function MaterialsPendingProductsPage({
     });
   };
 
-  const handleSendEmails = () => {
+  const handleSendEmails = async () => {
     setEmailError(null);
     if (!selectedList.length || isSendingEmails) return;
 
@@ -813,22 +918,34 @@ export function MaterialsPendingProductsPage({
       return;
     }
 
-    const payload: CreateMaterialOrderPayload = {
-      orderNumber: orderNumberForModal,
-      supplierName,
-      supplierEmail: supplierEmailAddress,
-      supplierCc: ccEmails,
-      supplierSubject,
-      supplierBody: emailBody,
-      logisticsTo: hasStockUsage ? logisticsToEmails : [],
-      logisticsCc: hasStockUsage ? logisticsCcEmails : [],
-      logisticsSubject: hasStockUsage ? logisticsSubject : undefined,
-      logisticsBody: hasStockUsage ? logisticsEmailBody : undefined,
-      products: productRequests,
-      sourceBudgetIds,
-    };
+    try {
+      const deliveryNoteAttachment = await buildDeliveryNoteAttachment();
 
-    createOrderMutation.mutate(payload);
+      const payload: CreateMaterialOrderPayload = {
+        orderNumber: orderNumberForModal,
+        supplierName,
+        supplierEmail: supplierEmailAddress,
+        supplierCc: ccEmails,
+        supplierSubject,
+        supplierBody: emailBody,
+        logisticsTo: hasStockUsage ? logisticsToEmails : [],
+        logisticsCc: hasStockUsage ? logisticsCcEmails : [],
+        logisticsSubject: hasStockUsage ? logisticsSubject : undefined,
+        logisticsBody: hasStockUsage ? logisticsEmailBody : undefined,
+        logisticsAttachments:
+          hasStockUsage && deliveryNoteAttachment ? [deliveryNoteAttachment] : undefined,
+        products: productRequests,
+        sourceBudgetIds,
+      };
+
+      await createOrderMutation.mutateAsync(payload);
+    } catch (error) {
+      if (error instanceof Error) {
+        setEmailError(error.message);
+        return;
+      }
+      setEmailError('No se pudo generar el albarán para logística.');
+    }
   };
 
   return (

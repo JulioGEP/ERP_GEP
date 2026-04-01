@@ -18,6 +18,12 @@ type ProductRequest = {
   totalLabel?: string | null;
 };
 
+type EmailAttachment = {
+  filename: string;
+  contentType?: string;
+  contentBase64: string;
+};
+
 type CreateMaterialOrderBody = {
   id?: number;
   orderNumber?: number;
@@ -30,6 +36,7 @@ type CreateMaterialOrderBody = {
   logisticsCc?: string[];
   logisticsSubject?: string | null;
   logisticsBody?: string | null;
+  logisticsAttachments?: EmailAttachment[];
   products?: ProductRequest[];
   sourceBudgetIds?: string[];
   notes?: string | null;
@@ -106,6 +113,25 @@ function normalizeProducts(value: unknown): ProductRequest[] {
       supplierQuantity: Number.isFinite(supplierQuantity) ? supplierQuantity : 0,
       stockQuantity: Number.isFinite(stockQuantity) ? stockQuantity : 0,
       totalLabel: normalizeString((item as ProductRequest)?.totalLabel),
+    });
+  }
+
+  return normalized;
+}
+
+function normalizeAttachments(value: unknown): EmailAttachment[] {
+  if (!Array.isArray(value)) return [];
+  const normalized: EmailAttachment[] = [];
+
+  for (const item of value) {
+    const filename = normalizeString((item as EmailAttachment)?.filename);
+    const contentBase64 = normalizeString((item as EmailAttachment)?.contentBase64);
+    if (!filename || !contentBase64) continue;
+
+    normalized.push({
+      filename,
+      contentType: normalizeString((item as EmailAttachment)?.contentType),
+      contentBase64: contentBase64.replace(/\s+/g, ''),
     });
   }
 
@@ -473,6 +499,7 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
   const logisticsCc = normalizeEmailArray(request.body.logisticsCc);
   const logisticsSubject = normalizeString(request.body.logisticsSubject) ?? LOGISTICS_FALLBACK_SUBJECT;
   const logisticsBody = normalizeString(request.body.logisticsBody);
+  const logisticsAttachments = normalizeAttachments(request.body.logisticsAttachments);
   const products = normalizeProducts(request.body.products);
   const sourceBudgetIds = normalizeStringArray(request.body.sourceBudgetIds);
   const notes = normalizeString(request.body.notes);
@@ -518,6 +545,7 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
         cc: logisticsCc,
         subject: logisticsSubject,
         body: logisticsBody!,
+        attachments: logisticsAttachments,
       }
     : null;
 
@@ -556,6 +584,7 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
       cc: logisticsEmailPayload.cc,
       subject: logisticsEmailPayload.subject,
       text: logisticsEmailPayload.body,
+      attachments: logisticsEmailPayload.attachments,
       from: senderFrom,
     });
   }

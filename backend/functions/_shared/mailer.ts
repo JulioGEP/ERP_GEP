@@ -14,13 +14,18 @@ type SendEmailParams = {
   cc?: string | string[];
   from?: string;
   replyTo?: string;
+  attachments?: Array<{
+    filename: string;
+    contentType?: string;
+    contentBase64: string;
+  }>;
 };
 
 /**
  * Envío de email mediante Gmail API (Service Account + DWD) usando sendGmail().
  * Sin nodemailer/OAuth2: menos superficie y sin problemas de OpenSSL.
  */
-export async function sendEmail({ to, subject, html, text, cc, from, replyTo }: SendEmailParams): Promise<void> {
+export async function sendEmail({ to, subject, html, text, cc, from, replyTo, attachments }: SendEmailParams): Promise<void> {
   const plainText = text ?? (html ? stripHtml(html) : "");
   const htmlBody =
     html ??
@@ -33,6 +38,47 @@ export async function sendEmail({ to, subject, html, text, cc, from, replyTo }: 
   const hasText = Boolean(plainText);
   const ccHeader = normalizeEmailList(cc);
   const boundary = `mime_boundary_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const normalizedAttachments = normalizeAttachments(attachments);
+
+  if (normalizedAttachments.length > 0) {
+    const mixedBoundary = `mixed_boundary_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    const alternativeBody = buildAlternativeBody({
+      plainText,
+      htmlBody,
+      boundary,
+      hasText,
+    });
+
+    const attachmentParts = normalizedAttachments.flatMap((attachment) => [
+      `--${mixedBoundary}`,
+      `Content-Type: ${attachment.contentType}; name="${attachment.filename}"`,
+      `Content-Transfer-Encoding: base64`,
+      `Content-Disposition: attachment; filename="${attachment.filename}"`,
+      ``,
+      chunkBase64(attachment.contentBase64),
+    ]);
+
+    const bodyParts = [
+      `--${mixedBoundary}`,
+      `Content-Type: ${alternativeBody.contentType}`,
+      ``,
+      alternativeBody.body,
+      ...attachmentParts,
+      `--${mixedBoundary}--`,
+      ``,
+    ].join("\r\n");
+
+    await sendGmail({
+      to,
+      cc: ccHeader,
+      subject,
+      body: bodyParts,
+      contentType: `multipart/mixed; boundary="${mixedBoundary}"`,
+      from: from ?? FROM,
+      replyTo,
+    });
+    return;
+  }
 
   if (hasText) {
     const bodyParts = [
@@ -72,6 +118,38 @@ export async function sendEmail({ to, subject, html, text, cc, from, replyTo }: 
     from: from ?? FROM,
     replyTo,
   });
+}
+
+function buildAlternativeBody(params: {
+  plainText: string;
+  htmlBody: string;
+  boundary: string;
+  hasText: boolean;
+}): { contentType: string; body: string } {
+  if (!params.hasText) {
+    return {
+      contentType: "text/html; charset=UTF-8",
+      body: chunkBase64(Buffer.from(params.htmlBody, "utf8").toString("base64")),
+    };
+  }
+
+  return {
+    contentType: `multipart/alternative; boundary="${params.boundary}"`,
+    body: [
+      `--${params.boundary}`,
+      `Content-Type: text/plain; charset=UTF-8`,
+      `Content-Transfer-Encoding: base64`,
+      ``,
+      chunkBase64(Buffer.from(params.plainText, "utf8").toString("base64")),
+      `--${params.boundary}`,
+      `Content-Type: text/html; charset=UTF-8`,
+      `Content-Transfer-Encoding: base64`,
+      ``,
+      chunkBase64(Buffer.from(params.htmlBody, "utf8").toString("base64")),
+      `--${params.boundary}--`,
+      ``,
+    ].join("\r\n"),
+  };
 }
 
 /**
@@ -130,4 +208,25 @@ function normalizeEmailList(value: string | string[] | undefined): string | unde
 
   if (!normalized.length) return undefined;
   return normalized.join(", ");
+}
+
+function normalizeAttachments(
+  value: SendEmailParams["attachments"],
+): Array<{ filename: string; contentType: string; contentBase64: string }> {
+  if (!Array.isArray(value)) return [];
+
+  const normalized: Array<{ filename: string; contentType: string; contentBase64: string }> = [];
+  for (const item of value) {
+    const filename = (item?.filename || "").trim();
+    const contentBase64 = (item?.contentBase64 || "").replace(/\s+/g, "");
+    if (!filename || !contentBase64) continue;
+
+    normalized.push({
+      filename,
+      contentType: (item?.contentType || "application/octet-stream").trim(),
+      contentBase64,
+    });
+  }
+
+  return normalized;
 }
