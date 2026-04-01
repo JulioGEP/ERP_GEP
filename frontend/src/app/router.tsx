@@ -499,7 +499,6 @@ export function AppRouter({
           element={
             <GuardedRoute
               path="/informes/formacion"
-              roles={['Admin', 'Comercial', 'Administracion', 'Logistica', 'People']}
               element={<InformesFormacionPage />}
             />
           }
@@ -509,7 +508,6 @@ export function AppRouter({
           element={
             <GuardedRoute
               path="/informes/listado"
-              roles={['Admin', 'Comercial', 'Administracion', 'Logistica', 'People']}
               element={<InformesListadoPage />}
             />
           }
@@ -519,7 +517,6 @@ export function AppRouter({
           element={
             <GuardedRoute
               path="/informes/preventivo"
-              roles={['Admin', 'Comercial', 'Administracion', 'Logistica', 'People']}
               element={<InformesPreventivoPage />}
             />
           }
@@ -529,7 +526,6 @@ export function AppRouter({
           element={
             <GuardedRoute
               path="/informes/simulacro"
-              roles={['Admin', 'Comercial', 'Administracion', 'Logistica', 'People']}
               element={<InformesSimulacroPage />}
             />
           }
@@ -539,7 +535,6 @@ export function AppRouter({
           element={
             <GuardedRoute
               path="/informes/actuaciones_preventivos"
-              roles={['Admin', 'Comercial', 'Administracion', 'Logistica', 'People']}
               element={<InformesActuacionesPreventivosPage />}
             />
           }
@@ -549,7 +544,6 @@ export function AppRouter({
           element={
             <GuardedRoute
               path="/informes/recurso_preventivo_ebro"
-              roles={['Admin', 'Comercial', 'Administracion', 'Logistica', 'People']}
               element={<InformesRecursoPreventivoEbroPage />}
             />
           }
