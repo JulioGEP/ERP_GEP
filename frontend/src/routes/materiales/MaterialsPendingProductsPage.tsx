@@ -1405,6 +1405,9 @@ export function MaterialsPendingProductsPage({
               </Button>
             ) : null}
           </div>
+          <p className="text-muted small mt-3 mb-0">
+            Al enviar el mail se creará el pedido automáticamente, si cancelas, el pedido no se habrá creado.
+          </p>
         </Modal.Body>
       </Modal>
     </div>
