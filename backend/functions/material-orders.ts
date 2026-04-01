@@ -130,7 +130,7 @@ function normalizeAttachments(value: unknown): EmailAttachment[] {
 
     normalized.push({
       filename,
-      contentType: normalizeString((item as EmailAttachment)?.contentType),
+      contentType: normalizeString((item as EmailAttachment)?.contentType) ?? undefined,
       contentBase64: contentBase64.replace(/\s+/g, ''),
     });
   }

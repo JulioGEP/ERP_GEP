@@ -42,12 +42,26 @@ export async function sendEmail({ to, subject, html, text, cc, from, replyTo, at
 
   if (normalizedAttachments.length > 0) {
     const mixedBoundary = `mixed_boundary_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-    const alternativeBody = buildAlternativeBody({
-      plainText,
-      htmlBody,
-      boundary,
-      hasText,
-    });
+    const textAndHtmlParts = hasText
+      ? [
+          `--${mixedBoundary}`,
+          `Content-Type: text/plain; charset=UTF-8`,
+          `Content-Transfer-Encoding: base64`,
+          ``,
+          chunkBase64(Buffer.from(plainText, "utf8").toString("base64")),
+          `--${mixedBoundary}`,
+          `Content-Type: text/html; charset=UTF-8`,
+          `Content-Transfer-Encoding: base64`,
+          ``,
+          chunkBase64(Buffer.from(htmlBody, "utf8").toString("base64")),
+        ]
+      : [
+          `--${mixedBoundary}`,
+          `Content-Type: text/html; charset=UTF-8`,
+          `Content-Transfer-Encoding: base64`,
+          ``,
+          chunkBase64(Buffer.from(htmlBody, "utf8").toString("base64")),
+        ];
 
     const attachmentParts = normalizedAttachments.flatMap((attachment) => [
       `--${mixedBoundary}`,
@@ -59,10 +73,7 @@ export async function sendEmail({ to, subject, html, text, cc, from, replyTo, at
     ]);
 
     const bodyParts = [
-      `--${mixedBoundary}`,
-      `Content-Type: ${alternativeBody.contentType}`,
-      ``,
-      alternativeBody.body,
+      ...textAndHtmlParts,
       ...attachmentParts,
       `--${mixedBoundary}--`,
       ``,
@@ -118,38 +129,6 @@ export async function sendEmail({ to, subject, html, text, cc, from, replyTo, at
     from: from ?? FROM,
     replyTo,
   });
-}
-
-function buildAlternativeBody(params: {
-  plainText: string;
-  htmlBody: string;
-  boundary: string;
-  hasText: boolean;
-}): { contentType: string; body: string } {
-  if (!params.hasText) {
-    return {
-      contentType: "text/html; charset=UTF-8",
-      body: chunkBase64(Buffer.from(params.htmlBody, "utf8").toString("base64")),
-    };
-  }
-
-  return {
-    contentType: `multipart/alternative; boundary="${params.boundary}"`,
-    body: [
-      `--${params.boundary}`,
-      `Content-Type: text/plain; charset=UTF-8`,
-      `Content-Transfer-Encoding: base64`,
-      ``,
-      chunkBase64(Buffer.from(params.plainText, "utf8").toString("base64")),
-      `--${params.boundary}`,
-      `Content-Type: text/html; charset=UTF-8`,
-      `Content-Transfer-Encoding: base64`,
-      ``,
-      chunkBase64(Buffer.from(params.htmlBody, "utf8").toString("base64")),
-      `--${params.boundary}--`,
-      ``,
-    ].join("\r\n"),
-  };
 }
 
 /**

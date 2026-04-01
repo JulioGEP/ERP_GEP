@@ -793,6 +793,12 @@ export function MaterialsPendingProductsPage({
 
     const currentDate = new Date().toLocaleDateString('es-ES');
     const shippingAddress = primaryBudget?.direccion_envio ?? '—';
+    const customerName =
+      primaryBudget?.organization?.name?.trim() ||
+      contactFullName.trim() ||
+      '—';
+    const customerTaxId = primaryBudget?.mail_invoice?.trim() || primaryBudget?.person?.email?.trim() || '—';
+    const customerLocation = primaryBudget?.training_address?.trim() || shippingAddress;
     const dealProducts = selectedList
       .filter(({ stockUsage }) => stockUsage > 0)
       .map(({ row, stockUsage }) => [
@@ -806,8 +812,17 @@ export function MaterialsPendingProductsPage({
     const docDefinition: TDocumentDefinitions = {
       pageSize: 'A4',
       pageMargins: [28, 30, 28, 34],
+      header: {
+        margin: [28, 14, 28, 6],
+        table: {
+          widths: ['*', 160],
+          body: [[{ text: 'GEP GROUP · ALBARÁN DE LOGÍSTICA', bold: true, fontSize: 11 }, { text: 'ERP GEP', alignment: 'right', fontSize: 9 }]],
+        },
+        layout: 'noBorders',
+      },
       content: [
         {
+          margin: [0, 10, 0, 0],
           table: {
             widths: ['*', '*', 60],
             body: [[`ALBARÁN Nº ${orderNumberLabel}`, `FECHA ${currentDate}`, 'PÁG. 1']],
@@ -819,10 +834,10 @@ export function MaterialsPendingProductsPage({
           table: {
             widths: ['*', 120],
             body: [
-              ['CLIENTE', primaryBudget?.organization?.name ?? '—'],
-              ['N.I.F.', '—'],
+              ['CLIENTE', customerName],
+              ['N.I.F.', customerTaxId],
               ['DOMICILIO', shippingAddress],
-              ['POBLACIÓN / C.P.', '—'],
+              ['POBLACIÓN / C.P.', customerLocation],
             ],
           },
           layout: 'lightHorizontalLines',
