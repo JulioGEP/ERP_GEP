@@ -496,25 +496,50 @@ export function AppRouter({
 
         <Route
           path="/informes/formacion"
-          element={<GuardedRoute path="/informes/formacion" element={<InformesFormacionPage />} />}
+          element={
+            <GuardedRoute
+              path="/informes/formacion"
+              roles={['Admin', 'Comercial', 'Administracion', 'Logistica', 'People']}
+              element={<InformesFormacionPage />}
+            />
+          }
         />
         <Route
           path="/informes/listado"
-          element={<GuardedRoute path="/informes/listado" element={<InformesListadoPage />} />}
+          element={
+            <GuardedRoute
+              path="/informes/listado"
+              roles={['Admin', 'Comercial', 'Administracion', 'Logistica', 'People']}
+              element={<InformesListadoPage />}
+            />
+          }
         />
         <Route
           path="/informes/preventivo"
-          element={<GuardedRoute path="/informes/preventivo" element={<InformesPreventivoPage />} />}
+          element={
+            <GuardedRoute
+              path="/informes/preventivo"
+              roles={['Admin', 'Comercial', 'Administracion', 'Logistica', 'People']}
+              element={<InformesPreventivoPage />}
+            />
+          }
         />
         <Route
           path="/informes/simulacro"
-          element={<GuardedRoute path="/informes/simulacro" element={<InformesSimulacroPage />} />}
+          element={
+            <GuardedRoute
+              path="/informes/simulacro"
+              roles={['Admin', 'Comercial', 'Administracion', 'Logistica', 'People']}
+              element={<InformesSimulacroPage />}
+            />
+          }
         />
         <Route
           path="/informes/actuaciones_preventivos"
           element={
             <GuardedRoute
               path="/informes/actuaciones_preventivos"
+              roles={['Admin', 'Comercial', 'Administracion', 'Logistica', 'People']}
               element={<InformesActuacionesPreventivosPage />}
             />
           }
@@ -524,6 +549,7 @@ export function AppRouter({
           element={
             <GuardedRoute
               path="/informes/recurso_preventivo_ebro"
+              roles={['Admin', 'Comercial', 'Administracion', 'Logistica', 'People']}
               element={<InformesRecursoPreventivoEbroPage />}
             />
           }

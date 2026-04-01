@@ -564,6 +564,11 @@ function collectPermittedPaths(nodes: readonly NavNode[], hasPermission: (path: 
   });
 }
 
+function isGeneralReportsPath(path: string | null | undefined): boolean {
+  if (!path) return false;
+  return path === '/informes' || path.startsWith('/informes/');
+}
+
 function formatDateKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -895,6 +900,9 @@ export default function AuthenticatedApp() {
   const filteredNavItems = useMemo(() => {
     const items: NavItem[] = [];
     navigationCatalog.forEach((item) => {
+      if (isFormador && isGeneralReportsPath(item.path)) {
+        return;
+      }
       const children = filterNavNodes(item.children ?? [], hasPermission);
       const hasDirect = item.path ? hasPermission(item.path) : false;
       if (!hasDirect && children.length === 0) {
@@ -903,7 +911,7 @@ export default function AuthenticatedApp() {
       items.push({ ...item, children });
     });
     return items;
-  }, [hasPermission, navigationCatalog]);
+  }, [hasPermission, isFormador, navigationCatalog]);
 
   const allowedPaths = useMemo(() => {
     const paths = new Set<string>();
