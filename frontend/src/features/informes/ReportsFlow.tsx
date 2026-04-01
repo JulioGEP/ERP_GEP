@@ -40,7 +40,7 @@ const REPORT_ROUTE_SEGMENT: Record<ReportType, string> = {
   formacion: 'formacion',
   preventivo: 'preventivo',
   simulacro: 'simulacro',
-  'preventivo-ebro': 'actuaciones_preventivos',
+  'preventivo-ebro': 'recurso_preventivo_ebro',
 };
 
 const REPORT_TYPE_OPTIONS: Array<{ value: ReportType; label: string }> = [

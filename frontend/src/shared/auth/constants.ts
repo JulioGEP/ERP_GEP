@@ -62,7 +62,6 @@ export const DEFAULT_ROUTE_ORDER = [
   '/usuarios/trainer/informes/formacion',
   '/usuarios/trainer/informes/preventivo',
   '/usuarios/trainer/informes/simulacro',
-  '/usuarios/trainer/informes/actuaciones_preventivos',
   '/usuarios/trainer/informes/recurso_preventivo_ebro',
   '/dashboard',
   '/control_horario',
