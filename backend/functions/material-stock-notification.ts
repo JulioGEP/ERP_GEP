@@ -68,7 +68,10 @@ export const handler = createHttpHandler(async (request) => {
   const budgetId = normalizeString((request.body as { budgetId?: unknown } | null)?.budgetId);
   const products = normalizeProducts((request.body as { products?: unknown } | null)?.products);
   const shippingAddress = normalizeString((request.body as { shippingAddress?: unknown } | null)?.shippingAddress);
-  const contact = normalizeString((request.body as { contact?: unknown } | null)?.contact);
+  const salespersonName = normalizeString((request.body as { salespersonName?: unknown } | null)?.salespersonName);
+  const customerFullName = normalizeString((request.body as { customerFullName?: unknown } | null)?.customerFullName);
+  const customerEmail = normalizeString((request.body as { customerEmail?: unknown } | null)?.customerEmail);
+  const customerPhone = normalizeString((request.body as { customerPhone?: unknown } | null)?.customerPhone);
 
   if (!budgetId) {
     return errorResponse('VALIDATION_ERROR', 'El presupuesto es obligatorio', 400);
@@ -80,9 +83,11 @@ export const handler = createHttpHandler(async (request) => {
 
   const productLines = products.map((product) => `- ${product.productName} y la cantidad ${formatQuantity(product.quantity)}`);
 
-  const body = `Hola Logistica\n\nNº de pedido: ${budgetId}\nDesde el Sales necesitamos un nuevo pedido\n${productLines.join(
+  const contact = [customerFullName ?? 'No informado', customerEmail ?? 'Sin email', customerPhone ?? 'Sin teléfono'].join(' ');
+
+  const body = `Hola Logistica\n\nSoy ${salespersonName ?? 'el comercial asignado'} ya tengo la orden de hacer el pedido del suguiente presupuesto\nNº de "presupuesto" -> ${budgetId}\nDesde el Sales necesitamos un nuevo pedido\n${productLines.join(
     '\n',
-  )}\n\nDirección de envío: ${shippingAddress ?? 'No informada'}\nContacto: ${contact ?? 'No informado'}\n\nActualizar el pedido cuando tengáis numero de orden o de seguimiento\n\nSino hay Stock y hay que hacer pedido, crearlo desde la ruta https://erpgep.netlify.app/materiales/materiales`;
+  )}\n\nDirección de envío: ${shippingAddress ?? 'No informada'}\nContacto: ${contact}\n\nLOGISTICA:\nSino hay Stock crear el pedido desde la ruta https://erpgep.netlify.app/materiales/materiales \nSi no hay stock, que administración lo pida y reenviar este mail\n\nADMINISTRACIÓN:\nSi hay que pedir material, crear el pedido desde la ruta https://erpgep.netlify.app/materiales/materiales\n\nActualizar el pedido cuando tengáis numero de orden o de seguimiento\n\nEnviado desde el ERP\n¡Gracias!`;
 
   await sendEmail({
     to: LOGISTICS_EMAIL,

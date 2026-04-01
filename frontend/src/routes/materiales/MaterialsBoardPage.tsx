@@ -246,16 +246,14 @@ function getBudgetNotificationProducts(budget: DealSummary): Array<{ productName
     .filter((product): product is { productName: string; quantity: number } => product !== null);
 }
 
-function getBudgetNotificationContact(budget: DealSummary): string | null {
-  const personName = `${budget.person?.first_name ?? ''} ${budget.person?.last_name ?? ''}`.trim();
-  const personEmail = budget.person?.email?.trim() ?? '';
-  const personPhone = budget.person?.phone?.trim() ?? '';
+function getShippingAddressForNotification(budget: DealSummary): string | null {
+  const shippingAddress = budget.direccion_envio?.trim();
+  if (shippingAddress && shippingAddress.length > 0) return shippingAddress;
 
-  const segments = [personName, personEmail, personPhone].filter((segment) => segment.length > 0);
-  if (segments.length > 0) return segments.join(' · ');
+  const legacyShippingAddress = (budget as DealSummary & { direccionEnvio?: string | null }).direccionEnvio?.trim();
+  if (legacyShippingAddress && legacyShippingAddress.length > 0) return legacyShippingAddress;
 
-  const fallbackOrganization = budget.organization?.name?.trim() ?? '';
-  return fallbackOrganization.length ? fallbackOrganization : null;
+  return null;
 }
 
 const ARCHIVED_MATERIAL_STATUS: MaterialDealStatus = 'Enviados al cliente';
@@ -407,13 +405,28 @@ export function MaterialsBoardPage({
       budgetId,
       products,
       shippingAddress,
-      contact,
+      salespersonName,
+      customerFullName,
+      customerEmail,
+      customerPhone,
     }: {
       budgetId: string;
       products: Array<{ productName: string; quantity: number }>;
       shippingAddress?: string | null;
-      contact?: string | null;
-    }) => sendMaterialStockNotification({ budgetId, products, shippingAddress, contact }),
+      salespersonName?: string | null;
+      customerFullName?: string | null;
+      customerEmail?: string | null;
+      customerPhone?: string | null;
+    }) =>
+      sendMaterialStockNotification({
+        budgetId,
+        products,
+        shippingAddress,
+        salespersonName,
+        customerFullName,
+        customerEmail,
+        customerPhone,
+      }),
     onError: () => {
       setUpdateError('No se pudo enviar el aviso a logística.');
     },
@@ -772,14 +785,16 @@ export function MaterialsBoardPage({
               const budget = budgetsById.get(pendingMove.budgetId);
               if (!budget) return;
               const products = getBudgetNotificationProducts(budget);
-              const shippingAddress = budget.direccion_envio?.trim() || null;
-              const contact = getBudgetNotificationContact(budget);
+              const shippingAddress = getShippingAddressForNotification(budget);
               try {
                 await notificationMutation.mutateAsync({
                   budgetId: pendingMove.budgetId,
                   products,
                   shippingAddress,
-                  contact,
+                  salespersonName: budget.comercial?.trim() || null,
+                  customerFullName: `${budget.person?.first_name ?? ''} ${budget.person?.last_name ?? ''}`.trim() || null,
+                  customerEmail: budget.person?.email?.trim() || null,
+                  customerPhone: budget.person?.phone?.trim() || null,
                 });
                 handleStatusChange(budget, pendingMove.targetStatus);
               } catch {
