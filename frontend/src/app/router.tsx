@@ -628,7 +628,7 @@ export function AppRouter({
           }
         />
         <Route
-          path="/usuarios/trainer/informes/recurso_preventivo_ebro"
+          path="/usuarios/trainer/informes/actuaciones_preventivos"
           element={
             <GuardedRoute
               path="/usuarios/trainer/informes/recurso_preventivo_ebro"
@@ -636,6 +636,10 @@ export function AppRouter({
               element={<TrainerReportsRecursoPreventivoEbroPage />}
             />
           }
+        />
+        <Route
+          path="/usuarios/trainer/informes/recurso_preventivo_ebro"
+          element={<Navigate to="/usuarios/trainer/informes/actuaciones_preventivos" replace />}
         />
         <Route
           path="/usuarios/trainer/disponibilidad"
