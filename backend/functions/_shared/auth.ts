@@ -60,6 +60,15 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Formador: ['/usuarios/trainer/*', '/perfil', '/perfil/control_horas', '/control_horario'],
 };
 
+const INFORMES_SECTION_PERMISSIONS = [
+  '/informes/listado',
+  '/informes/formacion',
+  '/informes/preventivo',
+  '/informes/simulacro',
+  '/informes/actuaciones_preventivos',
+  '/informes/recurso_preventivo_ebro',
+] as const;
+
 export function normalizeRoleKey(value: string | null | undefined): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -167,6 +176,7 @@ export type UserRecord = {
   email: string;
   role: string;
   active: boolean;
+  can_deliver_training?: boolean | null;
   password_hash?: string | null;
   password_algo?: string | null;
   password_updated_at?: Date | null;
@@ -213,7 +223,12 @@ export function getPermissionsForRole(role: string | null | undefined): readonly
 
 export function getPermissionsForUser(user: UserRecord): readonly string[] {
   const permissions = new Set(getPermissionsForRole(user.role));
+  const normalizedRole = normalizeRoleKey(user.role);
   const normalizedEmail = user.email?.toLowerCase();
+
+  if (normalizedRole !== 'admin' && user.can_deliver_training) {
+    INFORMES_SECTION_PERMISSIONS.forEach((permission) => permissions.add(permission));
+  }
 
   if (normalizedEmail === 'carles@gepgroup.es') {
     permissions.add('/calendario/*');
