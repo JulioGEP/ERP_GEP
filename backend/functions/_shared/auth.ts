@@ -229,6 +229,10 @@ export function getPermissionsForUser(user: UserRecord): readonly string[] {
     permissions.add('/usuarios/control_horario_fijos');
   }
 
+  if (normalizedEmail === 'manuela@gepgroup.es' || normalizedEmail === 'carles@gepgroup.es') {
+    permissions.add('/reporting/actuaciones_preventivos');
+  }
+
   return Array.from(permissions);
 }
 

@@ -712,7 +712,6 @@ export function AppRouter({
           element={
             <GuardedRoute
               path="/reporting/actuaciones_preventivos"
-              roles={['Admin']}
               element={<ActuacionesPreventivosDashboardPage />}
             />
           }
