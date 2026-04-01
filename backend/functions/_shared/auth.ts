@@ -167,6 +167,7 @@ export type UserRecord = {
   email: string;
   role: string;
   active: boolean;
+  can_deliver_training?: boolean;
   password_hash?: string | null;
   password_algo?: string | null;
   password_updated_at?: Date | null;
@@ -213,9 +214,19 @@ export function getPermissionsForRole(role: string | null | undefined): readonly
 
 export function getPermissionsForUser(user: UserRecord): readonly string[] {
   const permissions = new Set(getPermissionsForRole(user.role));
+  const normalizedRole = normalizeRoleKey(user.role);
   const normalizedEmail = user.email?.toLowerCase();
   const isActuacionesPreventivosReportingUser =
     normalizedEmail === 'manuela@gepgroup.es' || normalizedEmail === 'carles@gepgroup.es';
+
+  if (user.can_deliver_training && normalizedRole !== 'admin') {
+    permissions.add('/informes/listado');
+    permissions.add('/informes/formacion');
+    permissions.add('/informes/preventivo');
+    permissions.add('/informes/simulacro');
+    permissions.add('/informes/actuaciones_preventivos');
+    permissions.add('/informes/recurso_preventivo_ebro');
+  }
 
   if (normalizedEmail === 'carles@gepgroup.es') {
     permissions.add('/calendario/*');
