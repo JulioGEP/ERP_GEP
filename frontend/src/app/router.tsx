@@ -450,9 +450,10 @@ export function AppRouter({
           }
         />
         <Route path="/recursos/productos" element={<Navigate to="/recursos/formaciones" replace />} />
+        <Route path="/recursos/stock" element={<Navigate to="/materiales/stock" replace />} />
         <Route
-          path="/recursos/stock"
-          element={<GuardedRoute path="/recursos/stock" element={<StockPage {...stockPageProps} />} />}
+          path="/materiales/stock"
+          element={<GuardedRoute path="/materiales/stock" element={<StockPage {...stockPageProps} />} />}
         />
         <Route
           path="/recursos/mailchimp"

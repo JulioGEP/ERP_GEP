@@ -128,6 +128,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Materiales/Presupuestos', label: 'Presupuestos', path: '/materiales/presupuestos' },
       { key: 'Materiales/Materiales', label: 'Materiales', path: '/materiales/materiales' },
       { key: 'Materiales/Pedidos', label: 'Pedidos', path: '/materiales/pedidos' },
+      { key: 'Materiales/Stock', label: 'Stock', path: '/materiales/stock' },
     ],
   },
   {
@@ -151,7 +152,6 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
       { key: 'Recursos/Formaciones', label: 'Formaciones', path: '/recursos/formaciones' },
       { key: 'Recursos/ProductsHolded', label: 'Products Holded', path: '/recursos/products_holded' },
-      { key: 'Recursos/Stock', label: 'Stock', path: '/recursos/stock' },
       { key: 'Recursos/Mailchimp', label: 'Mailchimp', path: '/recursos/mailchimp' },
       { key: 'Recursos/Slack', label: 'Slack', path: '/recursos/slack' },
       { key: 'Recursos/CamposPipe', label: 'Campos Pipe', path: '/recursos/campos_pipe' },
