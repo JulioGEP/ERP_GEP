@@ -38,6 +38,7 @@ type NormalizedWooOrder = {
   variationIdWoo: string | null;
   sku: string | null;
   quantity: number;
+  discountPercentageFromPayload: number;
   subtotal: number;
   taxPercentage: number | null;
   rawDate: string | null;
@@ -436,6 +437,15 @@ function normalizeWooOrder(payloadRoot: JsonObject): NormalizedWooOrder {
     pickMetaValue(lineMeta, ['pa_localizacion', 'meta_data_pa_localizacion', 'attribute_pa_localizacion']) ??
     readString(lineItem['meta_data_pa_localizacion']);
   const taxPercentage = resolveWooTaxPercentage(payload, lineItem);
+  const quantityFromPayload = readNumber(payload.quantity) ?? readNumber(payloadRoot.quantity);
+  const quantityFromLine = readNumber(lineItem.quantity);
+  const resolvedQuantity = Math.max(1, Math.trunc(quantityFromPayload ?? quantityFromLine ?? 1));
+  const discountType = readString(payload.discount_type) ?? readString(payloadRoot.discount_type);
+  const nominalAmount = readNumber(payload.nominal_amount) ?? readNumber(payloadRoot.nominal_amount) ?? 0;
+  const discountPercentageFromPayload =
+    normalizeComparison(discountType) === 'percent' || normalizeComparison(discountType) === 'percentage'
+      ? Math.max(0, nominalAmount)
+      : 0;
 
   return {
     orderId,
@@ -460,7 +470,8 @@ function normalizeWooOrder(payloadRoot: JsonObject): NormalizedWooOrder {
     productIdWoo: readString(lineItem.product_id),
     variationIdWoo: readString(lineItem.variation_id),
     sku: readString(lineItem.sku),
-    quantity: Math.max(1, Math.trunc(readNumber(lineItem.quantity) ?? 1)),
+    quantity: resolvedQuantity,
+    discountPercentageFromPayload,
     subtotal: readNumber(lineItem.subtotal) ?? readNumber(payload.total) ?? 0,
     taxPercentage,
     rawDate,
@@ -501,11 +512,14 @@ function classifyOrder(order: NormalizedWooOrder): {
   const requiresFundae = normalizeBooleanText(order.fundae) === 'yes';
   const requiresPurchaseOrder = normalizeBooleanText(order.requiresPurchaseOrder) === 'yes';
 
-  let discountPercentage = 0;
-  if (isPartner) {
-    discountPercentage = requiresPrintScan ? 15 : 20;
-  } else if (isClient20) {
-    discountPercentage = 20;
+  const discountFromPayload = Math.max(0, order.discountPercentageFromPayload);
+  let discountPercentage = discountFromPayload;
+  if (discountPercentage === 0) {
+    if (isPartner) {
+      discountPercentage = requiresPrintScan ? 15 : 20;
+    } else if (isClient20) {
+      discountPercentage = 20;
+    }
   }
 
   return {
@@ -872,7 +886,7 @@ function buildAddProductPayload(order: NormalizedWooOrder, productIdPipe: string
   return {
     product_id: normalizedProductId,
     item_price: order.subtotal,
-    quantity: 1,
+    quantity: order.quantity,
     discount: discountPercentage > 0 ? discountPercentage : undefined,
     discount_type: 'percentage',
     tax_method: 'exclusive',
@@ -1306,6 +1320,7 @@ async function createAndSendHoldedInvoiceFromWooOrder(params: {
 
   const invoicePayload = {
     date: 'today',
+    approveDoc: true,
     contactCode: holdedContact.code || undefined,
     contactId: holdedContact.id,
     invoiceNum: '',
