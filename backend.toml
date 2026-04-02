@@ -13,10 +13,10 @@ NODE_VERSION = "20"
 
 
 [functions."daily-availability-slack"]
-schedule = "0 4,5 * * 1-5"
+schedule = "0 5 * * 1-5"
 
 [functions."daily-trainers-slack"]
-schedule = "0 4,5 * * *"
+schedule = "0 5 * * *"
 
 [functions."control-horario-reminders"]
 schedule = "*/15 * * * *"
