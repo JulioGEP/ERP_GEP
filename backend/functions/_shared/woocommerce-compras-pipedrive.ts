@@ -125,6 +125,7 @@ const DEAL_SKU_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_DEAL_SKU_FIELD_KEY || 'f
 const DEAL_VARIATION_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_DEAL_VARIATION_FIELD_KEY || '478b2a7f79323212032ab2344aff193c4bf77523';
 const DEAL_TRAINING_DATE_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_DEAL_TRAINING_DATE_FIELD_KEY || '98f072a788090ac2ae52017daaf9618c3a189033';
 const DEAL_CONSTANT_STATUS_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_DEAL_CONSTANT_STATUS_FIELD_KEY || 'ce2c299bd19c48d40297cd7b204780585ab2a5f0';
+const DEAL_HOLDED_BUDGET_ID_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_DEAL_HOLDED_BUDGET_ID_FIELD_KEY || '4118257ffc3bad107769f69d05e5bd1d7415cadd';
 
 const DEAL_INITIAL_SERVICE_VALUE = process.env.WOOCOMMERCE_PIPE_DEAL_INITIAL_SERVICE_VALUE || '234';
 const DEAL_WON_SERVICE_VALUE = process.env.WOOCOMMERCE_PIPE_DEAL_WON_SERVICE_VALUE || '236';
@@ -857,7 +858,11 @@ function buildDealCreatePayload(
   };
 }
 
-function buildDealUpdatePayload(order: NormalizedWooOrder, singleOptionValues: DealSingleOptionValues) {
+function buildDealUpdatePayload(
+  order: NormalizedWooOrder,
+  singleOptionValues: DealSingleOptionValues,
+  holdedBudgetId: string | null = null,
+) {
   const lifecycle = resolveDealLifecycle(order);
   return {
     status: lifecycle.status,
@@ -874,6 +879,7 @@ function buildDealUpdatePayload(order: NormalizedWooOrder, singleOptionValues: D
     [DEAL_SKU_FIELD_KEY]: order.sku,
     [DEAL_VARIATION_FIELD_KEY]: order.variationIdWoo,
     [DEAL_CONSTANT_STATUS_FIELD_KEY]: DEAL_CONSTANT_STATUS_VALUE,
+    [DEAL_HOLDED_BUDGET_ID_FIELD_KEY]: holdedBudgetId ?? undefined,
   };
 }
 
@@ -1477,11 +1483,6 @@ export async function sendWooOrderToPipedrive(params: {
   );
   if (detailsNoteCreated) notesCreated.push('details');
 
-  await pdRequest(`/deals/${encodeURIComponent(dealId)}`, {
-    method: 'PUT',
-    body: buildDealUpdatePayload(order, singleOptionValues),
-  });
-
   let holdedDocumentId: string | null = null;
   let holdedDocumentType: 'invoice' | null = null;
   let invoiceEmailSent = false;
@@ -1500,6 +1501,11 @@ export async function sendWooOrderToPipedrive(params: {
       warnings.push('La factura se ha creado en Holded, pero no se ha enviado por email porque el pedido no tiene correo de facturación.');
     }
   }
+
+  await pdRequest(`/deals/${encodeURIComponent(dealId)}`, {
+    method: 'PUT',
+    body: buildDealUpdatePayload(order, singleOptionValues, holdedDocumentId),
+  });
 
   if (classification.requiresFundae) {
     warnings.push('El pedido requiere gestión FUNDAE: revisa la comunicación interna adicional fuera de Pipedrive.');
