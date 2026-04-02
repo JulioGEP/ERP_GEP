@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Badge, Button, ButtonGroup, Card, Col, Form, Row, Table } from 'react-bootstrap';
 import { fetchUsers, type UserSummary } from '../../api/users';
+import { fetchReportingTrainerControlHours } from '../../features/reporting/api';
 import { exportToExcel } from '../../shared/export/exportToExcel';
 
 type ShiftSlot = 'Mañana' | 'Noche';
@@ -9,6 +10,7 @@ type ShiftType = 'DOMINGO_JUEVES' | 'VIERNES_SABADO';
 
 type Firefighter = {
   code: string;
+  trainerId: string;
   name: string;
   shift: ShiftSlot;
 };
@@ -54,20 +56,20 @@ const FRIDAY_SATURDAY_NIGHT_WINDOW = '13:45 - 22:15';
 
 function buildDefaultFirefighters(): Firefighter[] {
   return [
-    { code: 'B01', name: '', shift: 'Mañana' },
-    { code: 'B02', name: '', shift: 'Mañana' },
-    { code: 'B03', name: '', shift: 'Mañana' },
-    { code: 'B04', name: '', shift: 'Mañana' },
-    { code: 'B05', name: '', shift: 'Mañana' },
-    { code: 'B06', name: '', shift: 'Mañana' },
-    { code: 'B07', name: '', shift: 'Mañana' },
-    { code: 'B08', name: '', shift: 'Noche' },
-    { code: 'B09', name: '', shift: 'Noche' },
-    { code: 'B10', name: '', shift: 'Noche' },
-    { code: 'B11', name: '', shift: 'Noche' },
-    { code: 'B12', name: '', shift: 'Noche' },
-    { code: 'B13', name: '', shift: 'Noche' },
-    { code: 'B14', name: '', shift: 'Noche' },
+    { code: 'B01', trainerId: '', name: '', shift: 'Mañana' },
+    { code: 'B02', trainerId: '', name: '', shift: 'Mañana' },
+    { code: 'B03', trainerId: '', name: '', shift: 'Mañana' },
+    { code: 'B04', trainerId: '', name: '', shift: 'Mañana' },
+    { code: 'B05', trainerId: '', name: '', shift: 'Mañana' },
+    { code: 'B06', trainerId: '', name: '', shift: 'Mañana' },
+    { code: 'B07', trainerId: '', name: '', shift: 'Mañana' },
+    { code: 'B08', trainerId: '', name: '', shift: 'Noche' },
+    { code: 'B09', trainerId: '', name: '', shift: 'Noche' },
+    { code: 'B10', trainerId: '', name: '', shift: 'Noche' },
+    { code: 'B11', trainerId: '', name: '', shift: 'Noche' },
+    { code: 'B12', trainerId: '', name: '', shift: 'Noche' },
+    { code: 'B13', trainerId: '', name: '', shift: 'Noche' },
+    { code: 'B14', trainerId: '', name: '', shift: 'Noche' },
   ];
 }
 
@@ -121,6 +123,22 @@ export default function UsersPlanningPage() {
     },
   });
   const activeTrainers = trainersQuery.data ?? [];
+  const workedHoursByTrainerId = useQuery({
+    queryKey: ['users', 'planning', 'worked-hours-ytd'],
+    queryFn: async () => {
+      const now = new Date();
+      const startDate = `${now.getFullYear()}-01-01`;
+      const endDate = now.toISOString().slice(0, 10);
+      const response = await fetchReportingTrainerControlHours({ startDate, endDate });
+      const grouped = new Map<string, number>();
+      for (const entry of response.items) {
+        const previous = grouped.get(entry.trainerId) ?? 0;
+        grouped.set(entry.trainerId, previous + entry.loggedHours);
+      }
+      return grouped;
+    },
+  });
+  const workedHoursById = workedHoursByTrainerId.data ?? new Map<string, number>();
 
   const planningModel = useMemo(() => {
     const now = new Date();
@@ -135,8 +153,9 @@ export default function UsersPlanningPage() {
 
     const stats = new Map<string, FirefighterStats>();
     firefighters.forEach((firefighter) => {
+      const workedHours = firefighter.trainerId ? workedHoursById.get(firefighter.trainerId) ?? 0 : 0;
       stats.set(firefighter.code, {
-        totalHours: 0,
+        totalHours: workedHours,
         totalServices: 0,
         weeklyServices: new Map<string, number>(),
       });
@@ -218,7 +237,7 @@ export default function UsersPlanningPage() {
     }
 
     return { days, stats, alerts };
-  }, [firefighters]);
+  }, [firefighters, workedHoursById]);
 
   const planningMonths = useMemo(() => {
     const grouped = new Map<number, DayPlan[]>();
@@ -260,18 +279,17 @@ export default function UsersPlanningPage() {
     return monthly;
   }, [planningModel.days]);
 
-  const handleNameChange = (code: string, name: string) => {
-    setFirefighters((previous) => previous.map((ff) => (ff.code === code ? { ...ff, name } : ff)));
+  const handleNameChange = (code: string, trainerId: string) => {
+    const selectedTrainer = activeTrainers.find((trainer) => trainer.trainerId === trainerId);
+    const fullName = selectedTrainer ? `${selectedTrainer.firstName} ${selectedTrainer.lastName}`.trim() : '';
+    setFirefighters((previous) => previous.map((ff) => (ff.code === code ? { ...ff, trainerId, name: fullName } : ff)));
   };
 
   const handleShiftChange = (code: string, shift: ShiftSlot) => {
     setFirefighters((previous) => previous.map((ff) => (ff.code === code ? { ...ff, shift } : ff)));
   };
 
-  const allFirefightersAssigned = useMemo(
-    () => firefighters.every((firefighter) => firefighter.name.trim().length > 0),
-    [firefighters],
-  );
+  const allFirefightersAssigned = useMemo(() => firefighters.every((firefighter) => firefighter.trainerId.trim().length > 0), [firefighters]);
 
   const handleDownloadExcel = () => {
     if (!allFirefightersAssigned) return;
@@ -308,13 +326,14 @@ export default function UsersPlanningPage() {
         </Card.Header>
         <Card.Body className="d-flex flex-column gap-2">
           <Alert variant="info" className="mb-0">
-            <strong>Condiciones aplicadas:</strong> máximo {WEEKLY_MAX_SERVICES} servicios semanales por bombero (≈40h),
+          <strong>Condiciones aplicadas:</strong> máximo {WEEKLY_MAX_SERVICES} servicios semanales por bombero (≈40h),
             {` `}{SERVICES_PER_SHIFT} bomberos por servicio, rotación diaria del 7º bombero de cada turno y turnos de domingo
             a jueves de {SUNDAY_THURSDAY_SERVICE_HOURS.toLocaleString('es-ES')}h (05:45-18:15 / 17:45-06:15), y viernes/sábado
             de {FRIDAY_SATURDAY_SERVICE_HOURS.toLocaleString('es-ES')}h (05:45-14:15 / 13:45-22:15).
           </Alert>
           <Alert variant="secondary" className="mb-0">
-            Calendario base sin vacaciones ({TARGET_ANNUAL_HOURS.toLocaleString('es-ES')} h/año). Las vacaciones se cubrirán posteriormente.
+            Calendario base sin vacaciones ({TARGET_ANNUAL_HOURS.toLocaleString('es-ES')} h/año). El cálculo anual parte de las horas
+            ya trabajadas por cada bombero desde el 1 de enero hasta hoy.
           </Alert>
           {planningModel.alerts.length > 0 && (
             <Alert variant="warning" className="mb-0">
@@ -341,20 +360,30 @@ export default function UsersPlanningPage() {
                     <Form.Group>
                       <Form.Label className="small text-muted mb-1">Nombre</Form.Label>
                       <Form.Select
-                        value={firefighter.name}
+                        value={firefighter.trainerId}
                         onChange={(event) => handleNameChange(firefighter.code, event.target.value)}
                       >
                         <option value="">Selecciona formador activo</option>
                         {activeTrainers.map((trainer: UserSummary) => {
                           const fullName = `${trainer.firstName} ${trainer.lastName}`.trim();
                           return (
-                            <option key={trainer.id} value={fullName}>
+                            <option key={trainer.id} value={trainer.trainerId ?? ''}>
                               {fullName}
                             </option>
                           );
                         })}
                       </Form.Select>
                     </Form.Group>
+                    <div className="small text-muted">
+                      Horas realizadas desde 1 de enero:{' '}
+                      <strong>
+                        {(firefighter.trainerId ? workedHoursById.get(firefighter.trainerId) ?? 0 : 0).toLocaleString('es-ES', {
+                          minimumFractionDigits: 1,
+                          maximumFractionDigits: 1,
+                        })}{' '}
+                        h
+                      </strong>
+                    </div>
                     <Form.Group>
                       <Form.Label className="small text-muted mb-1">Turno base</Form.Label>
                       <Form.Select
