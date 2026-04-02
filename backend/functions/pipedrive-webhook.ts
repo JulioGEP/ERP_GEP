@@ -258,7 +258,20 @@ function normalizeTextValue(value: string | null | undefined): string {
 
 function isWooReservationMode(value: string | null | undefined): boolean {
   const normalized = normalizeTextValue(value);
-  return normalized === 'reserva web' || normalized.includes('woocommerce');
+  return normalized === 'reserva web' || normalized === 'compra web' || normalized.includes('woocommerce');
+}
+
+async function shouldSkipHoldedBudgetSyncForWooOrder(
+  prisma: ReturnType<typeof getPrisma>,
+  dealId: string,
+): Promise<boolean> {
+  const latestWooOrder = await prisma.woocommerce_compras_webhooks.findFirst({
+    where: { presupuesto: dealId },
+    orderBy: { created_at: 'desc' },
+    select: { payment_method: true },
+  });
+
+  return typeof latestWooOrder?.payment_method === 'string' && latestWooOrder.payment_method.trim().length > 0;
 }
 
 async function maybeDelayWooBudgetSync(prisma: ReturnType<typeof getPrisma>, dealId: string): Promise<void> {
@@ -384,6 +397,10 @@ async function autoSyncBudgetToHolded(
   prisma: ReturnType<typeof getPrisma>,
   dealId: string,
 ): Promise<{ attempted: boolean; synced: boolean; mode: 'create' | 'update' }> {
+  if (await shouldSkipHoldedBudgetSyncForWooOrder(prisma, dealId)) {
+    return { attempted: false, synced: false, mode: 'create' };
+  }
+
   const stored = await prisma.deals.findUnique({
     where: { deal_id: dealId },
     select: { presu_holded: true },

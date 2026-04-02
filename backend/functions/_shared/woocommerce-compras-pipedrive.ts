@@ -127,7 +127,7 @@ const DEAL_CONSTANT_STATUS_FIELD_KEY = process.env.WOOCOMMERCE_PIPE_DEAL_CONSTAN
 
 const DEAL_INITIAL_SERVICE_VALUE = process.env.WOOCOMMERCE_PIPE_DEAL_INITIAL_SERVICE_VALUE || '234';
 const DEAL_WON_SERVICE_VALUE = process.env.WOOCOMMERCE_PIPE_DEAL_WON_SERVICE_VALUE || '236';
-const DEAL_INITIAL_SOURCE_VALUE = process.env.WOOCOMMERCE_PIPE_DEAL_INITIAL_SOURCE_VALUE || 'reserva web';
+const DEAL_INITIAL_SOURCE_VALUE = process.env.WOOCOMMERCE_PIPE_DEAL_INITIAL_SOURCE_VALUE || 'compra web';
 const DEAL_CONSTANT_STATUS_VALUE = process.env.WOOCOMMERCE_PIPE_DEAL_CONSTANT_STATUS_VALUE || '63';
 
 const HOLDED_CONTACTS_ENDPOINT = 'https://api.holded.com/api/invoicing/v1/contacts';
@@ -696,9 +696,11 @@ async function resolveDealSingleOptionValues(
     : [];
   const trainingLookupLabel = trainingPrimaryLabel ?? trainingLookupCandidates[0] ?? null;
   const siteLookupLabel = order.formattedLocation ?? order.rawLocation;
-  const fundaeLookupLabel = normalizeBooleanText(order.fundae) === 'yes' ? 'Sí' : normalizeBooleanText(order.fundae) === 'no' ? 'No' : order.fundae;
+  const normalizedFundae = normalizeBooleanText(order.fundae);
+  const fundaeLookupLabel = normalizedFundae === 'yes' ? 'Sí' : normalizedFundae === 'no' ? 'No' : order.fundae;
+  const fundaeOptionId: PipedriveOptionValue = normalizedFundae === 'yes' ? 84 : 85;
 
-  const [trainingOption, siteOption, fundaeOption] = await Promise.all([
+  const [trainingOption, siteOption] = await Promise.all([
     resolveSingleOptionId(prisma, {
       fieldKey: DEAL_TRAINING_FIELD_KEY,
       fieldName: 'Formación',
@@ -710,17 +712,12 @@ async function resolveDealSingleOptionValues(
       fieldName: 'Sede de la Formación',
       candidateLabels: [siteLookupLabel, order.rawLocation],
     }),
-    resolveSingleOptionId(prisma, {
-      fieldKey: DEAL_FUNDAE_FIELD_KEY,
-      fieldName: 'FUNDAE',
-      candidateLabels: [fundaeLookupLabel, order.fundae],
-    }),
   ]);
 
   return {
     trainingOptionId: toPipedriveOptionValue(trainingOption.optionId),
     siteOptionId: toPipedriveOptionValue(siteOption.optionId),
-    fundaeOptionId: toPipedriveOptionValue(fundaeOption.optionId),
+    fundaeOptionId,
     trainingLookupLabel,
     siteLookupLabel,
     fundaeLookupLabel,
