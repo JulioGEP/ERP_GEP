@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ComponentType } from 'react';
-import { Container, Nav, Navbar, Toast, ToastContainer, NavDropdown, Offcanvas } from 'react-bootstrap';
+import { Container, Nav, Navbar, Toast, ToastContainer, NavDropdown, Offcanvas, Modal, Button } from 'react-bootstrap';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from '../features/presupuestos/BudgetImportModal';
@@ -976,6 +976,8 @@ export default function AuthenticatedApp() {
   const isMaterialsRoute = location.pathname.startsWith('/materiales');
 
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showMaterialOrderDeleteBlockedModal, setShowMaterialOrderDeleteBlockedModal] = useState(false);
+  const [materialOrderDeleteBlockedMessage, setMaterialOrderDeleteBlockedMessage] = useState<string | null>(null);
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
   const [selectedBudgetSummary, setSelectedBudgetSummary] = useState<DealSummary | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -1098,6 +1100,11 @@ export default function AuthenticatedApp() {
       pushToast({ variant: 'success', message: 'Pedido eliminado' });
     },
     onError: (error: unknown) => {
+      if (error instanceof ApiError && error.code === 'ORDER_DELETE_FORBIDDEN') {
+        setMaterialOrderDeleteBlockedMessage(error.message);
+        setShowMaterialOrderDeleteBlockedModal(true);
+        return;
+      }
       const message =
         error instanceof ApiError
           ? error.message
@@ -2318,6 +2325,25 @@ export default function AuthenticatedApp() {
         comment={productComment?.comment ?? null}
         onClose={handleCloseProductComment}
       />
+
+      <Modal
+        show={showMaterialOrderDeleteBlockedModal}
+        onHide={() => setShowMaterialOrderDeleteBlockedModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>No se puede eliminar el pedido</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {materialOrderDeleteBlockedMessage ??
+            'No se puede eliminar el pedido porque tiene documentos adjuntos o está marcado como realizado/recibido.'}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="primary" onClick={() => setShowMaterialOrderDeleteBlockedModal(false)}>
+            Entendido
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       <ToastContainer position="bottom-end" className="p-3">
         {toasts.map((toast) => {

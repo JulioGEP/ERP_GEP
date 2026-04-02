@@ -481,6 +481,25 @@ export const handler = createHttpHandler<CreateMaterialOrderBody>(async (request
       return errorResponse('NOT_FOUND', 'No se encontró el pedido indicado', 404);
     }
 
+    const hasRealizado = Boolean(existing.pedido_realizado);
+    const hasRecibido = Boolean(existing.pedido_recibido);
+    const documentsCount = await prisma.material_order_documents.count({ where: { order_id: orderId } });
+    const hasDocuments = documentsCount > 0;
+
+    if (hasDocuments || hasRealizado || hasRecibido) {
+      const reasons: string[] = [];
+      if (hasDocuments) reasons.push('tiene documentos adjuntos');
+      if (hasRealizado) reasons.push('está marcado como realizado');
+      if (hasRecibido) reasons.push('está marcado como recibido');
+
+      const reasonsLabel = reasons.join(', ');
+      return errorResponse(
+        'ORDER_DELETE_FORBIDDEN',
+        `No se puede eliminar el pedido porque ${reasonsLabel}.`,
+        409,
+      );
+    }
+
     await prisma.pedidos.delete({ where: { id: orderId } });
     await syncMaterialDealStatusesFromOrders(prisma, existing.source_budget_ids ?? []);
 
