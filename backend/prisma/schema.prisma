@@ -919,8 +919,28 @@ model pedidos {
   pedido_realizado  Boolean  @default(false)
   pedido_recibido   Boolean  @default(false)
   sent_from         String?  @default("erp@gepgroup.es")
+  documents         material_order_documents[]
 
   @@map("pedidos")
+}
+
+model material_order_documents {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id           Int
+  file_name          String
+  mime_type          String?
+  file_size          Int?
+  drive_file_id      String?
+  drive_file_name    String?
+  drive_web_view_link String?
+  drive_folder_id    String?
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  order pedidos @relation(fields: [order_id], references: [id], onDelete: Cascade)
+
+  @@index([order_id], map: "idx_material_order_documents_order_id")
+  @@map("material_order_documents")
 }
 
 enum DocumentOrigin {

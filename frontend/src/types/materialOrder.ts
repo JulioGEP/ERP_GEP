@@ -33,6 +33,20 @@ export type MaterialOrder = {
   sentFrom: string | null;
 };
 
+export type MaterialOrderDocument = {
+  id: string;
+  orderId: number;
+  fileName: string;
+  mimeType: string | null;
+  fileSize: number | null;
+  driveFileId: string | null;
+  driveFileName: string | null;
+  driveWebViewLink: string | null;
+  driveFolderId: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
 export type MaterialOrdersResponse = {
   orders: MaterialOrder[];
   nextOrderNumber: number;

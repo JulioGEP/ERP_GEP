@@ -1,7 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Alert, Badge, Button, Col, Modal, Row, Spinner, Table } from 'react-bootstrap';
-import type { MaterialOrder } from '../../types/materialOrder';
+import { Accordion, Alert, Badge, Button, Col, Modal, Row, Spinner, Table } from 'react-bootstrap';
+import {
+  deleteMaterialOrderDocument,
+  fetchMaterialOrderDocuments,
+  uploadMaterialOrderDocument,
+} from '../../features/materials/orders.api';
+import type { MaterialOrder, MaterialOrderDocument } from '../../types/materialOrder';
 import type { DealSummary } from '../../types/deal';
 
 export type MaterialsOrdersPageProps = {
@@ -80,6 +85,24 @@ function getNormalizedTextoPedido(textoPedido: string | null | undefined): strin
   return textoPedido?.trim() ? textoPedido.trim() : null;
 }
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      const marker = 'base64,';
+      const index = result.indexOf(marker);
+      if (index < 0) {
+        reject(new Error('No se pudo codificar el archivo.'));
+        return;
+      }
+      resolve(result.slice(index + marker.length));
+    };
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export function MaterialsOrdersPage({
   orders,
   budgets,
@@ -100,6 +123,11 @@ export function MaterialsOrdersPage({
   const [pedidoRecibidoDraft, setPedidoRecibidoDraft] = useState(false);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [showReceiveWarning, setShowReceiveWarning] = useState(false);
+  const [documentsByOrder, setDocumentsByOrder] = useState<Record<number, MaterialOrderDocument[]>>({});
+  const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
+  const [isUploadingDocuments, setIsUploadingDocuments] = useState(false);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+  const [documentError, setDocumentError] = useState<string | null>(null);
   const navigate = useNavigate();
   const hasError = !!error;
   const hasOrders = orders.length > 0;
@@ -129,6 +157,36 @@ export function MaterialsOrdersPage({
     setPedidoRealizadoDraft(Boolean(selectedOrder.pedidoRealizado));
     setPedidoRecibidoDraft(Boolean(selectedOrder.pedidoRecibido));
   }, [selectedOrder]);
+
+  useEffect(() => {
+    if (!selectedOrder) {
+      setDocumentError(null);
+      return;
+    }
+
+    const orderId = selectedOrder.id;
+    if (documentsByOrder[orderId]) {
+      return;
+    }
+
+    setIsLoadingDocuments(true);
+    setDocumentError(null);
+
+    void fetchMaterialOrderDocuments(orderId)
+      .then((response) => {
+        setDocumentsByOrder((current) => ({
+          ...current,
+          [orderId]: response.documents ?? [],
+        }));
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : 'No se pudieron cargar los documentos.';
+        setDocumentError(message);
+      })
+      .finally(() => {
+        setIsLoadingDocuments(false);
+      });
+  }, [documentsByOrder, selectedOrder]);
 
 
   const openReceiveWarning = () => {
@@ -233,6 +291,66 @@ export function MaterialsOrdersPage({
   const selectedOrderEstimatedDelivery = selectedOrder
     ? getOrderEstimatedDelivery(selectedOrder, budgetsById)
     : '—';
+  const selectedOrderDocuments = selectedOrder ? (documentsByOrder[selectedOrder.id] ?? []) : [];
+
+  const handleUploadDocuments = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!selectedOrder || !files?.length) return;
+
+    setDocumentError(null);
+    setIsUploadingDocuments(true);
+
+    try {
+      const uploadedDocs: MaterialOrderDocument[] = [];
+      for (const file of Array.from(files)) {
+        const contentBase64 = await fileToBase64(file);
+        const response = await uploadMaterialOrderDocument({
+          orderId: selectedOrder.id,
+          fileName: file.name,
+          mimeType: file.type || null,
+          fileSize: file.size,
+          contentBase64,
+        });
+        uploadedDocs.push(response.document);
+      }
+
+      setDocumentsByOrder((current) => {
+        const existing = current[selectedOrder.id] ?? [];
+        return {
+          ...current,
+          [selectedOrder.id]: [...uploadedDocs, ...existing],
+        };
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'No se pudieron subir los documentos.';
+      setDocumentError(message);
+    } finally {
+      setIsUploadingDocuments(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleDeleteDocument = async (documentId: string) => {
+    if (!selectedOrder) return;
+    const confirmed = window.confirm('¿Eliminar documento?');
+    if (!confirmed) return;
+
+    setDeletingDocumentId(documentId);
+    setDocumentError(null);
+
+    try {
+      await deleteMaterialOrderDocument(documentId);
+      setDocumentsByOrder((current) => ({
+        ...current,
+        [selectedOrder.id]: (current[selectedOrder.id] ?? []).filter((doc) => doc.id !== documentId),
+      }));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'No se pudo eliminar el documento.';
+      setDocumentError(message);
+    } finally {
+      setDeletingDocumentId(null);
+    }
+  };
 
   const handleRowToggleUpdate = async (
     order: MaterialOrder,
@@ -541,6 +659,90 @@ export function MaterialsOrdersPage({
                   </div>
                 )}
               </section>
+
+              <Accordion defaultActiveKey="" alwaysOpen={false}>
+                <Accordion.Item eventKey="documents">
+                  <Accordion.Header>
+                    <span className="erp-accordion-title">
+                      Documentos
+                      {selectedOrderDocuments.length > 0 ? (
+                        <span className="erp-accordion-count">{selectedOrderDocuments.length}</span>
+                      ) : null}
+                    </span>
+                  </Accordion.Header>
+                  <Accordion.Body>
+                    <div className="d-grid gap-3">
+                      <div>
+                        <label className="btn btn-outline-secondary btn-sm mb-0" htmlFor="material-order-documents-upload">
+                          {isUploadingDocuments ? (
+                            <>
+                              <Spinner animation="border" size="sm" role="status" className="me-2" />
+                              Subiendo…
+                            </>
+                          ) : (
+                            'Subir documentos'
+                          )}
+                        </label>
+                        <input
+                          id="material-order-documents-upload"
+                          type="file"
+                          multiple
+                          className="d-none"
+                          onChange={(event) => {
+                            void handleUploadDocuments(event);
+                          }}
+                          disabled={isUploadingDocuments || !selectedOrder}
+                        />
+                      </div>
+
+                      {documentError ? <Alert variant="danger" className="mb-0">{documentError}</Alert> : null}
+
+                      {isLoadingDocuments ? (
+                        <div className="d-flex align-items-center gap-2 text-muted small">
+                          <Spinner animation="border" size="sm" role="status" />
+                          Cargando documentos…
+                        </div>
+                      ) : selectedOrderDocuments.length === 0 ? (
+                        <p className="text-muted mb-0">No hay documentos adjuntos.</p>
+                      ) : (
+                        <div className="d-grid gap-2">
+                          {selectedOrderDocuments.map((document) => (
+                            <div key={document.id} className="border rounded p-2 d-flex justify-content-between align-items-center gap-3">
+                              <a
+                                href={document.driveWebViewLink ?? '#'}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="fw-semibold"
+                                onClick={(event) => {
+                                  if (!document.driveWebViewLink) {
+                                    event.preventDefault();
+                                  }
+                                }}
+                              >
+                                {document.fileName}
+                              </a>
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                onClick={() => {
+                                  void handleDeleteDocument(document.id);
+                                }}
+                                disabled={deletingDocumentId === document.id}
+                              >
+                                {deletingDocumentId === document.id ? (
+                                  <Spinner animation="border" size="sm" role="status" />
+                                ) : (
+                                  'Eliminar'
+                                )}
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </Accordion.Body>
+                </Accordion.Item>
+              </Accordion>
             </div>
           ) : null}
         </Modal.Body>

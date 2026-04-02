@@ -3019,3 +3019,108 @@ export async function uploadUserDocumentToGoogleDrive(params: {
     destinationFolderWebViewLink: folderWebViewLink,
   };
 }
+
+export async function uploadMaterialOrderDocumentToGoogleDrive(params: {
+  orderNumber: number;
+  supplierName?: string | null;
+  fileName: string;
+  mimeType?: string | null;
+  data: Buffer;
+  driveIdOverride?: string | null;
+}): Promise<{
+  driveFileId: string;
+  driveFileName: string;
+  driveWebViewLink: string | null;
+  driveFolderId: string;
+}> {
+  const driveId = params.driveIdOverride?.trim() || '0AOXMlUY_16MGUk9PVA';
+
+  if (!getServiceAccount()) {
+    throw new Error('Credenciales de Google Drive no configuradas');
+  }
+
+  const pedidosFolderId = await ensureFolder({
+    name: 'Pedidos',
+    parentId: driveId,
+    driveId,
+  });
+
+  const supplierName = sanitizeName(params.supplierName || 'sin proveedor') || 'sin proveedor';
+  const orderFolderName = sanitizeName(`${params.orderNumber} - ${supplierName}`) || `${params.orderNumber}`;
+  const orderFolderId = await ensureUniqueSubfolder({
+    driveId,
+    parentId: pedidosFolderId,
+    folderName: orderFolderName,
+    context: { orderNumber: params.orderNumber, scope: 'materialOrders' },
+  });
+
+  const safeFileName = sanitizeName(params.fileName || 'documento') || 'documento';
+  const mimeType = params.mimeType?.trim() || 'application/octet-stream';
+
+  const uploadResult = await uploadBufferToDrive({
+    parentId: orderFolderId,
+    name: safeFileName,
+    mimeType,
+    data: params.data,
+  });
+
+  let driveWebViewLink: string | null = uploadResult.webViewLink ?? null;
+  try {
+    driveWebViewLink = (await ensureFilePublicWebViewLink(uploadResult.id)) ?? driveWebViewLink;
+  } catch (permissionError) {
+    console.warn('[google-drive-sync] No se pudo generar enlace público del documento de pedido', {
+      orderNumber: params.orderNumber,
+      fileName: params.fileName,
+      error: permissionError instanceof Error ? permissionError.message : String(permissionError),
+    });
+  }
+
+  return {
+    driveFileId: uploadResult.id,
+    driveFileName: uploadResult.name,
+    driveWebViewLink,
+    driveFolderId: orderFolderId,
+  };
+}
+
+export async function deleteMaterialOrderDocumentFromGoogleDrive(params: {
+  driveFileId?: string | null;
+  driveFileName?: string | null;
+  driveWebViewLink?: string | null;
+  driveFolderId?: string | null;
+  driveIdOverride?: string | null;
+}): Promise<{ fileDeleted: boolean }> {
+  const driveId = params.driveIdOverride?.trim() || '0AOXMlUY_16MGUk9PVA';
+
+  if (!getServiceAccount()) {
+    throw new Error('Credenciales de Google Drive no configuradas');
+  }
+
+  let fileId = toNonEmptyString(params.driveFileId);
+  if (!fileId) {
+    fileId = extractDriveFileId(params.driveWebViewLink);
+  }
+
+  if (!fileId && params.driveFolderId && params.driveFileName) {
+    fileId = await findFileIdInFolder({
+      folderId: params.driveFolderId,
+      driveId,
+      name: params.driveFileName,
+    });
+  }
+
+  if (!fileId) {
+    return { fileDeleted: false };
+  }
+
+  try {
+    await driveDelete(fileId);
+    return { fileDeleted: true };
+  } catch (error) {
+    console.warn('[google-drive-sync] No se pudo eliminar el documento de pedido en Drive', {
+      fileId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { fileDeleted: false };
+  }
+}
