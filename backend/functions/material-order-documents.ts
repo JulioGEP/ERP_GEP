@@ -11,7 +11,9 @@ const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024;
 
 function parsePath(path: string) {
   const normalized = String(path || '');
-  const trimmed = normalized.replace(/^\/?\.netlify\/functions\//, '/');
+  const trimmed = normalized
+    .replace(/^\/?\.netlify\/functions\//, '/')
+    .replace(/^\/?api\//, '/');
   const segments = trimmed.split('/').filter(Boolean);
   const documentId = segments[1] && segments[0] === 'material-order-documents' ? decodeURIComponent(segments[1]) : null;
   return { documentId };
@@ -131,8 +133,23 @@ export const handler = async (event: any) => {
       return successResponse({ document: mapDocument(document) }, 201);
     }
 
-    if (method === 'DELETE' && documentId) {
-      const existing = await prisma.material_order_documents.findUnique({ where: { id: documentId } });
+    if (method === 'DELETE') {
+      let bodyPayload: any = null;
+      if (event.body) {
+        try {
+          bodyPayload = JSON.parse(event.body);
+        } catch {
+          return errorResponse('VALIDATION_ERROR', 'JSON inválido', 400);
+        }
+      }
+      const bodyDocumentId = toStringOrNull(bodyPayload?.documentId ?? bodyPayload?.id);
+      const targetDocumentId = documentId ?? bodyDocumentId;
+
+      if (!targetDocumentId) {
+        return errorResponse('VALIDATION_ERROR', 'documentId es requerido', 400);
+      }
+
+      const existing = await prisma.material_order_documents.findUnique({ where: { id: targetDocumentId } });
       if (!existing) {
         return errorResponse('NOT_FOUND', 'Documento no encontrado', 404);
       }
@@ -144,9 +161,9 @@ export const handler = async (event: any) => {
         driveFolderId: existing.drive_folder_id,
       });
 
-      await prisma.material_order_documents.delete({ where: { id: documentId } });
+      await prisma.material_order_documents.delete({ where: { id: targetDocumentId } });
 
-      return successResponse({ deleted: true, id: documentId });
+      return successResponse({ deleted: true, id: targetDocumentId });
     }
 
     return errorResponse('NOT_IMPLEMENTED', 'Ruta o método no soportado', 404);

@@ -90,5 +90,5 @@ export async function uploadMaterialOrderDocument(payload: UploadMaterialOrderDo
 }
 
 export async function deleteMaterialOrderDocument(documentId: string) {
-  return delJson<{ deleted: true; id: string }>(`/api/material-order-documents/${encodeURIComponent(documentId)}`);
+  return delJson<{ deleted: true; id: string }>('/api/material-order-documents', { documentId });
 }
