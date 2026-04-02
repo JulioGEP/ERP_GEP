@@ -214,8 +214,8 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
           },
           {
             key: 'Reporting/WoocommerceCompras',
-            label: 'Woocommerce Compras',
-            path: '/reporting/woocommerce_compras',
+            label: 'Woocommerce Ventas',
+            path: '/reporting/woocommerce_ventas',
           },
           {
             key: 'Reporting/WebhooksLeadForm',

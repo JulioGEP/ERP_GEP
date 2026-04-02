@@ -763,15 +763,17 @@ export function AppRouter({
         />
 
         <Route
-          path="/reporting/woocommerce_compras"
+          path="/reporting/woocommerce_ventas"
           element={
             <GuardedRoute
-              path="/reporting/woocommerce_compras"
+              path="/reporting/woocommerce_ventas"
               roles={['Admin']}
               element={<WoocommerceComprasPage />}
             />
           }
         />
+
+        <Route path="/reporting/woocommerce_compras" element={<Navigate to="/reporting/woocommerce_ventas" replace />} />
 
         <Route
           path="/reporting/webhooks_lead_form"
