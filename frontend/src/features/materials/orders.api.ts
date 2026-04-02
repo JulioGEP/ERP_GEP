@@ -1,6 +1,11 @@
 // frontend/src/features/materials/orders.api.ts
 import { delJson, getJson, patchJson, postJson } from '../../api/client';
-import type { MaterialOrder, MaterialOrdersResponse, MaterialOrderProduct } from '../../types/materialOrder';
+import type {
+  MaterialOrder,
+  MaterialOrderDocument,
+  MaterialOrdersResponse,
+  MaterialOrderProduct,
+} from '../../types/materialOrder';
 
 export type CreateMaterialOrderPayload = {
   orderNumber?: number;
@@ -66,4 +71,24 @@ export type UpdateMaterialOrderPayload = {
 
 export async function updateMaterialOrder(payload: UpdateMaterialOrderPayload) {
   return patchJson<{ order: MaterialOrder }>('/api/material-orders', payload);
+}
+
+export async function fetchMaterialOrderDocuments(orderId: number) {
+  return getJson<{ documents: MaterialOrderDocument[] }>(`/api/material-order-documents?orderId=${orderId}`);
+}
+
+export type UploadMaterialOrderDocumentPayload = {
+  orderId: number;
+  fileName: string;
+  mimeType?: string | null;
+  fileSize?: number;
+  contentBase64: string;
+};
+
+export async function uploadMaterialOrderDocument(payload: UploadMaterialOrderDocumentPayload) {
+  return postJson<{ document: MaterialOrderDocument }>('/api/material-order-documents', payload);
+}
+
+export async function deleteMaterialOrderDocument(documentId: string) {
+  return delJson<{ deleted: true; id: string }>(`/api/material-order-documents/${encodeURIComponent(documentId)}`);
 }
