@@ -34,8 +34,8 @@ export const handler = createHttpHandler<any>(async (request) => {
       return auth.error;
     }
 
-    const startDateParam = request.queryStringParameters?.startDate;
-    const endDateParam = request.queryStringParameters?.endDate;
+    const startDateParam = request.query.startDate;
+    const endDateParam = request.query.endDate;
 
     const startDate = startDateParam ? new Date(startDateParam) : null;
     if (startDateParam && (startDate === null || Number.isNaN(startDate.getTime()))) {
