@@ -969,7 +969,8 @@ option.session-option-unavailable {
   background-color: rgba(27, 155, 77, 0.15);
 }
 
-.erp-calendar-event-status--private {
+.erp-calendar-event-status--private,
+.erp-calendar-event-status--draft {
   color: var(--color-red);
   background-color: rgba(232, 71, 77, 0.16);
 }
