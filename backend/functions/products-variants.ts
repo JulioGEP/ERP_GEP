@@ -871,7 +871,7 @@ async function updateVariantInWooCommerce(
   productWooId: bigint,
   variantWooId: bigint,
   updates: VariantWooUpdateInput,
-): Promise<void> {
+): Promise<{ appliedStatus?: string | null }> {
   ensureWooConfigured();
 
   const token = Buffer.from(`${WOO_KEY}:${WOO_SECRET}`).toString('base64');
@@ -956,34 +956,42 @@ async function updateVariantInWooCommerce(
     }
   }
 
-  if (!Object.keys(body).length) return;
+  if (!Object.keys(body).length) return {};
 
-  let response: FetchResponse;
-  try {
-    response = await fetch(url, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Basic ${token}`,
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-  } catch (error) {
-    console.error('[products-variants] network error updating WooCommerce variation', {
-      productId,
-      variationId,
-      updates,
-      error,
-    });
-    throw new Error('No se pudo conectar con WooCommerce');
-  }
-
-  const text = await response.text();
-  let data: any = {};
-  if (text) {
+  const performWooUpdate = async (payload: Record<string, any>): Promise<FetchResponse> => {
     try {
-      data = JSON.parse(text);
+      return await fetch(url, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Basic ${token}`,
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      console.error('[products-variants] network error updating WooCommerce variation', {
+        productId,
+        variationId,
+        updates: payload,
+        error,
+      });
+      throw new Error('No se pudo conectar con WooCommerce');
+    }
+  };
+
+  const parseWooUpdateError = async (response: FetchResponse): Promise<string | null> => {
+    const text = await response.text();
+    if (!text) {
+      return `Error al actualizar la variante en WooCommerce (status ${response.status})`;
+    }
+
+    try {
+      const data = JSON.parse(text);
+      if (data && typeof data === 'object' && typeof data.message === 'string') {
+        return data.message;
+      }
+      return `Error al actualizar la variante en WooCommerce (status ${response.status})`;
     } catch (error) {
       console.error('[products-variants] invalid JSON updating WooCommerce variation', {
         productId,
@@ -992,17 +1000,34 @@ async function updateVariantInWooCommerce(
         error,
         text,
       });
-      throw new Error('Respuesta inválida de WooCommerce');
+      return 'Respuesta inválida de WooCommerce';
     }
-  }
+  };
+
+  let response = await performWooUpdate(body);
 
   if (!response.ok) {
-    const message =
-      data && typeof data === 'object' && typeof data.message === 'string'
-        ? data.message
-        : `Error al actualizar la variante en WooCommerce (status ${response.status})`;
-    throw new Error(message);
+    const shouldFallbackToDraft =
+      response.status === 403 &&
+      body.status === 'private' &&
+      Object.keys(body).length === 1;
+
+    if (shouldFallbackToDraft) {
+      console.warn('[products-variants] WooCommerce rejected private status; retrying with draft', {
+        productId,
+        variationId,
+      });
+      response = await performWooUpdate({ status: 'draft' });
+      if (response.ok) {
+        return { appliedStatus: 'draft' };
+      }
+    }
+
+    const message = await parseWooUpdateError(response);
+    throw new Error(message ?? 'Error al actualizar la variante en WooCommerce');
   }
+
+  return {};
 }
 
 async function deleteVariantFromWooCommerce(
@@ -1872,7 +1897,14 @@ export const handler = createHttpHandler<any>(async (request) => {
 
     if (Object.keys(wooUpdates).length) {
       try {
-        await updateVariantInWooCommerce(existing.id_padre, existing.id_woo, wooUpdates);
+        const wooResult = await updateVariantInWooCommerce(existing.id_padre, existing.id_woo, wooUpdates);
+        if (
+          Object.prototype.hasOwnProperty.call(wooUpdates, 'status') &&
+          typeof wooResult.appliedStatus === 'string' &&
+          wooResult.appliedStatus.length
+        ) {
+          updates.status = wooResult.appliedStatus;
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo actualizar la variante en WooCommerce';
         return errorResponse('WOO_UPDATE_ERROR', message, 502);
