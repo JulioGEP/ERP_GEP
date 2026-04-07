@@ -170,7 +170,7 @@ const STOCK_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
 
 const PUBLICATION_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'publish', label: 'Publicado' },
-  { value: 'draft', label: 'Cancelado' },
+  { value: 'private', label: 'Cancelado' },
 ];
 
 const TRAINER_INVITE_STATUS_BADGES: Record<TrainerInviteStatus, { label: string; variant: string }> = {
@@ -187,7 +187,7 @@ function getStatusBadgeVariant(status: string | null): string {
   if (normalized === 'publish') {
     return 'success';
   }
-  if (normalized === 'private' || normalized === 'draft') {
+  if (normalized === 'private') {
     return 'danger';
   }
   return 'secondary';
@@ -268,7 +268,7 @@ function variantToFormValues(variant: VariantInfo): VariantFormValues {
     price: variant.price ?? '',
     stock: variant.stock != null ? String(variant.stock) : '',
     stock_status: variant.stock_status ?? 'instock',
-    status: (variant.status ?? 'publish') === 'private' ? 'draft' : (variant.status ?? 'publish'),
+    status: variant.status ?? 'publish',
     finalizar: variant.finalizar ?? 'Activa',
     sede: variant.sede ?? '',
     date: formatDateForInputValue(variant.date),

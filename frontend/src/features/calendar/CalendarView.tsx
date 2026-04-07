@@ -596,7 +596,7 @@ const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVarian
     if (!status.length) return '';
     const normalized = status.toLowerCase();
     if (normalized === 'publish') return 'publish publicado';
-    if (normalized === 'private' || normalized === 'draft') return `${normalized} cancelada`;
+    if (normalized === 'private') return 'private cancelada';
     return status;
   },
   trainer: (variant) => safeString(formatVariantTrainerNames(getVariantTrainerResources(variant))),
@@ -691,7 +691,7 @@ function getVariantStatusClass(status?: string | null, finalizar?: string | null
   }
 
   const normalizedStatus = status?.trim().toLowerCase();
-  if (normalizedStatus === 'private' || normalizedStatus === 'draft') {
+  if (normalizedStatus === 'private') {
     return 'is-cancelled';
   }
 
@@ -1803,7 +1803,7 @@ export function CalendarView({
             if (status === 'publish') {
               return 'Publicado';
             }
-            if (status === 'private' || status === 'draft') {
+            if (status === 'private') {
               return 'Cancelada';
             }
             return variantEvent.variant.status ?? 'Variante';
