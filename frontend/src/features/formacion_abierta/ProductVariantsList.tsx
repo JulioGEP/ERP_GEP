@@ -170,7 +170,7 @@ const STOCK_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
 
 const PUBLICATION_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'publish', label: 'Publicado' },
-  { value: 'draft', label: 'Cancelado' },
+  { value: 'private', label: 'Cancelado' },
 ];
 
 const TRAINER_INVITE_STATUS_BADGES: Record<TrainerInviteStatus, { label: string; variant: string }> = {
