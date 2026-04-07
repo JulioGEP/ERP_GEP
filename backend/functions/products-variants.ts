@@ -988,8 +988,11 @@ async function updateVariantInWooCommerce(
 
     try {
       const data = JSON.parse(text);
-      if (data && typeof data === 'object' && typeof data.message === 'string') {
-        return data.message;
+      if (data && typeof data === 'object') {
+        const parsedCode = typeof data.code === 'string' ? data.code.trim() : '';
+        const parsedMessage = typeof data.message === 'string' ? data.message.trim() : '';
+        if (parsedCode && parsedMessage) return `[${parsedCode}] ${parsedMessage}`;
+        if (parsedMessage) return parsedMessage;
       }
       return `Error al actualizar la variante en WooCommerce (status ${response.status})`;
     } catch (error) {
@@ -1000,24 +1003,24 @@ async function updateVariantInWooCommerce(
         error,
         text,
       });
-      return 'Respuesta inválida de WooCommerce';
+      const collapsedText = text.replace(/\s+/g, ' ').trim();
+      return collapsedText.length
+        ? `WooCommerce devolvió un error no-JSON: ${collapsedText.slice(0, 500)}`
+        : 'Respuesta inválida de WooCommerce';
     }
   };
 
   let response = await performWooUpdate(body);
 
   if (!response.ok) {
-    const shouldFallbackToDraft =
-      response.status === 403 &&
-      body.status === 'private' &&
-      Object.keys(body).length === 1;
+    const shouldFallbackToDraft = response.status === 403 && body.status === 'private';
 
     if (shouldFallbackToDraft) {
       console.warn('[products-variants] WooCommerce rejected private status; retrying with draft', {
         productId,
         variationId,
       });
-      response = await performWooUpdate({ status: 'draft' });
+      response = await performWooUpdate({ ...body, status: 'draft' });
       if (response.ok) {
         return { appliedStatus: 'draft' };
       }
