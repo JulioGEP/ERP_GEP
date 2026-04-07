@@ -1697,7 +1697,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         updates.status = 'publish';
       } else {
         const text = String(payload.status).trim().toLowerCase();
-        if (text !== 'publish' && text !== 'private')
+        if (text !== 'publish' && text !== 'private' && text !== 'draft')
           return errorResponse('VALIDATION_ERROR', 'Estado de publicación inválido', 400);
         updates.status = text;
       }
