@@ -34,10 +34,12 @@ const DEFAULT_CC = 'sales@gepgroup.es';
 
 const buildDefaultEmailBody = (publicReportUrl: string) =>
   `Hola
+
 Adjuntamos enlace del informe ${publicReportUrl}
 
-Estamos en contacto
+Jaime Martret - Director Técnico
 
+Estamos en contacto
 Gracias`;
 
 export function ReportListSection({
