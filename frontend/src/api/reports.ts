@@ -8,6 +8,7 @@ export type ReportListEntry = {
   fecha: string | null;
   formador: string | null;
   enlace: string | null;
+  contact_email: string | null;
   archivo: string | null;
   registrado_en: string | null;
 };

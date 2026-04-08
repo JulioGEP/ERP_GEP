@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReportListEntry } from '../../api/reports';
 import { fetchReportList } from '../../api/reports';
+import { useAuth } from '../../context/AuthContext';
 import { ReportListSection } from '../../features/informes/ReportListSection';
 
 export default function InformesListadoPage() {
+  const { user } = useAuth();
   const [reports, setReports] = useState<ReportListEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +32,7 @@ export default function InformesListadoPage() {
   }, []);
 
   const rows = useMemo(() => reports, [reports]);
+  const isAdmin = user?.role?.trim().toLowerCase() === 'admin';
 
   return (
     <ReportListSection
@@ -38,6 +41,7 @@ export default function InformesListadoPage() {
       rows={rows}
       loading={loading}
       error={error}
+      canSendReport={isAdmin}
     />
   );
 }

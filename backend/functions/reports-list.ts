@@ -64,6 +64,11 @@ export const handler = createHttpHandler(async (request) => {
         select: {
           deal_id: true,
           organizations: { select: { name: true } },
+          persons: {
+            select: {
+              email: true,
+            },
+          },
         },
       },
     },
@@ -96,6 +101,7 @@ export const handler = createHttpHandler(async (request) => {
       fecha: session?.fecha_inicio_utc ? toMadridISOString(session.fecha_inicio_utc) : null,
       formador: trainerNames.join(', ') || null,
       enlace: doc.drive_web_view_link ?? null,
+      contact_email: deal?.persons?.email ?? null,
       archivo: doc.drive_file_name ?? null,
       registrado_en: doc.added_at ? toMadridISOString(doc.added_at) : null,
     };
