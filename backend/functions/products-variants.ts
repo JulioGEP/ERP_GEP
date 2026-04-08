@@ -772,7 +772,6 @@ function parseVariantIdFromPath(path: string): string | null {
 }
 
 type FetchResponse = Awaited<ReturnType<typeof fetch>>;
-type WooAuthMode = 'header' | 'query';
 
 const LOCATION_KEYWORDS = ['localizacion', 'ubicacion', 'sede'];
 const DATE_KEYWORDS = ['fecha'];
@@ -817,17 +816,28 @@ type VariantWooUpdateInput = Pick<
 async function fetchWooVariation(
   productWooId: bigint,
   variantWooId: bigint,
+  authToken: string,
 ): Promise<{ attributes: WooVariationAttribute[] }> {
   const productId = productWooId.toString();
   const variationId = variantWooId.toString();
-  const resource = `products/${productId}/variations/${variationId}`;
-  const response = await requestWooWithAuthFallback({
-    method: 'GET',
-    resource,
-    productId,
-    variationId,
-    operation: 'fetching',
-  });
+  const url = `${WOO_BASE}/wp-json/wc/v3/products/${productId}/variations/${variationId}`;
+
+  let response: FetchResponse;
+  try {
+    response = await fetch(url, {
+      headers: {
+        Authorization: `Basic ${authToken}`,
+        Accept: 'application/json',
+      },
+    });
+  } catch (error) {
+    console.error('[products-variants] network error fetching WooCommerce variation', {
+      productId,
+      variationId,
+      error,
+    });
+    throw new Error('No se pudo conectar con WooCommerce');
+  }
 
   const text = await response.text();
   let data: any = {};
@@ -857,88 +867,17 @@ async function fetchWooVariation(
   return { attributes };
 }
 
-function buildWooVariationUrl(resource: string, authMode: WooAuthMode): string {
-  const url = new URL(`${WOO_BASE}/wp-json/wc/v3/${resource.replace(/^\/+/, '')}`);
-  if (authMode === 'query') {
-    url.searchParams.set('consumer_key', WOO_KEY);
-    url.searchParams.set('consumer_secret', WOO_SECRET);
-  }
-  return url.toString();
-}
-
-function buildWooHeaders(authMode: WooAuthMode): Record<string, string> {
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-  };
-  if (authMode === 'header') {
-    const token = Buffer.from(`${WOO_KEY}:${WOO_SECRET}`).toString('base64');
-    headers.Authorization = `Basic ${token}`;
-  }
-  return headers;
-}
-
-async function requestWooWithAuthFallback(params: {
-  method: 'GET' | 'PUT' | 'DELETE';
-  resource: string;
-  productId: string;
-  variationId: string;
-  operation: 'fetching' | 'updating' | 'deleting';
-  body?: Record<string, any>;
-}): Promise<FetchResponse> {
-  const authModes: WooAuthMode[] = ['header', 'query'];
-
-  for (const authMode of authModes) {
-    const url = buildWooVariationUrl(params.resource, authMode);
-    const headers = buildWooHeaders(authMode);
-    if (params.method === 'PUT') headers['Content-Type'] = 'application/json';
-
-    let response: FetchResponse;
-    try {
-      response = await fetch(url, {
-        method: params.method,
-        headers,
-        body: params.body ? JSON.stringify(params.body) : undefined,
-      });
-    } catch (error) {
-      console.error(`[products-variants] network error ${params.operation} WooCommerce variation`, {
-        productId: params.productId,
-        variationId: params.variationId,
-        authMode,
-        error,
-      });
-      throw new Error('No se pudo conectar con WooCommerce');
-    }
-
-    if (response.status !== 401 && response.status !== 403) {
-      return response;
-    }
-
-    if (authMode === 'header') {
-      console.warn('[products-variants] retrying WooCommerce request with query auth', {
-        productId: params.productId,
-        variationId: params.variationId,
-        operation: params.operation,
-        status: response.status,
-      });
-      continue;
-    }
-
-    return response;
-  }
-
-  throw new Error('No se pudo conectar con WooCommerce');
-}
-
 async function updateVariantInWooCommerce(
   productWooId: bigint,
   variantWooId: bigint,
   updates: VariantWooUpdateInput,
-): Promise<{ appliedStatus?: string | null }> {
+): Promise<void> {
   ensureWooConfigured();
 
+  const token = Buffer.from(`${WOO_KEY}:${WOO_SECRET}`).toString('base64');
   const productId = productWooId.toString();
   const variationId = variantWooId.toString();
-  const resource = `products/${productId}/variations/${variationId}`;
+  const url = `${WOO_BASE}/wp-json/wc/v3/products/${productId}/variations/${variationId}`;
 
   const body: Record<string, any> = {};
 
@@ -969,7 +908,7 @@ async function updateVariantInWooCommerce(
     Object.prototype.hasOwnProperty.call(updates, 'sede') ||
     Object.prototype.hasOwnProperty.call(updates, 'date')
   ) {
-    const { attributes } = await fetchWooVariation(productWooId, variantWooId);
+    const { attributes } = await fetchWooVariation(productWooId, variantWooId, token);
     const updatedAttributes = attributes.map((a) => ({ ...a }));
 
     let attributesChanged = false;
@@ -1017,33 +956,34 @@ async function updateVariantInWooCommerce(
     }
   }
 
-  if (!Object.keys(body).length) return {};
+  if (!Object.keys(body).length) return;
 
-  const performWooUpdate = async (payload: Record<string, any>): Promise<FetchResponse> =>
-    requestWooWithAuthFallback({
+  let response: FetchResponse;
+  try {
+    response = await fetch(url, {
       method: 'PUT',
-      resource,
+      headers: {
+        Authorization: `Basic ${token}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    console.error('[products-variants] network error updating WooCommerce variation', {
       productId,
       variationId,
-      operation: 'updating',
-      body: payload,
+      updates,
+      error,
     });
+    throw new Error('No se pudo conectar con WooCommerce');
+  }
 
-  const parseWooUpdateError = async (response: FetchResponse): Promise<string | null> => {
-    const text = await response.text();
-    if (!text) {
-      return `Error al actualizar la variante en WooCommerce (status ${response.status})`;
-    }
-
+  const text = await response.text();
+  let data: any = {};
+  if (text) {
     try {
-      const data = JSON.parse(text);
-      if (data && typeof data === 'object') {
-        const parsedCode = typeof data.code === 'string' ? data.code.trim() : '';
-        const parsedMessage = typeof data.message === 'string' ? data.message.trim() : '';
-        if (parsedCode && parsedMessage) return `[${parsedCode}] ${parsedMessage}`;
-        if (parsedMessage) return parsedMessage;
-      }
-      return `Error al actualizar la variante en WooCommerce (status ${response.status})`;
+      data = JSON.parse(text);
     } catch (error) {
       console.error('[products-variants] invalid JSON updating WooCommerce variation', {
         productId,
@@ -1052,34 +992,17 @@ async function updateVariantInWooCommerce(
         error,
         text,
       });
-      const collapsedText = text.replace(/\s+/g, ' ').trim();
-      return collapsedText.length
-        ? `WooCommerce devolvió un error no-JSON: ${collapsedText.slice(0, 500)}`
-        : 'Respuesta inválida de WooCommerce';
+      throw new Error('Respuesta inválida de WooCommerce');
     }
-  };
-
-  let response = await performWooUpdate(body);
-
-  if (!response.ok) {
-    const shouldFallbackToDraft = response.status === 403 && body.status === 'private';
-
-    if (shouldFallbackToDraft) {
-      console.warn('[products-variants] WooCommerce rejected private status; retrying with draft', {
-        productId,
-        variationId,
-      });
-      response = await performWooUpdate({ ...body, status: 'draft' });
-      if (response.ok) {
-        return { appliedStatus: 'draft' };
-      }
-    }
-
-    const message = await parseWooUpdateError(response);
-    throw new Error(message ?? 'Error al actualizar la variante en WooCommerce');
   }
 
-  return {};
+  if (!response.ok) {
+    const message =
+      data && typeof data === 'object' && typeof data.message === 'string'
+        ? data.message
+        : `Error al actualizar la variante en WooCommerce (status ${response.status})`;
+    throw new Error(message);
+  }
 }
 
 async function deleteVariantFromWooCommerce(
@@ -1088,15 +1011,28 @@ async function deleteVariantFromWooCommerce(
 ): Promise<VariantDeletionResult> {
   ensureWooConfigured();
 
+  const token = Buffer.from(`${WOO_KEY}:${WOO_SECRET}`).toString('base64');
   const productId = productWooId.toString();
   const variationId = variantWooId.toString();
-  const response = await requestWooWithAuthFallback({
-    method: 'DELETE',
-    resource: `products/${productId}/variations/${variationId}?force=true`,
-    productId,
-    variationId,
-    operation: 'deleting',
-  });
+  const url = `${WOO_BASE}/wp-json/wc/v3/products/${productId}/variations/${variationId}?force=true`;
+
+  let response: FetchResponse;
+  try {
+    response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Basic ${token}`,
+        Accept: 'application/json',
+      },
+    });
+  } catch (error) {
+    console.error('[products-variants] network error deleting WooCommerce variation', {
+      productId,
+      variationId,
+      error,
+    });
+    throw new Error('No se pudo conectar con WooCommerce');
+  }
 
   if (response.status === 404) {
     return { success: true, message: 'La variante no existe en WooCommerce, se eliminará localmente.' };
@@ -1936,14 +1872,7 @@ export const handler = createHttpHandler<any>(async (request) => {
 
     if (Object.keys(wooUpdates).length) {
       try {
-        const wooResult = await updateVariantInWooCommerce(existing.id_padre, existing.id_woo, wooUpdates);
-        if (
-          Object.prototype.hasOwnProperty.call(wooUpdates, 'status') &&
-          typeof wooResult.appliedStatus === 'string' &&
-          wooResult.appliedStatus.length
-        ) {
-          updates.status = wooResult.appliedStatus;
-        }
+        await updateVariantInWooCommerce(existing.id_padre, existing.id_woo, wooUpdates);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo actualizar la variante en WooCommerce';
         return errorResponse('WOO_UPDATE_ERROR', message, 502);
