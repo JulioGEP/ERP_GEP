@@ -2431,6 +2431,9 @@ export function VariantModal({
       setFormValues(nextValues);
       setInitialValues(nextValues);
       setSaveSuccess(closeAfter ? null : 'Variante actualizada correctamente.');
+      if (payload.status !== undefined) {
+        emitToast({ variant: 'success', message: 'Estado de la variante actualizado correctamente.' });
+      }
       const updatedStatusMap = syncTrainerInviteStatusMap(
         enhancedVariant.trainer_invite_statuses ?? {},
         nextValues.trainer_ids,
