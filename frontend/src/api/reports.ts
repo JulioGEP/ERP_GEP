@@ -1,4 +1,4 @@
-import { getJson } from './client';
+import { getJson, postJson } from './client';
 
 export type ReportListEntry = {
   id: string;
@@ -19,4 +19,17 @@ export type ReportListResponse = {
 
 export async function fetchReportList() {
   return getJson<ReportListResponse>('/reports-list');
+}
+
+export type SendReportEmailPayload = {
+  reportId: string;
+  senderName: string;
+  senderEmail: string;
+  to: string;
+  cc?: string;
+  body: string;
+};
+
+export async function sendReportEmail(payload: SendReportEmailPayload) {
+  return postJson<{ message: string }>('/report-send', payload);
 }
