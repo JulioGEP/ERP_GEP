@@ -37,7 +37,7 @@ const escapeHtml = (value: string): string =>
   value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 const buildHtmlBody = (plainText: string): string =>
-  `<div style="white-space: pre-wrap; font-family: Arial, sans-serif;">${escapeHtml(plainText)}</div>${REPORT_SIGNATURE_HTML}`;
+  `<div style="white-space: pre-wrap; font-family: Arial, sans-serif;">${escapeHtml(plainText)}</div>`;
 
 export const handler = createHttpHandler<ReportSendBody>(async (request) => {
   if (request.method !== 'POST') {
