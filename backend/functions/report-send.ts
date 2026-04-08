@@ -111,6 +111,11 @@ export const handler = createHttpHandler<ReportSendBody>(async (request) => {
     text: body,
   });
 
+  await prisma.sesion_files.update({
+    where: { id: report.id },
+    data: { report_email_sent_at: new Date() },
+  });
+
   return successResponse({ message: 'Informe enviado correctamente' });
 });
 
