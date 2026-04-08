@@ -47,7 +47,6 @@ const REPORT_TYPE_OPTIONS: Array<{ value: ReportType; label: string }> = [
   { value: 'formacion', label: 'Formación' },
   { value: 'preventivo', label: 'Preventivo' },
   { value: 'simulacro', label: 'Simulacro' },
-  { value: 'preventivo-ebro', label: 'Recurso Preventivo EBRO' },
 ];
 
 const createEmptyDraft = (type: ReportType): ReportDraft => ({
