@@ -125,6 +125,29 @@ const buildImageRows = (imagenes = []) =>
     margin: [0, 6, 0, 6],
   }))
 
+const removeImageNodesFromPdfmakeContent = (node) => {
+  if (Array.isArray(node)) {
+    return node
+      .map((item) => removeImageNodesFromPdfmakeContent(item))
+      .flat()
+      .filter((item) => item !== null)
+  }
+
+  if (!node || typeof node !== 'object') return node
+  if (Object.prototype.hasOwnProperty.call(node, 'image')) return null
+
+  const next = { ...node }
+  for (const key of Object.keys(next)) {
+    const value = removeImageNodesFromPdfmakeContent(next[key])
+    if (value === null) {
+      delete next[key]
+    } else {
+      next[key] = value
+    }
+  }
+  return next
+}
+
 const stripHtml = (html) =>
   (html || '')
     .replace(/<br\s*\/?>/gi, '\n')
@@ -744,6 +767,7 @@ export async function generateReportPdfmake(draft) {
         i: { italics: true },
       },
     })
+    aiContent = removeImageNodesFromPdfmakeContent(aiContent)
   } catch {
     const plain = stripHtml(aiHtml)
     aiContent = plain ? { text: plain } : null
