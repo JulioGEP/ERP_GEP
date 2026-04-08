@@ -598,6 +598,7 @@ model sesion_files {
   sesion_id                  String   @db.Uuid
   file_type                  String   @db.VarChar(16)
   compartir_formador         Boolean  @default(false)
+  report_email_sent_at       DateTime? @db.Timestamptz(6)
   trainer_expense            Boolean  @default(false)
   trainer_expense_trainer_id String?  @db.VarChar(255)
   added_at                   DateTime @default(now()) @db.Timestamptz(6)

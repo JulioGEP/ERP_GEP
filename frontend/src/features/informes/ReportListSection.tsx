@@ -56,7 +56,7 @@ export function ReportListSection({
   const [sendError, setSendError] = useState<string | null>(null);
   const [sendSuccess, setSendSuccess] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
-  const [sentReportIds, setSentReportIds] = useState<Record<string, true>>({});
+  const [localSentReportIds, setLocalSentReportIds] = useState<Record<string, true>>({});
 
   const isMailModalOpen = Boolean(selectedReport && emailDraft);
 
@@ -101,7 +101,7 @@ export function ReportListSection({
         body: emailDraft.body,
       });
       setSendSuccess('Informe enviado correctamente.');
-      setSentReportIds((prev) => ({ ...prev, [selectedReport.id]: true }));
+      setLocalSentReportIds((prev) => ({ ...prev, [selectedReport.id]: true }));
     } catch (error) {
       if (isApiError(error)) {
         setSendError(error.message || 'No se pudo enviar el informe.');
@@ -154,7 +154,9 @@ export function ReportListSection({
                     </td>
                   </tr>
                 ) : (
-                  rows.map((report) => (
+                  rows.map((report) => {
+                    const isSent = Boolean(report.email_enviado_en || localSentReportIds[report.id]);
+                    return (
                     <tr key={report.id}>
                       <td>{report.presupuesto || '—'}</td>
                       <td>{report.empresa || '—'}</td>
@@ -177,11 +179,11 @@ export function ReportListSection({
                                   Enviar
                                 </button>
                                 <span
-                                  className={`badge ${sentReportIds[report.id] ? 'text-bg-success' : 'text-bg-secondary'}`}
-                                  title={sentReportIds[report.id] ? 'Email enviado' : 'Email no enviado'}
-                                  aria-label={sentReportIds[report.id] ? 'Email enviado' : 'Email no enviado'}
+                                  className={`badge ${isSent ? 'text-bg-success' : 'text-bg-secondary'}`}
+                                  title={isSent ? 'Email enviado' : 'Email no enviado'}
+                                  aria-label={isSent ? 'Email enviado' : 'Email no enviado'}
                                 >
-                                  {sentReportIds[report.id] ? '✓ Enviado' : 'Pendiente'}
+                                  {isSent ? '✓ Enviado' : 'Pendiente'}
                                 </span>
                               </>
                             ) : null}
@@ -191,7 +193,8 @@ export function ReportListSection({
                         )}
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

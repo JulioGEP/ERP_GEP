@@ -11,6 +11,7 @@ export type ReportListEntry = {
   contact_email: string | null;
   archivo: string | null;
   registrado_en: string | null;
+  email_enviado_en: string | null;
 };
 
 export type ReportListResponse = {

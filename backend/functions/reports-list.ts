@@ -40,6 +40,7 @@ export const handler = createHttpHandler(async (request) => {
       sesion_id: true,
       drive_file_name: true,
       drive_web_view_link: true,
+      report_email_sent_at: true,
       added_at: true,
       sesiones: {
         select: {
@@ -104,6 +105,7 @@ export const handler = createHttpHandler(async (request) => {
       contact_email: deal?.persons?.email ?? null,
       archivo: doc.drive_file_name ?? null,
       registrado_en: doc.added_at ? toMadridISOString(doc.added_at) : null,
+      email_enviado_en: doc.report_email_sent_at ? toMadridISOString(doc.report_email_sent_at) : null,
     };
   });
 
