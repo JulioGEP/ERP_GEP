@@ -3,9 +3,12 @@ import { requireAuth } from './_shared/auth';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, successResponse } from './_shared/response';
 import { sendEmail } from './_shared/mailer';
+import { getSlackToken } from './_shared/slackConfig';
 
 const LOGISTICS_EMAIL = 'logistica@gepgroup.es';
 const SALES_EMAIL = 'sales@gepgroup.es';
+const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
+const SALES_MATERIALS_SLACK_CHANNEL_ID = 'C09DFT04GNL';
 
 type ProductLine = {
   productName: string;
@@ -54,6 +57,30 @@ function normalizeProducts(input: unknown): ProductLine[] {
   return Array.from(unique.values());
 }
 
+async function sendSlackNotification(text: string): Promise<void> {
+  const token = getSlackToken();
+  if (!token) {
+    throw new Error('No existe la variable SLACK_TOKEN en Netlify.');
+  }
+
+  const response = await fetch(SLACK_API_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify({
+      channel: SALES_MATERIALS_SLACK_CHANNEL_ID,
+      text,
+    }),
+  });
+
+  const payload = (await response.json()) as { ok?: boolean; error?: string };
+  if (!response.ok || !payload?.ok) {
+    throw new Error(payload?.error || 'No se pudo enviar el mensaje a Slack.');
+  }
+}
+
 export const handler = createHttpHandler(async (request) => {
   if (request.method !== 'POST') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
@@ -96,6 +123,8 @@ export const handler = createHttpHandler(async (request) => {
     subject: `Aviso logística presupuesto ${budgetId}`,
     text: body,
   });
+
+  await sendSlackNotification(body);
 
   return successResponse({ sent: true });
 });
