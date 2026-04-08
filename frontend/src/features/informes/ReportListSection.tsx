@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { isApiError } from '../../api/client';
+import { sendReportEmail } from '../../api/reports';
 import type { ReportListEntry } from '../../api/reports';
 
 const formatDate = (value: string | null) => {
@@ -49,10 +51,15 @@ export function ReportListSection({
 }: ReportListSectionProps) {
   const [selectedReport, setSelectedReport] = useState<ReportListEntry | null>(null);
   const [emailDraft, setEmailDraft] = useState<EmailDraft | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sendSuccess, setSendSuccess] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
 
   const isMailModalOpen = Boolean(selectedReport && emailDraft);
 
   const openSendReportModal = (report: ReportListEntry) => {
+    setSendError(null);
+    setSendSuccess(null);
     setSelectedReport(report);
     setEmailDraft({
       senderName: DEFAULT_SENDER_NAME,
@@ -66,12 +73,43 @@ export function ReportListSection({
   const closeSendReportModal = () => {
     setSelectedReport(null);
     setEmailDraft(null);
+    setSendError(null);
+    setSendSuccess(null);
+    setIsSending(false);
   };
 
   const modalTitle = useMemo(() => {
     if (!selectedReport?.presupuesto) return 'Simulación de envío de informe';
     return `Simulación de envío · Presupuesto ${selectedReport.presupuesto}`;
   }, [selectedReport?.presupuesto]);
+
+  const handleSendReport = async () => {
+    if (!selectedReport || !emailDraft || isSending) return;
+    setSendError(null);
+    setSendSuccess(null);
+    setIsSending(true);
+    try {
+      await sendReportEmail({
+        reportId: selectedReport.id,
+        senderName: emailDraft.senderName,
+        senderEmail: emailDraft.senderEmail,
+        to: emailDraft.to,
+        cc: emailDraft.cc,
+        body: emailDraft.body,
+      });
+      setSendSuccess('Informe enviado correctamente.');
+    } catch (error) {
+      if (isApiError(error)) {
+        setSendError(error.message || 'No se pudo enviar el informe.');
+      } else if (error instanceof Error && error.message) {
+        setSendError(error.message);
+      } else {
+        setSendError('No se pudo enviar el informe.');
+      }
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   return (
     <>
@@ -159,6 +197,16 @@ export function ReportListSection({
                   <button type="button" className="btn-close" aria-label="Close" onClick={closeSendReportModal} />
                 </div>
                 <div className="modal-body">
+                  {sendError ? (
+                    <div className="alert alert-danger py-2" role="alert">
+                      {sendError}
+                    </div>
+                  ) : null}
+                  {sendSuccess ? (
+                    <div className="alert alert-success py-2" role="alert">
+                      {sendSuccess}
+                    </div>
+                  ) : null}
                   <div className="mb-3">
                     <label className="form-label">Sender (nombre)</label>
                     <input
@@ -216,6 +264,9 @@ export function ReportListSection({
                   </div>
                 </div>
                 <div className="modal-footer">
+                  <button type="button" className="btn btn-primary" onClick={handleSendReport} disabled={isSending}>
+                    {isSending ? 'Enviando...' : 'Enviar'}
+                  </button>
                   <button type="button" className="btn btn-secondary" onClick={closeSendReportModal}>
                     Cerrar
                   </button>
