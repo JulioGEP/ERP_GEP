@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import type { ReportListEntry } from '../../api/reports';
 
 const formatDate = (value: string | null) => {
@@ -14,7 +15,28 @@ type ReportListSectionProps = {
   loading: boolean;
   error: string | null;
   emptyMessage?: string;
+  canSendReport?: boolean;
 };
+
+type EmailDraft = {
+  senderName: string;
+  senderEmail: string;
+  to: string;
+  cc: string;
+  body: string;
+};
+
+const DEFAULT_SENDER_NAME = 'Informes GEO Group';
+const DEFAULT_SENDER_EMAIL = 'erp@gepgroup.es';
+const DEFAULT_CC = 'sales@gepgroup.es';
+
+const buildDefaultEmailBody = (publicReportUrl: string) =>
+  `Hola
+Adjuntamos enlace del informe ${publicReportUrl}
+
+Estamos en contacto
+
+Gracias`;
 
 export function ReportListSection({
   title,
@@ -23,69 +45,187 @@ export function ReportListSection({
   loading,
   error,
   emptyMessage = 'No hay informes registrados todavía.',
+  canSendReport = false,
 }: ReportListSectionProps) {
+  const [selectedReport, setSelectedReport] = useState<ReportListEntry | null>(null);
+  const [emailDraft, setEmailDraft] = useState<EmailDraft | null>(null);
+
+  const isMailModalOpen = Boolean(selectedReport && emailDraft);
+
+  const openSendReportModal = (report: ReportListEntry) => {
+    setSelectedReport(report);
+    setEmailDraft({
+      senderName: DEFAULT_SENDER_NAME,
+      senderEmail: DEFAULT_SENDER_EMAIL,
+      to: report.contact_email ?? '',
+      cc: DEFAULT_CC,
+      body: buildDefaultEmailBody(report.enlace ?? ''),
+    });
+  };
+
+  const closeSendReportModal = () => {
+    setSelectedReport(null);
+    setEmailDraft(null);
+  };
+
+  const modalTitle = useMemo(() => {
+    if (!selectedReport?.presupuesto) return 'Simulación de envío de informe';
+    return `Simulación de envío · Presupuesto ${selectedReport.presupuesto}`;
+  }, [selectedReport?.presupuesto]);
+
   return (
-    <section className="py-3">
-      <div className="d-flex align-items-center justify-content-between mb-3">
-        <div>
-          {description ? <p className="text-muted mb-1">{description}</p> : null}
-          <h2 className="h4 mb-0">{title}</h2>
+    <>
+      <section className="py-3">
+        <div className="d-flex align-items-center justify-content-between mb-3">
+          <div>
+            {description ? <p className="text-muted mb-1">{description}</p> : null}
+            <h2 className="h4 mb-0">{title}</h2>
+          </div>
         </div>
-      </div>
 
-      {error ? (
-        <div className="alert alert-danger" role="alert">
-          {error}
-        </div>
-      ) : null}
+        {error ? (
+          <div className="alert alert-danger" role="alert">
+            {error}
+          </div>
+        ) : null}
 
-      {loading ? (
-        <div className="text-center py-4">Cargando informes...</div>
-      ) : (
-        <div className="table-responsive">
-          <table className="table table-striped align-middle">
-            <thead>
-              <tr>
-                <th>Presupuesto</th>
-                <th>Empresa</th>
-                <th>Sesión</th>
-                <th>Fecha</th>
-                <th>Formador</th>
-                <th>Enlace</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-4">Cargando informes...</div>
+        ) : (
+          <div className="table-responsive">
+            <table className="table table-striped align-middle">
+              <thead>
                 <tr>
-                  <td colSpan={6} className="text-center py-4">
-                    {emptyMessage}
-                  </td>
+                  <th>Presupuesto</th>
+                  <th>Empresa</th>
+                  <th>Sesión</th>
+                  <th>Fecha</th>
+                  <th>Formador</th>
+                  <th>Enlace</th>
                 </tr>
-              ) : (
-                rows.map((report) => (
-                  <tr key={report.id}>
-                    <td>{report.presupuesto || '—'}</td>
-                    <td>{report.empresa || '—'}</td>
-                    <td>{report.sesion || '—'}</td>
-                    <td>{formatDate(report.fecha)}</td>
-                    <td>{report.formador || '—'}</td>
-                    <td>
-                      {report.enlace ? (
-                        <a href={report.enlace} target="_blank" rel="noreferrer">
-                          Ver informe
-                        </a>
-                      ) : (
-                        '—'
-                      )}
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-4">
+                      {emptyMessage}
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
+                ) : (
+                  rows.map((report) => (
+                    <tr key={report.id}>
+                      <td>{report.presupuesto || '—'}</td>
+                      <td>{report.empresa || '—'}</td>
+                      <td>{report.sesion || '—'}</td>
+                      <td>{formatDate(report.fecha)}</td>
+                      <td>{report.formador || '—'}</td>
+                      <td>
+                        {report.enlace ? (
+                          <div className="d-flex flex-wrap gap-2 align-items-center">
+                            <a href={report.enlace} target="_blank" rel="noreferrer">
+                              Ver informe
+                            </a>
+                            {canSendReport ? (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-primary"
+                                onClick={() => openSendReportModal(report)}
+                              >
+                                Enviar informe
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {isMailModalOpen && emailDraft ? (
+        <>
+          <div className="modal-backdrop fade show" />
+          <div className="modal fade show d-block" tabIndex={-1} role="dialog" aria-modal="true">
+            <div className="modal-dialog modal-lg modal-dialog-scrollable">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">{modalTitle}</h5>
+                  <button type="button" className="btn-close" aria-label="Close" onClick={closeSendReportModal} />
+                </div>
+                <div className="modal-body">
+                  <div className="mb-3">
+                    <label className="form-label">Sender (nombre)</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={emailDraft.senderName}
+                      onChange={(event) =>
+                        setEmailDraft((prev) => (prev ? { ...prev, senderName: event.target.value } : prev))
+                      }
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label">Sender (email)</label>
+                    <input
+                      type="email"
+                      className="form-control"
+                      value={emailDraft.senderEmail}
+                      onChange={(event) =>
+                        setEmailDraft((prev) => (prev ? { ...prev, senderEmail: event.target.value } : prev))
+                      }
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label">Para</label>
+                    <input
+                      type="email"
+                      className="form-control"
+                      value={emailDraft.to}
+                      onChange={(event) =>
+                        setEmailDraft((prev) => (prev ? { ...prev, to: event.target.value } : prev))
+                      }
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label">CC</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={emailDraft.cc}
+                      onChange={(event) =>
+                        setEmailDraft((prev) => (prev ? { ...prev, cc: event.target.value } : prev))
+                      }
+                    />
+                  </div>
+                  <div className="mb-0">
+                    <label className="form-label">Cuerpo</label>
+                    <textarea
+                      className="form-control"
+                      rows={8}
+                      value={emailDraft.body}
+                      onChange={(event) =>
+                        setEmailDraft((prev) => (prev ? { ...prev, body: event.target.value } : prev))
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={closeSendReportModal}>
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
+    </>
   );
 }
 
