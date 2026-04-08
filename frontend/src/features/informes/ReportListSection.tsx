@@ -56,6 +56,7 @@ export function ReportListSection({
   const [sendError, setSendError] = useState<string | null>(null);
   const [sendSuccess, setSendSuccess] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [sentReportIds, setSentReportIds] = useState<Record<string, true>>({});
 
   const isMailModalOpen = Boolean(selectedReport && emailDraft);
 
@@ -100,6 +101,7 @@ export function ReportListSection({
         body: emailDraft.body,
       });
       setSendSuccess('Informe enviado correctamente.');
+      setSentReportIds((prev) => ({ ...prev, [selectedReport.id]: true }));
     } catch (error) {
       if (isApiError(error)) {
         setSendError(error.message || 'No se pudo enviar el informe.');
@@ -166,13 +168,22 @@ export function ReportListSection({
                               Ver informe
                             </a>
                             {canSendReport ? (
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline-primary"
-                                onClick={() => openSendReportModal(report)}
-                              >
-                                Enviar informe
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-outline-primary"
+                                  onClick={() => openSendReportModal(report)}
+                                >
+                                  Enviar
+                                </button>
+                                <span
+                                  className={`badge ${sentReportIds[report.id] ? 'text-bg-success' : 'text-bg-secondary'}`}
+                                  title={sentReportIds[report.id] ? 'Email enviado' : 'Email no enviado'}
+                                  aria-label={sentReportIds[report.id] ? 'Email enviado' : 'Email no enviado'}
+                                >
+                                  {sentReportIds[report.id] ? '✓ Enviado' : 'Pendiente'}
+                                </span>
+                              </>
                             ) : null}
                           </div>
                         ) : (
