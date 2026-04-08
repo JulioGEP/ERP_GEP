@@ -192,11 +192,6 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         label: 'Actuaciones preventivos',
         path: '/informes/actuaciones_preventivos',
       },
-      {
-        key: 'Informes/RecursoPreventivoEbro',
-        label: 'Recurso Preventivo EBRO',
-        path: '/informes/recurso_preventivo_ebro',
-      },
     ],
   },
   {
@@ -870,11 +865,6 @@ export default function AuthenticatedApp() {
               key: 'Trainer/Reports/ActuacionesPreventivos',
               label: 'Actuaciones Preventivos',
               path: '/usuarios/trainer/informes/actuaciones_preventivos',
-            },
-            {
-              key: 'Trainer/Reports/RecursoPreventivoEbro',
-              label: 'Recurso Preventivo EBRO',
-              path: '/usuarios/trainer/informes/recurso_preventivo_ebro',
             },
           ],
         },
