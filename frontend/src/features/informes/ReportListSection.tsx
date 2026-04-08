@@ -26,7 +26,7 @@ type EmailDraft = {
   body: string;
 };
 
-const DEFAULT_SENDER_NAME = 'Informes GEO Group';
+const DEFAULT_SENDER_NAME = 'Informes GEP Group';
 const DEFAULT_SENDER_EMAIL = 'erp@gepgroup.es';
 const DEFAULT_CC = 'sales@gepgroup.es';
 
