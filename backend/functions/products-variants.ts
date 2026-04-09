@@ -84,9 +84,10 @@ async function ensureVariantTrainerLinksTable(prisma: PrismaClientOrTx): Promise
         variant_id UUID NOT NULL,
         trainer_id TEXT NOT NULL,
         position INTEGER NOT NULL,
+        day INTEGER NOT NULL DEFAULT 1,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        PRIMARY KEY (variant_id, trainer_id),
+        PRIMARY KEY (variant_id, trainer_id, day),
         CONSTRAINT ${VARIANT_TRAINER_TABLE}_variant_fk FOREIGN KEY (variant_id) REFERENCES variants(id) ON DELETE CASCADE,
         CONSTRAINT ${VARIANT_TRAINER_TABLE}_trainer_fk FOREIGN KEY (trainer_id) REFERENCES trainers(trainer_id) ON DELETE CASCADE
       );`,
@@ -143,6 +144,7 @@ type VariantTrainerLink = {
   name: string | null;
   apellido: string | null;
   position: number;
+  day: number;
 };
 
 type VariantUnitLink = {
@@ -169,9 +171,46 @@ function sanitizeIdArray(value: unknown): string[] | null {
   return result;
 }
 
+function normalizeProductIdentifier(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .toLowerCase();
+  return normalized.length ? normalized : null;
+}
+
+const TWO_DAY_VERTICAL_PRODUCT_KEYS = new Set(['atrabajosverticales', 'trabajosverticales']);
+
+function isTwoDayVerticalProduct(product: {
+  name: string | null;
+  code: string | null;
+  category: string | null;
+}): boolean {
+  const identifiers = [product.name, product.code, product.category]
+    .map((value) => normalizeProductIdentifier(value))
+    .filter((value): value is string => Boolean(value));
+
+  return identifiers.some((identifier) => TWO_DAY_VERTICAL_PRODUCT_KEYS.has(identifier));
+}
+
+function normalizeTrainerAssignmentDay(value: unknown): 1 | 2 {
+  return value === 2 ? 2 : 1;
+}
+
+function shiftDateByDays(date: Date | string | null | undefined, days: number): Date | string | null | undefined {
+  if (!date || days === 0) return date;
+  const parsed = date instanceof Date ? new Date(date.getTime()) : new Date(date);
+  if (Number.isNaN(parsed.getTime())) return date;
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  return parsed;
+}
+
 async function fetchVariantTrainerAssignments(
   prisma: PrismaClientOrTx,
   variantIds: string[],
+  day: 1 | 2 = 1,
 ): Promise<Map<string, VariantTrainerLink[]>> {
   const map = new Map<string, VariantTrainerLink[]>();
   if (!variantIds.length) return map;
@@ -186,13 +225,22 @@ async function fetchVariantTrainerAssignments(
                vtl.trainer_id,
                t.name,
                t.apellido,
-               vtl.position
+               vtl.position,
+               vtl.day
         FROM variant_trainer_links vtl
         LEFT JOIN trainers t ON t.trainer_id = vtl.trainer_id
         WHERE vtl.variant_id IN (${variantIdList})
+          AND COALESCE(vtl.day, 1) = ${day}
         ORDER BY vtl.variant_id, vtl.position ASC
       `,
-    )) as Array<{ variant_id: string; trainer_id: string; name: string | null; apellido: string | null; position: number }>;
+    )) as Array<{
+      variant_id: string;
+      trainer_id: string;
+      name: string | null;
+      apellido: string | null;
+      position: number;
+      day: number | null;
+    }>;
 
     for (const row of rows) {
       const list = map.get(row.variant_id) ?? [];
@@ -201,6 +249,7 @@ async function fetchVariantTrainerAssignments(
         name: row.name ?? null,
         apellido: row.apellido ?? null,
         position: row.position,
+        day: normalizeTrainerAssignmentDay(row.day),
       });
       map.set(row.variant_id, list);
     }
@@ -267,6 +316,7 @@ async function syncVariantTrainerAssignments(
   prisma: PrismaClientOrTx,
   variantId: string,
   trainerIds: string[],
+  day: 1 | 2 = 1,
 ): Promise<void> {
   if (!(await ensureVariantTrainerLinksTable(prisma))) return;
 
@@ -276,7 +326,7 @@ async function syncVariantTrainerAssignments(
     const tableName = VARIANT_TRAINER_TABLE;
     const table = (Prisma as any).raw(tableName);
     await prisma.$executeRaw(
-      sql`DELETE FROM ${table} WHERE variant_id = ${variantId}::uuid`,
+      sql`DELETE FROM ${table} WHERE variant_id = ${variantId}::uuid AND COALESCE(day, 1) = ${day}`,
     );
 
     if (!ids.length) {
@@ -284,13 +334,13 @@ async function syncVariantTrainerAssignments(
     }
 
     const values = join(
-      ids.map((id, index) => sql`(${variantId}::uuid, ${id}, ${index})`),
+      ids.map((id, index) => sql`(${variantId}::uuid, ${id}, ${index}, ${day})`),
     );
 
     await prisma.$executeRaw(
-      sql`INSERT INTO ${table} (variant_id, trainer_id, position)
+      sql`INSERT INTO ${table} (variant_id, trainer_id, position, day)
           VALUES ${values}
-          ON CONFLICT (variant_id, trainer_id)
+          ON CONFLICT (variant_id, trainer_id, day)
           DO UPDATE SET position = EXCLUDED.position, updated_at = NOW()`,
     );
   } catch (error) {
@@ -346,6 +396,7 @@ async function syncVariantUnitAssignments(
 async function findVariantIdsByTrainerAssignments(
   prisma: PrismaClientOrTx,
   trainerIds: string[],
+  day: 1 | 2 = 1,
   excludeVariantId?: string,
 ): Promise<string[]> {
   if (!trainerIds.length) return [];
@@ -360,6 +411,7 @@ async function findVariantIdsByTrainerAssignments(
         SELECT DISTINCT variant_id::text AS variant_id
         FROM variant_trainer_links
         WHERE trainer_id IN (${trainerIdList})
+          AND COALESCE(day, 1) = ${day}
         ${exclusionClause}
       `,
     )) as Array<{ variant_id: string }>;
@@ -487,15 +539,18 @@ async function ensureVariantResourcesAvailable(
     salaId,
     unidadIds,
     range,
+    trainerAssignmentDay,
   }: {
     excludeVariantId?: string;
     trainerIds: string[];
     salaId: string | null;
     unidadIds: string[];
     range: DateRange | null;
+    trainerAssignmentDay?: 1 | 2;
   },
 ): Promise<ReturnType<typeof errorResponse> | null> {
   if (!range) return null;
+  const assignmentDay = normalizeTrainerAssignmentDay(trainerAssignmentDay);
 
   const normalizedTrainerIds = Array.from(
     new Set(
@@ -590,7 +645,7 @@ async function ensureVariantResourcesAvailable(
     trainer_id: true,
     sala_id: true,
     unidad_movil_id: true,
-    products: { select: { hora_inicio: true, hora_fin: true } },
+    products: { select: { name: true, code: true, category: true, hora_inicio: true, hora_fin: true } },
   } as const;
 
   let variantRecords: Array<{
@@ -599,7 +654,13 @@ async function ensureVariantResourcesAvailable(
     trainer_id: string | null;
     sala_id: string | null;
     unidad_movil_id: string | null;
-    products?: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
+    products?: {
+      name: string | null;
+      code: string | null;
+      category: string | null;
+      hora_inicio: Date | string | null;
+      hora_fin: Date | string | null;
+    } | null;
   }> = [];
 
   if (variantConditions.length) {
@@ -624,7 +685,7 @@ async function ensureVariantResourcesAvailable(
   }
 
   const trainerVariantIds = normalizedTrainerIds.length
-    ? await findVariantIdsByTrainerAssignments(prisma, normalizedTrainerIds, excludeVariantId)
+    ? await findVariantIdsByTrainerAssignments(prisma, normalizedTrainerIds, assignmentDay, excludeVariantId)
     : [];
   const unitVariantIds = normalizedUnidadIds.length
     ? await findVariantIdsByUnitAssignments(prisma, normalizedUnidadIds, excludeVariantId)
@@ -666,7 +727,7 @@ async function ensureVariantResourcesAvailable(
 
   if (variantIdsForAssignments.length) {
     const assignmentResults = await Promise.all([
-      fetchVariantTrainerAssignments(prisma, variantIdsForAssignments),
+      fetchVariantTrainerAssignments(prisma, variantIdsForAssignments, assignmentDay),
       fetchVariantUnitAssignments(prisma, variantIdsForAssignments),
     ]);
     trainerAssignments = assignmentResults[0];
@@ -679,8 +740,13 @@ async function ensureVariantResourcesAvailable(
   const hasVariantConflict = variantRecords.some((variant) => {
     if (excludeVariantId && variant.id === excludeVariantId) return false;
 
+    const dateWithAssignmentOffset =
+      assignmentDay === 2 && isTwoDayVerticalProduct(variant.products ?? { name: null, code: null, category: null })
+        ? shiftDateByDays(variant.date, 1)
+        : variant.date;
+
     const otherRange = computeVariantRange(
-      variant.date,
+      dateWithAssignmentOffset,
       variant.products ?? { hora_inicio: null, hora_fin: null },
     );
     if (!otherRange) return false;
@@ -1663,6 +1729,19 @@ export const handler = createHttpHandler<any>(async (request) => {
     if (!request.rawBody) return errorResponse('VALIDATION_ERROR', 'Cuerpo de la petición requerido', 400);
 
     const payload = request.body && typeof request.body === 'object' ? (request.body as any) : {};
+    const requestedAssignmentDayRaw =
+      typeof payload.day === 'number'
+        ? payload.day
+        : typeof payload.day === 'string' && payload.day.trim().length
+          ? Number(payload.day)
+          : 1;
+    if (!Number.isFinite(requestedAssignmentDayRaw) || !Number.isInteger(requestedAssignmentDayRaw)) {
+      return errorResponse('VALIDATION_ERROR', 'Día de formador inválido', 400);
+    }
+    if (requestedAssignmentDayRaw !== 1 && requestedAssignmentDayRaw !== 2) {
+      return errorResponse('VALIDATION_ERROR', 'Día de formador inválido', 400);
+    }
+    const requestedAssignmentDay = normalizeTrainerAssignmentDay(requestedAssignmentDayRaw);
     const updates: VariantUpdateInput = {};
 
     if (Object.prototype.hasOwnProperty.call(payload, 'price')) {
@@ -1786,13 +1865,13 @@ export const handler = createHttpHandler<any>(async (request) => {
         trainer_id: true,
         sala_id: true,
         unidad_movil_id: true,
-        products: { select: { hora_inicio: true, hora_fin: true } },
+        products: { select: { name: true, code: true, category: true, hora_inicio: true, hora_fin: true } },
       },
     });
     if (!existing) return errorResponse('NOT_FOUND', 'Variante no encontrada', 404);
 
     const [existingTrainerAssignments, existingUnitAssignments] = await Promise.all([
-      fetchVariantTrainerAssignments(prisma, [variantId]),
+      fetchVariantTrainerAssignments(prisma, [variantId], requestedAssignmentDay),
       fetchVariantUnitAssignments(prisma, [variantId]),
     ]);
 
@@ -1847,8 +1926,18 @@ export const handler = createHttpHandler<any>(async (request) => {
       }
     }
 
-    const productTimes = existing.products ?? { hora_inicio: null, hora_fin: null };
-    const variantRange = computeVariantRange(nextDate, productTimes);
+    const productDetails = existing.products ?? {
+      name: null,
+      code: null,
+      category: null,
+      hora_inicio: null,
+      hora_fin: null,
+    };
+    const effectiveRangeDate =
+      requestedAssignmentDay === 2 && isTwoDayVerticalProduct(productDetails)
+        ? shiftDateByDays(nextDate, 1)
+        : nextDate;
+    const variantRange = computeVariantRange(effectiveRangeDate, productDetails);
 
     const availabilityError = await ensureVariantResourcesAvailable(prisma, {
       excludeVariantId: existing.id,
@@ -1856,6 +1945,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       salaId: nextSalaId,
       unidadIds: nextUnidadIds,
       range: variantRange,
+      trainerAssignmentDay: requestedAssignmentDay,
     });
     if (availabilityError) return availabilityError;
 
@@ -1895,7 +1985,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.variants.update({ where: { id: variantId }, data });
       if (trainerIdsUpdate !== undefined) {
-        await syncVariantTrainerAssignments(tx, variantId, nextTrainerIds);
+        await syncVariantTrainerAssignments(tx, variantId, nextTrainerIds, requestedAssignmentDay);
         if (nextTrainerIds.length) {
           await tx.variant_trainer_invites.deleteMany({
             where: {

@@ -2263,7 +2263,7 @@ export function VariantModal({
       return;
     }
 
-    const payload: VariantUpdatePayload = {};
+    const payload: VariantUpdatePayload = { day: variant.day ?? 1 };
 
     if (formValues.price !== initialValues.price) {
       payload.price = formValues.price.trim() ? formValues.price.trim() : null;
@@ -2304,7 +2304,8 @@ export function VariantModal({
       payload.unidad_movil_ids = sanitizeStringArray(formValues.unidad_movil_ids);
     }
 
-    if (!Object.keys(payload).length) {
+    const payloadKeys = Object.keys(payload).filter((key) => key !== 'day');
+    if (!payloadKeys.length) {
       if (closeAfter) {
         onHide();
       }
@@ -2317,7 +2318,10 @@ export function VariantModal({
     try {
       const updated = await updateProductVariant(variant.id, payload);
 
-      let enhancedVariant: VariantInfo = updated;
+      let enhancedVariant: VariantInfo = {
+        ...updated,
+        day: variant.day ?? updated.day ?? 1,
+      };
 
       if (payload.trainer_ids) {
         const sanitizedTrainerIds = sanitizeStringArray(payload.trainer_ids);
