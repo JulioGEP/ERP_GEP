@@ -680,6 +680,7 @@ function resolveVariantUnits(details: CalendarVariantEvent['variant']): VariantI
 
 function createActiveVariantFromCalendarEvent(event: CalendarVariantEvent): ActiveVariant {
   const variantDetails = event.variant;
+  const day: 1 | 2 = event.id.endsWith(':day2') ? 2 : 1;
   const trainerRecord = mapCalendarVariantTrainer(variantDetails.trainer);
   const trainers = (variantDetails.trainers ?? [])
     .map((record) => mapCalendarVariantTrainer(record))
@@ -711,6 +712,7 @@ function createActiveVariantFromCalendarEvent(event: CalendarVariantEvent): Acti
 
   const variantInfo: VariantInfo = {
     id: variantDetails.id,
+    day,
     id_woo: sanitizeString(variantDetails.id_woo) ?? '',
     parent_woo_id: sanitizeString(variantDetails.parent_woo_id),
     name: variantDetails.name ?? null,

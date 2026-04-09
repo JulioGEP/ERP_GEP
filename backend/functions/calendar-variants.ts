@@ -24,6 +24,7 @@ type VariantTrainerLink = {
   name: string | null;
   apellido: string | null;
   position: number;
+  day: number;
 };
 
 type CalendarVariantEvent = {
@@ -357,8 +358,8 @@ function isTwoDayVerticalProduct(product: {
 async function fetchVariantTrainerAssignments(
   prisma: ReturnType<typeof getPrisma>,
   variantIds: string[],
-): Promise<Map<string, VariantTrainerLink[]>> {
-  const map = new Map<string, VariantTrainerLink[]>();
+): Promise<Map<string, Map<number, VariantTrainerLink[]>>> {
+  const map = new Map<string, Map<number, VariantTrainerLink[]>>();
   if (!variantIds.length) return map;
 
   try {
@@ -368,17 +369,19 @@ async function fetchVariantTrainerAssignments(
       name: string | null;
       apellido: string | null;
       position: number;
+      day: number | null;
     }>>(
       Prisma.sql`
         SELECT vtl.variant_id::text AS variant_id,
                vtl.trainer_id,
                t.name,
                t.apellido,
-               vtl.position
+               vtl.position,
+               vtl.day
         FROM variant_trainer_links vtl
         LEFT JOIN trainers t ON t.trainer_id = vtl.trainer_id
         WHERE vtl.variant_id IN (${Prisma.join(variantIds.map((id) => Prisma.sql`${id}::uuid`))})
-        ORDER BY vtl.variant_id, vtl.position ASC
+        ORDER BY vtl.variant_id, vtl.day, vtl.position ASC
       `,
     )) as Array<{
       variant_id: string;
@@ -386,17 +389,22 @@ async function fetchVariantTrainerAssignments(
       name: string | null;
       apellido: string | null;
       position: number;
+      day: number | null;
     }>;
 
     for (const row of rows) {
-      const list = map.get(row.variant_id) ?? [];
+      const day = row.day === 2 ? 2 : 1;
+      const daysMap = map.get(row.variant_id) ?? new Map<number, VariantTrainerLink[]>();
+      const list = daysMap.get(day) ?? [];
       list.push({
         trainer_id: row.trainer_id,
         name: row.name ?? null,
         apellido: row.apellido ?? null,
         position: row.position,
+        day,
       });
-      map.set(row.variant_id, list);
+      daysMap.set(day, list);
+      map.set(row.variant_id, daysMap);
     }
   } catch (error) {
     if (!isMissingRelationError(error, 'variant_trainer_links')) {
@@ -731,15 +739,21 @@ export const handler = async (event: any) => {
       const studentsTotal = wooIdKey ? studentsCountByVariant.get(wooIdKey) ?? 0 : null;
       const variantDeals = wooIdKey ? dealsByVariant.get(wooIdKey) ?? [] : [];
 
-      const normalizedVariant = normalizeVariantRecord(
+      const dayAssignments = trainerAssignments.get(record.id) ?? new Map<number, VariantTrainerLink[]>();
+      const normalizedVariantDay1 = normalizeVariantRecord(
         {
           ...record,
-          trainer_links: trainerAssignments.get(record.id) ?? [],
+          trainer_links: dayAssignments.get(1) ?? [],
         },
         studentsTotal,
       );
 
-      const pushEvent = (id: string, start: Date, end: Date) => {
+      const pushEvent = (
+        id: string,
+        start: Date,
+        end: Date,
+        normalizedVariant: ReturnType<typeof normalizeVariantRecord>,
+      ) => {
         events.push({
           id,
           start: start.toISOString(),
@@ -750,15 +764,22 @@ export const handler = async (event: any) => {
         });
       };
 
-      pushEvent(record.id, times.start, times.end);
+      pushEvent(record.id, times.start, times.end, normalizedVariantDay1);
 
       // duplicado para verticales 2 días
       if (variantDate && isTwoDayVerticalProduct(product)) {
+        const normalizedVariantDay2 = normalizeVariantRecord(
+          {
+            ...record,
+            trainer_links: dayAssignments.get(2) ?? [],
+          },
+          studentsTotal,
+        );
         const nextDayDate = new Date(variantDate.getTime());
         nextDayDate.setUTCDate(nextDayDate.getUTCDate() + 1);
         const nextTimes = computeEventTimes(nextDayDate, product);
         if (nextTimes) {
-          pushEvent(`${record.id}:day2`, nextTimes.start, nextTimes.end);
+          pushEvent(`${record.id}:day2`, nextTimes.start, nextTimes.end, normalizedVariantDay2);
         }
       }
     });

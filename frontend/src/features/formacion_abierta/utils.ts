@@ -48,6 +48,10 @@ function toNumberOrNull(value: unknown): number | null {
   return null;
 }
 
+function toVariantDay(value: unknown): 1 | 2 {
+  return value === 2 || value === '2' ? 2 : 1;
+}
+
 function toBooleanOrNull(value: unknown): boolean | null {
   if (typeof value === 'boolean') {
     return value;
@@ -285,6 +289,7 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
 
   return {
     id: String(input?.id ?? fallbackId),
+    day: toVariantDay(input?.day),
     id_woo: input?.id_woo != null ? String(input.id_woo) : '',
     parent_woo_id: parentWooId,
     name: input?.name ?? null,

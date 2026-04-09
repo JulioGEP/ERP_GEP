@@ -9,6 +9,7 @@ export type VariantTrainerInvite = {
 
 export type VariantInfo = {
   id: string;
+  day?: 1 | 2;
   id_woo: string;
   parent_woo_id: string | null;
   name: string | null;
@@ -79,6 +80,7 @@ export type ProductDefaultsUpdatePayload = {
 };
 
 export type VariantUpdatePayload = {
+  day?: 1 | 2;
   price?: string | null;
   stock?: number | null;
   stock_status?: string | null;
