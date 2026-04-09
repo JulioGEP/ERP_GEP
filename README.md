@@ -320,6 +320,7 @@ Desde raíz:
 - `npm run test --workspace frontend` — tests unitarios/interfaz frontend.
 - `npm run typecheck --workspace frontend` — chequeo de tipos frontend.
 - `npm run typecheck:functions` — chequeo de tipos de funciones backend.
+- `npm run typecheck:functions:noemit` — chequeo backend en modo `--noEmit --pretty false` (incluye `prisma generate` antes de `tsc`).
 - `npm run prisma:format` — formato de esquema Prisma.
 - `npm run prisma:prune` — limpieza de binarios Prisma para CI/Netlify.
 - `npm run netlify:build` — pipeline de build para despliegue.
