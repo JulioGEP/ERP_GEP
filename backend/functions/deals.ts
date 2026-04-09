@@ -974,6 +974,7 @@ export async function importDealFromPipedrive(dealIdRaw: any) {
     productsCount: 0,
     notesCount: 0,
     filesCount: 0,
+    notesFetched: false,
   };
   let errorMessage: string | undefined;
 
@@ -1123,6 +1124,7 @@ export async function importDealFromPipedrive(dealIdRaw: any) {
     counters.productsCount = Array.isArray(products) ? products.length : 0;
     counters.notesCount = Array.isArray(notes) ? notes.length : 0;
     counters.filesCount = Array.isArray(files) ? files.length : 0;
+    counters.notesFetched = !notesFetchFailed;
 
     // 2) Mapear + upsert relacional en Neon
     const persistStart = Date.now();

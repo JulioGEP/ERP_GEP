@@ -382,14 +382,25 @@ async function refreshDealAfterWebhook(
   await importDealFromPipedrive(dealId);
 
   const pipeline = stored.pipeline_label ?? stored.pipeline_id ?? null;
-  if (isFormacionAbiertaPipeline(pipeline)) {
-    return true;
-  }
+  const isFormacionAbierta = isFormacionAbiertaPipeline(pipeline);
 
-  // Si el pipeline no quedó resuelto aún, reintentamos igualmente una vez más
-  // para capturar notas/alumnos que llegan con retraso desde Pipedrive.
+  // Reintentamos una vez más para capturar notas/alumnos que llegan con retraso desde Pipedrive.
   await new Promise((resolve) => setTimeout(resolve, 3500));
   await importDealFromPipedrive(dealId);
+
+  // En Formación Abierta algunas automatizaciones de Pipedrive tardan más
+  // en crear la nota con el listado de alumnos. Si aún no hay alumnos,
+  // hacemos un último reintento.
+  if (isFormacionAbierta) {
+    const studentsCount = await prisma.alumnos.count({
+      where: { deal_id: dealId },
+    });
+    if (studentsCount === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      await importDealFromPipedrive(dealId);
+    }
+  }
+
   return true;
 }
 
