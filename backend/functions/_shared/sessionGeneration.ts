@@ -14,6 +14,21 @@ type DealProductRecord = {
   id_pipe?: string | null;
 };
 
+function normalizeLabelForComparison(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const label = String(value).trim();
+  if (!label.length) return null;
+  return label
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+}
+
+function isFormacionAbiertaPipeline(value: unknown): boolean {
+  return normalizeLabelForComparison(value) === 'formacion abierta';
+}
+
 export function hasApplicableCode(code: unknown): boolean {
   if (!code) return false;
   const normalized = String(code).toLowerCase();
@@ -85,6 +100,7 @@ async function syncSessionsForProduct(
   dealId: string,
   product: DealProductRecord,
   defaultAddress: string | null,
+  forceSingleSession: boolean,
 ) {
   const productCatalogId = (() => {
     if (!product?.id) return null;
@@ -100,6 +116,7 @@ async function syncSessionsForProduct(
       (typeof productCatalogId === 'string' && productCatalogId.trim().toLowerCase() === '1'));
 
   const targetQuantity =
+    forceSingleSession ||
     isSingleSessionProduct ||
     (hasApplicableCode(product.code) && normalizedPipeId && SINGLE_SESSION_PIPE_IDS.has(normalizedPipeId)) ||
     hasPrevencionPrefix(product.name, product.code)
@@ -142,6 +159,7 @@ export async function generateSessionsForDeal(tx: Prisma.TransactionClient, deal
     select: {
       deal_id: true,
       training_address: true,
+      pipeline_label: true,
       deal_products: {
         select: { id: true, deal_id: true, quantity: true, name: true, code: true },
       },
@@ -218,7 +236,13 @@ export async function generateSessionsForDeal(tx: Prisma.TransactionClient, deal
 
   const syncResults = await Promise.all(
     applicableWithPipe.map((product: DealProductRecord) =>
-      syncSessionsForProduct(tx, deal.deal_id, product, deal.training_address ?? null),
+      syncSessionsForProduct(
+        tx,
+        deal.deal_id,
+        product,
+        deal.training_address ?? null,
+        isFormacionAbiertaPipeline(deal.pipeline_label),
+      ),
     ),
   );
 
