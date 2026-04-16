@@ -38,6 +38,8 @@ type NormalizedWooOrder = {
   variationIdWoo: string | null;
   sku: string | null;
   quantity: number;
+  unitPrice: number;
+  lineSubtotal: number;
   discountPercentageFromPayload: number;
   subtotal: number;
   taxPercentage: number | null;
@@ -447,6 +449,10 @@ function normalizeWooOrder(payloadRoot: JsonObject): NormalizedWooOrder {
     normalizeComparison(discountType) === 'percent' || normalizeComparison(discountType) === 'percentage'
       ? Math.max(0, nominalAmount)
       : 0;
+  const lineSubtotal = readNumber(lineItem.subtotal) ?? readNumber(payload.total) ?? 0;
+  const unitPriceFromPayload = readNumber(lineItem.price);
+  const unitPrice =
+    unitPriceFromPayload ?? (resolvedQuantity > 0 && lineSubtotal > 0 ? lineSubtotal / resolvedQuantity : lineSubtotal);
 
   return {
     orderId,
@@ -472,8 +478,10 @@ function normalizeWooOrder(payloadRoot: JsonObject): NormalizedWooOrder {
     variationIdWoo: readString(lineItem.variation_id),
     sku: readString(lineItem.sku),
     quantity: resolvedQuantity,
+    unitPrice,
+    lineSubtotal,
     discountPercentageFromPayload,
-    subtotal: readNumber(lineItem.subtotal) ?? readNumber(payload.total) ?? 0,
+    subtotal: lineSubtotal,
     taxPercentage,
     rawDate,
     rawLocation,
@@ -891,7 +899,7 @@ function buildAddProductPayload(order: NormalizedWooOrder, productIdPipe: string
 
   return {
     product_id: normalizedProductId,
-    item_price: order.subtotal,
+    item_price: order.unitPrice,
     quantity: order.quantity,
     discount: discountPercentage > 0 ? discountPercentage : undefined,
     discount_type: 'percentage',
@@ -1326,7 +1334,7 @@ async function createAndSendHoldedInvoiceFromWooOrder(params: {
 
   const invoicePayload = {
     date: 'today',
-    approveDoc: true,
+    approveDoc: false,
     contactCode: holdedContact.code || undefined,
     contactId: holdedContact.id,
     invoiceNum: '',
@@ -1341,7 +1349,7 @@ async function createAndSendHoldedInvoiceFromWooOrder(params: {
         name: params.resolvedProduct.productName ?? params.order.productName ?? 'Reserva de formación',
         desc: '',
         units: params.order.quantity,
-        subtotal: params.order.subtotal,
+        subtotal: params.order.unitPrice,
         discount: params.discountPercentage > 0 ? params.discountPercentage : undefined,
         tax: params.order.taxPercentage ?? 21,
       },
@@ -1357,11 +1365,6 @@ async function createAndSendHoldedInvoiceFromWooOrder(params: {
   if (!documentId) {
     throw new Error('Holded no devolvió el identificador de la factura creada.');
   }
-
-  await holdedRequest<any>(`${HOLDED_INVOICES_ENDPOINT}/${encodeURIComponent(documentId)}`, {
-    method: 'PUT',
-    body: JSON.stringify({ paymentMethod: holdedPaymentMethodId }),
-  });
 
   let emailSent = false;
   if (params.order.billingEmail) {
@@ -1488,17 +1491,22 @@ export async function sendWooOrderToPipedrive(params: {
   let invoiceEmailSent = false;
 
   if (isDirectInvoiceOrder(order)) {
-    const holdedInvoice = await createAndSendHoldedInvoiceFromWooOrder({
-      order,
-      resolvedProduct,
-      discountPercentage: classification.discountPercentage,
-    });
-    holdedDocumentId = holdedInvoice.documentId;
-    holdedDocumentType = 'invoice';
-    invoiceEmailSent = holdedInvoice.emailSent;
+    try {
+      const holdedInvoice = await createAndSendHoldedInvoiceFromWooOrder({
+        order,
+        resolvedProduct,
+        discountPercentage: classification.discountPercentage,
+      });
+      holdedDocumentId = holdedInvoice.documentId;
+      holdedDocumentType = 'invoice';
+      invoiceEmailSent = holdedInvoice.emailSent;
 
-    if (!invoiceEmailSent) {
-      warnings.push('La factura se ha creado en Holded, pero no se ha enviado por email porque el pedido no tiene correo de facturación.');
+      if (!invoiceEmailSent) {
+        warnings.push('La factura se ha creado en Holded, pero no se ha enviado por email porque el pedido no tiene correo de facturación.');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      warnings.push(`No se pudo crear la factura en Holded: ${message}`);
     }
   }
 
