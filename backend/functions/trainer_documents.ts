@@ -362,6 +362,89 @@ async function persistPayrollExpense(
   });
 }
 
+async function removePayrollExpenseForDocument(
+  prisma: Pick<ReturnType<typeof getPrisma>, 'office_payrolls'>,
+  userId: string,
+  documentId: string,
+) {
+  const payroll = await prisma.office_payrolls.findFirst({
+    where: {
+      user_id: userId,
+      comment_cost: { contains: `"${documentId}"` },
+    },
+    select: {
+      user_id: true,
+      year: true,
+      month: true,
+      dietas: true,
+      kilometrajes: true,
+      pernocta: true,
+      nocturnidad: true,
+      festivo: true,
+      horas_extras: true,
+      otros_gastos: true,
+      comment_cost: true,
+    },
+  });
+
+  if (!payroll) {
+    return;
+  }
+
+  const commentMap = parseCommentCostMap(payroll.comment_cost);
+  const commentEntry = commentMap[documentId];
+  if (!commentEntry) {
+    return;
+  }
+
+  delete commentMap[documentId];
+
+  const amount = typeof commentEntry.amount === 'number' && Number.isFinite(commentEntry.amount)
+    ? Number(commentEntry.amount.toFixed(2))
+    : 0;
+  const column = resolveExpenseColumn(commentEntry.category);
+
+  const currentValues: Record<PayrollExtraField, number> = {
+    dietas: decimalToNumber(payroll.dietas),
+    kilometrajes: decimalToNumber(payroll.kilometrajes),
+    pernocta: decimalToNumber(payroll.pernocta),
+    nocturnidad: decimalToNumber(payroll.nocturnidad),
+    festivo: decimalToNumber(payroll.festivo),
+    horas_extras: decimalToNumber(payroll.horas_extras),
+    otros_gastos: decimalToNumber(payroll.otros_gastos),
+  };
+
+  if (column && amount > 0) {
+    const nextValue = Number((currentValues[column] - amount).toFixed(2));
+    currentValues[column] = nextValue < 0 ? 0 : nextValue;
+  }
+
+  const nextTotalExtras = Number(
+    PAYROLL_EXTRA_FIELDS.reduce((acc, field) => acc + currentValues[field], 0).toFixed(2),
+  );
+
+  await prisma.office_payrolls.update({
+    where: {
+      user_id_year_month: {
+        user_id: payroll.user_id,
+        year: payroll.year,
+        month: payroll.month,
+      },
+    },
+    data: {
+      dietas: new Prisma.Decimal(currentValues.dietas),
+      kilometrajes: new Prisma.Decimal(currentValues.kilometrajes),
+      pernocta: new Prisma.Decimal(currentValues.pernocta),
+      nocturnidad: new Prisma.Decimal(currentValues.nocturnidad),
+      festivo: new Prisma.Decimal(currentValues.festivo),
+      horas_extras: new Prisma.Decimal(currentValues.horas_extras),
+      otros_gastos: new Prisma.Decimal(currentValues.otros_gastos),
+      total_extras: new Prisma.Decimal(nextTotalExtras),
+      comment_cost: stringifyCommentCostMap(commentMap),
+    },
+  });
+}
+
 function parseDocumentType(value: unknown) {
   const key = toStringOrNull(value)?.toLowerCase();
   if (!key) {
@@ -603,7 +686,12 @@ export const handler = async (event: any) => {
         });
       }
 
-      await prisma.trainer_documents.delete({ where: { id: documentId } });
+      await prisma.$transaction(async (tx) => {
+        if (trainer.user_id && trainer.contrato_fijo) {
+          await removePayrollExpenseForDocument(tx, trainer.user_id, documentId);
+        }
+        await tx.trainer_documents.delete({ where: { id: documentId } });
+      });
 
       return successResponse({
         deleted: true,
