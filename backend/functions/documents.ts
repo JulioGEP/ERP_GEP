@@ -81,13 +81,6 @@ function formatTrainingDate(value: unknown, fallback?: unknown): string {
   return `${year}-${month}-${day}`;
 }
 
-function extractProvince(address: string | null | undefined): string {
-  const normalized = sanitizeFileNamePart(address);
-  if (!normalized) return 'Provincia desconocida';
-  const parts = normalized.split(',').map((part) => part.trim()).filter(Boolean);
-  return parts.length ? parts[parts.length - 1] : normalized;
-}
-
 async function resolveTrainingSiglas(params: {
   prisma: ReturnType<typeof getPrisma>;
   dealProductId?: string | null;
@@ -96,32 +89,76 @@ async function resolveTrainingSiglas(params: {
 }): Promise<string | null> {
   const { prisma, dealProductId, dealId, dealProductName } = params;
 
+  const normalizedDealProductName = sanitizeFileNamePart(dealProductName).toLowerCase();
+
   if (dealProductId) {
     const dealProductWithProduct = await prisma.deal_products.findUnique({
       where: { id: dealProductId },
-      select: { products: { select: { siglas: true } } },
+      select: {
+        name: true,
+        products: {
+          select: { siglas: true },
+        },
+      },
     });
 
     const siglasByRelation = sanitizeFileNamePart(dealProductWithProduct?.products?.siglas);
     if (siglasByRelation) {
       return siglasByRelation;
     }
+
+    const normalizedDealProductRecordName =
+      sanitizeFileNamePart(dealProductWithProduct?.name).toLowerCase();
+    if (
+      normalizedDealProductName &&
+      normalizedDealProductRecordName &&
+      normalizedDealProductName !== normalizedDealProductRecordName
+    ) {
+      const productByName = await prisma.products.findFirst({
+        where: { name: { equals: dealProductName!, mode: 'insensitive' } },
+        select: { siglas: true },
+      });
+      const siglasByProductName = sanitizeFileNamePart(productByName?.siglas);
+      if (siglasByProductName) {
+        return siglasByProductName;
+      }
+    }
   }
 
-  if (!dealProductName) {
-    return null;
+  if (normalizedDealProductName) {
+    const dealProducts = await prisma.deal_products.findMany({
+      where: { deal_id: dealId },
+      select: {
+        name: true,
+        products: {
+          select: { name: true, siglas: true },
+        },
+      },
+    });
+
+    for (const row of dealProducts) {
+      const candidateNames = [row.name, row.products?.name]
+        .map((value) => sanitizeFileNamePart(value).toLowerCase())
+        .filter(Boolean);
+      if (!candidateNames.includes(normalizedDealProductName)) {
+        continue;
+      }
+
+      const siglas = sanitizeFileNamePart(row.products?.siglas);
+      if (siglas) {
+        return siglas;
+      }
+    }
+
+    const fallbackProduct = await prisma.products.findFirst({
+      where: { name: { equals: dealProductName!, mode: 'insensitive' } },
+      select: { siglas: true },
+    });
+
+    return sanitizeFileNamePart(fallbackProduct?.siglas) || null;
   }
 
-  const byName = await prisma.deal_products.findFirst({
-    where: {
-      deal_id: dealId,
-      name: dealProductName,
-      products: { name: dealProductName },
-    },
-    select: { products: { select: { siglas: true } } },
-  });
-
-  return sanitizeFileNamePart(byName?.products?.siglas) || null;
+  return null;
 }
 
 function toBufferFromBase64(contentBase64: string): Buffer {
@@ -156,7 +193,6 @@ export const handler = async (event: any) => {
     const sessionId = toStringOrNull(payload?.sessionId ?? payload?.sesion_id);
     const studentId = toStringOrNull(payload?.studentId ?? payload?.alumno_id);
     const type = toStringOrNull(payload?.type ?? payload?.documentType);
-    const locationOverride = toStringOrNull(payload?.locationOverride ?? payload?.lugar);
 
     if (!dealId || !sessionId || !studentId) {
       return errorResponse(
@@ -270,26 +306,11 @@ export const handler = async (event: any) => {
       sanitizeFileNamePart(
         deal.organizations?.name ?? (deal as any)?.organizations?.name ?? (deal as any)?.organization?.name,
       ) || 'Empresa desconocida';
-    const trainingType =
-      trainingSiglas ||
-      sanitizeFileNamePart(dealProduct?.name) ||
-      sanitizeFileNamePart(dealProduct?.type) ||
-      sanitizeFileNamePart(dealProduct?.category) ||
-      'Formación';
+    const trainingAcronym = trainingSiglas || 'Sin siglas';
     const trainingDate = formatTrainingDate(
       resolvedSession.fecha_inicio_utc,
       (deal as any)?.a_fecha ?? null,
     );
-    const provinceFromDeal = sanitizeFileNamePart(toStringOrNull((deal as any)?.sede_label));
-    const provinceFromSession = extractProvince(resolvedSession.direccion);
-    const provinceFromOrganization = extractProvince((deal as any)?.organizations?.address);
-    const provinceOverride = sanitizeFileNamePart(locationOverride);
-    const province =
-      provinceOverride ||
-      provinceFromDeal ||
-      (provinceFromSession !== 'Provincia desconocida' ? provinceFromSession : null) ||
-      (provinceFromOrganization !== 'Provincia desconocida' ? provinceFromOrganization : null) ||
-      'Provincia desconocida';
     const studentName =
       sanitizeFileNamePart(`${student.nombre ?? ''} ${student.apellido ?? ''}`) ||
       sanitizeFileNamePart(student.nombre) ||
@@ -297,7 +318,7 @@ export const handler = async (event: any) => {
       sanitizeFileNamePart(student.dni) ||
       'Alumno sin nombre';
 
-    let normalizedFileName = `Certificado - ${organizationName} - ${trainingType} - ${trainingDate} - ${province} - ${studentName}`;
+    let normalizedFileName = `Certificado - ${organizationName} - ${trainingAcronym} - ${trainingDate} - ${studentName}`;
     if (!normalizedFileName.toLowerCase().endsWith('.pdf')) {
       normalizedFileName = `${normalizedFileName}.pdf`;
     }
