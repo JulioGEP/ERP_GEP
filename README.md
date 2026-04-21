@@ -1,5 +1,7 @@
 # ERP GEP
 
+<!-- Última actualización: 2026-04-21 -->
+
 ERP GEP es un **monorepo** que concentra toda la operación de una plataforma interna de formación: ciclo comercial, planificación, ejecución, documentación y control.
 
 Este README está pensado como **guía técnica y funcional detallada** para que cualquier persona del equipo pueda:
