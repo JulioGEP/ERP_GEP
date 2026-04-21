@@ -1,6 +1,8 @@
 ## Git workflow
-- Never push directly to `main`
-- Create branch: `claude/<task-slug>`
-- Commit with descriptive message
-- Push branch with: `git push origin <branch>`
-- Create PR to `main` with: `gh pr create --title "..." --body "..."`
+- Al terminar CUALQUIER tarea, siempre:
+  1. Crea una rama nueva con formato: `claude/<descripcion-corta-en-kebab-case>`
+  2. Haz commit con mensaje descriptivo en español
+  3. Haz push de la rama al remoto
+  4. Abre un PR a main con título y descripción del cambio
+  5. El PR debe crearse en estado "Ready for review", NUNCA como Draft
+- NUNCA hagas push directo a main
