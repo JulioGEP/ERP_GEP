@@ -220,9 +220,13 @@ export async function generateSessionsForDeal(tx: Prisma.TransactionClient, deal
     return { ...product, id_pipe: resolvedPipeId };
   });
 
-  const applicableIds = applicableWithPipe.map((product: DealProductRecord) => product.id);
+  const isFormacionAbierta = isFormacionAbiertaPipeline(deal.pipeline_label);
 
-  if (applicableIds.length === 0) {
+  // Para formación abierta: 1 presupuesto → 1 sesión (solo el primer producto aplicable)
+  const productsToSync = isFormacionAbierta ? applicableWithPipe.slice(0, 1) : applicableWithPipe;
+  const syncProductIds = productsToSync.map((product: DealProductRecord) => product.id);
+
+  if (syncProductIds.length === 0) {
     const result = await tx.sesiones.deleteMany({ where: { deal_id: dealId } });
     return { count: 0, created: 0, deleted: result.count } as const;
   }
@@ -230,18 +234,18 @@ export async function generateSessionsForDeal(tx: Prisma.TransactionClient, deal
   const pruneResult = await tx.sesiones.deleteMany({
     where: {
       deal_id: dealId,
-      NOT: { deal_product_id: { in: applicableIds } },
+      NOT: { deal_product_id: { in: syncProductIds } },
     },
   });
 
   const syncResults = await Promise.all(
-    applicableWithPipe.map((product: DealProductRecord) =>
+    productsToSync.map((product: DealProductRecord) =>
       syncSessionsForProduct(
         tx,
         deal.deal_id,
         product,
         deal.training_address ?? null,
-        isFormacionAbiertaPipeline(deal.pipeline_label),
+        isFormacionAbierta,
       ),
     ),
   );
