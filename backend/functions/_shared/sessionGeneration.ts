@@ -160,6 +160,7 @@ export async function generateSessionsForDeal(tx: Prisma.TransactionClient, deal
       deal_id: true,
       training_address: true,
       pipeline_label: true,
+      pipeline_id: true,
       deal_products: {
         select: { id: true, deal_id: true, quantity: true, name: true, code: true },
       },
@@ -220,7 +221,8 @@ export async function generateSessionsForDeal(tx: Prisma.TransactionClient, deal
     return { ...product, id_pipe: resolvedPipeId };
   });
 
-  const isFormacionAbierta = isFormacionAbiertaPipeline(deal.pipeline_label);
+  // pipeline_label is often null; pipeline_id stores the resolved label string (see mappers.ts)
+  const isFormacionAbierta = isFormacionAbiertaPipeline(deal.pipeline_label ?? deal.pipeline_id);
 
   // Para formación abierta: 1 presupuesto → 1 sesión (solo el primer producto aplicable)
   const productsToSync = isFormacionAbierta ? applicableWithPipe.slice(0, 1) : applicableWithPipe;
