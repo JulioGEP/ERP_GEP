@@ -53,6 +53,7 @@ type NormalizedWooOrder = {
   observations: string | null;
   couponCodes: string[];
   students: Student[];
+  isFullCouponOrder: boolean;
 };
 
 type PipedriveSyncResult = {
@@ -451,8 +452,12 @@ function normalizeWooOrder(payloadRoot: JsonObject): NormalizedWooOrder {
       : 0;
   const lineSubtotal = readNumber(lineItem.subtotal) ?? readNumber(payload.total) ?? 0;
   const unitPriceFromPayload = readNumber(lineItem.price);
-  const unitPrice =
-    unitPriceFromPayload ?? (resolvedQuantity > 0 && lineSubtotal > 0 ? lineSubtotal / resolvedQuantity : lineSubtotal);
+  // Cuando el cupón cubre el 100% del pedido, WooCommerce pone price=0 pero subtotal conserva
+  // el precio real de catálogo. En ese caso usamos subtotal como precio base en Pipedrive.
+  const isFullCouponOrder = (unitPriceFromPayload === null || unitPriceFromPayload === 0) && lineSubtotal > 0;
+  const unitPrice = isFullCouponOrder
+    ? (resolvedQuantity > 0 ? lineSubtotal / resolvedQuantity : lineSubtotal)
+    : (unitPriceFromPayload !== null ? unitPriceFromPayload : (resolvedQuantity > 0 && lineSubtotal > 0 ? lineSubtotal / resolvedQuantity : lineSubtotal));
 
   return {
     orderId,
@@ -493,6 +498,7 @@ function normalizeWooOrder(payloadRoot: JsonObject): NormalizedWooOrder {
     observations: pickMetaValue(orderMeta, ['custom_observations', 'meta_data_custom_observations', 'observations']),
     couponCodes: normalizeCouponCodes(payload),
     students: extractStudents(orderMeta),
+    isFullCouponOrder,
   };
 }
 
@@ -897,11 +903,13 @@ function buildAddProductPayload(order: NormalizedWooOrder, productIdPipe: string
     throw new Error(`El product_id de Pipedrive no es un entero válido: ${productIdPipe}`);
   }
 
+  const effectiveDiscount = order.isFullCouponOrder ? undefined : (discountPercentage > 0 ? discountPercentage : undefined);
+
   return {
     product_id: normalizedProductId,
     item_price: order.unitPrice,
     quantity: order.quantity,
-    discount: discountPercentage > 0 ? discountPercentage : undefined,
+    discount: effectiveDiscount,
     discount_type: 'percentage',
     tax_method: 'exclusive',
     tax: order.taxPercentage ?? undefined,
