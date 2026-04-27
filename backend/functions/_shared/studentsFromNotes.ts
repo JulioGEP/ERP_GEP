@@ -85,58 +85,42 @@ function parseEntry(entry: string) {
     .map((part) => normalizeWhitespace(part.replace(/^["']+/, '').replace(/["']+$/, '')))
     .filter((part) => part.length > 0);
 
-  if (rawParts.length < 2) {
+  // Formato esperado: Nombre | Apellido [| Email] | DNI
+  // El último campo siempre es el DNI (posicional, igual que el parser del frontend).
+  // Usar detección dinámica de teléfono causaba que DNIs españoles (8 dígitos + letra)
+  // se clasificaran como teléfonos, dejando solo 1 parte y devolviendo null.
+  if (rawParts.length < 3) {
     return null;
   }
 
-  const parts = [...rawParts];
+  const nombre = rawParts[0];
+  const lastPart = rawParts[rawParts.length - 1];
+  const dni = normalizeDni(lastPart);
 
+  if (!nombre.length || !dni) {
+    return null;
+  }
+
+  const middleParts = rawParts.slice(1, -1);
+
+  // Si algún campo intermedio contiene '@', es el email; el resto es el apellido.
   let email: string | null = null;
-  let telefono: string | null = null;
-  let dni: string | null = null;
-
-  for (let index = parts.length - 1; index >= 0; index -= 1) {
-    const part = parts[index];
-    if (!email) {
-      const normalizedEmail = normalizeEmail(part);
-      if (normalizedEmail) {
-        email = normalizedEmail;
-        parts.splice(index, 1);
-        continue;
-      }
-    }
-
-    if (!telefono) {
-      const normalizedPhone = normalizePhone(part);
-      if (normalizedPhone) {
-        telefono = normalizedPhone;
-        parts.splice(index, 1);
-        continue;
-      }
-    }
-
-    if (!dni) {
-      const normalizedDni = normalizeDni(part);
-      if (normalizedDni) {
-        dni = normalizedDni;
-        parts.splice(index, 1);
-        continue;
-      }
+  const apellidoParts: string[] = [];
+  for (const part of middleParts) {
+    const normalizedEmail = normalizeEmail(part);
+    if (normalizedEmail && !email) {
+      email = normalizedEmail;
+    } else {
+      apellidoParts.push(part);
     }
   }
 
-  if (parts.length < 2) {
+  const apellido = normalizeWhitespace(apellidoParts.join(' '));
+  if (!apellido.length) {
     return null;
   }
 
-  const nombre = parts[0];
-  const apellido = normalizeWhitespace(parts.slice(1).join(' '));
-
-  if (!nombre.length || !apellido.length) {
-    return null;
-  }
-
-  return { nombre, apellido, dni, email, telefono };
+  return { nombre, apellido, dni, email, telefono: null };
 }
 
 export function studentsFromNotes(notes: readonly NoteRecord[] | null | undefined): ParsedNoteStudent[] {
