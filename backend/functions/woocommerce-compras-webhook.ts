@@ -4,6 +4,7 @@ import type { Handler } from '@netlify/functions';
 import { COMMON_HEADERS } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
 import { sendWooOrderToPipedrive } from './_shared/woocommerce-compras-pipedrive';
+import { importDealFromPipedrive } from './deals';
 
 const WOOCOMMERCE_COMPRAS_WEBHOOK_TOKEN = 'wc_compras_2026_ERP_GEP_4wJ8nK7pQ2xL9vR6tM1sH5dF3bY0cZ';
 const ACCEPTED_STATUSES = new Set(['completed', 'completado']);
@@ -266,6 +267,30 @@ export const handler: Handler = async (event) => {
       });
     } catch (error) {
       console.error('[woocommerce-compras-webhook] Failed to auto-send order to Pipedrive', error);
+    }
+
+    // Importamos el deal al ERP directamente tras el envío a Pipedrive, sin esperar al
+    // webhook de vuelta. En este punto las notas con alumnos ya existen en Pipedrive
+    // (creadas por sendWooOrderToPipedrive antes de marcar el deal como ganado), por lo
+    // que importDealFromPipedrive las encontrará y sincronizará sesiones y alumnos.
+    if (autoSendResult?.dealId) {
+      try {
+        await importDealFromPipedrive(autoSendResult.dealId);
+        console.log(
+          JSON.stringify({
+            event: 'woocommerce-deal-erpimport-success',
+            deal_id: autoSendResult.dealId,
+            order_number: summary.orderNumber,
+          }),
+        );
+      } catch (importError) {
+        console.error('[woocommerce-compras-webhook] Error al importar deal al ERP tras envío a Pipedrive', {
+          dealId: autoSendResult.dealId,
+          error: importError instanceof Error
+            ? { message: importError.message, stack: importError.stack }
+            : importError,
+        });
+      }
     }
 
     return jsonResponse(200, {
