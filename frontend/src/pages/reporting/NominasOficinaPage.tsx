@@ -209,7 +209,7 @@ type ExtrasModalProps = {
 };
 
 type ExtrasFieldConfig = {
-  key: 'dietas' | 'kilometraje' | 'pernocta' | 'nocturnidad' | 'festivo' | 'horasExtras' | 'otrosGastos' | 'variable';
+  key: 'dietas' | 'kilometraje' | 'pernocta' | 'nocturnidad' | 'festivo' | 'horasExtras' | 'otrosGastos' | 'variable' | 'descuento';
   label: string;
   col: number;
   entryKey: keyof OfficePayrollRecord;
@@ -227,6 +227,7 @@ const EXTRAS_SUMMARY_FIELDS = [
   { key: 'horasExtras', label: 'Horas extras', col: 6, entryKey: 'horasExtras', costsKey: 'horasExtras' },
   { key: 'otrosGastos', label: 'Otros gastos', col: 12, entryKey: 'otrosGastos', costsKey: 'gastosExtras' },
   { key: 'variable', label: 'Variable', col: 12, entryKey: 'variable' },
+  { key: 'descuento', label: 'Descuento', col: 12, entryKey: 'descuento' },
 ] as const satisfies ExtrasFieldConfig[];
 const EXTRAS_TOTAL_FIELDS: ExtrasSummaryKey[] = [
   'dietas',
@@ -487,7 +488,8 @@ function ExtrasModal({ entry, onHide, onSaved, allowEdit }: ExtrasModalProps) {
       const parsed = parseLocaleNumber(fields[key]) ?? 0;
       return sum + parsed;
     }, 0);
-    return total.toFixed(2);
+    const descuento = parseLocaleNumber(fields.descuento) ?? 0;
+    return (total - descuento).toFixed(2);
   }, [fields]);
 
   const mutation = useMutation({
@@ -783,6 +785,7 @@ const payrollInitialFields = {
   horasExtras: '',
   otrosGastos: '',
   variable: '',
+  descuento: '',
   commentPayroll: '',
 };
 
@@ -826,6 +829,7 @@ function buildPayrollFieldsFromEntry(entry: OfficePayrollRecord): typeof payroll
     horasExtras: resolveValue(entry.horasExtras),
     otrosGastos: resolveValue(entry.otrosGastos),
     variable: resolveValue(entry.variable),
+    descuento: resolveValue(entry.descuento),
     commentPayroll: resolveValue(entry.commentPayroll),
   });
 }
@@ -852,10 +856,11 @@ function applyPayrollCalculations(fields: typeof payrollInitialFields): typeof p
   const horasExtras = normalizeNumber(fields.horasExtras);
   const otrosGastos = normalizeNumber(fields.otrosGastos);
   const variable = normalizeNumber(fields.variable);
+  const descuento = normalizeNumber(fields.descuento);
   const brutoExtrasTotal =
-    pernocta === null && nocturnidad === null && festivo === null && horasExtras === null && otrosGastos === null && variable === null
+    pernocta === null && nocturnidad === null && festivo === null && horasExtras === null && otrosGastos === null && variable === null && descuento === null
       ? null
-      : (pernocta ?? 0) + (nocturnidad ?? 0) + (festivo ?? 0) + (horasExtras ?? 0) + (otrosGastos ?? 0) + (variable ?? 0);
+      : (pernocta ?? 0) + (nocturnidad ?? 0) + (festivo ?? 0) + (horasExtras ?? 0) + (otrosGastos ?? 0) + (variable ?? 0) - (descuento ?? 0);
   const salarioBrutoTotal =
     salarioBruto === null && brutoExtrasTotal === null ? null : (salarioBruto ?? 0) + (brutoExtrasTotal ?? 0);
   const retencionPorcentaje = parsePercentageInput(fields.retencion ?? '');

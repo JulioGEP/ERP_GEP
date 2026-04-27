@@ -20,6 +20,7 @@ const COST_FIELD_DEFINITIONS = [
   { key: 'festivo', column: 'festivo' },
   { key: 'horasExtras', column: 'horas_extras' },
   { key: 'gastosExtras', column: 'gastos_extras' },
+  { key: 'descuento', column: 'descuento' },
 ] as const;
 
 type CostFieldDefinition = (typeof COST_FIELD_DEFINITIONS)[number];
@@ -77,6 +78,7 @@ type ExtraCostRecord = {
   festivo: DecimalLike | number | string;
   horas_extras: DecimalLike | number | string;
   gastos_extras: DecimalLike | number | string;
+  descuento: DecimalLike | number | string;
   notas: string | null;
   created_at: Date;
   updated_at: Date;

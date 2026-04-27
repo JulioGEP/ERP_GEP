@@ -786,7 +786,8 @@ const EXTRA_COST_FIELD_KEYS = [
   'nocturnidad',
   'festivo',
   'horasExtras',
-  'gastosExtras'
+  'gastosExtras',
+  'descuento'
 ] as const;
 
 export type TrainerExtraCostFieldKey = (typeof EXTRA_COST_FIELD_KEYS)[number];
@@ -1275,6 +1276,7 @@ export type OfficePayrollRecord = {
   horasExtras: number | null;
   otrosGastos: number | null;
   variable: number | null;
+  descuento: number | null;
   totalExtras: number | null;
   commentCost: string | null;
   commentPayroll: string | null;
@@ -1351,6 +1353,7 @@ export type OfficePayrollUpsertPayload = {
   horasExtras?: number | string | null;
   otrosGastos?: number | string | null;
   variable?: number | string | null;
+  descuento?: number | string | null;
   totalExtras?: number | string | null;
   commentCost?: string | null;
   commentPayroll?: string | null;

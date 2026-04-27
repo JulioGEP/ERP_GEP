@@ -22,6 +22,7 @@ type OfficePayrollRow = office_payrolls & {
   horas_extras?: DecimalLike;
   otros_gastos?: DecimalLike;
   variable?: DecimalLike;
+  descuento?: DecimalLike;
   convenio?: string | null;
   antiguedad?: Date | null;
   horas_semana?: DecimalLike;
@@ -54,6 +55,7 @@ type OfficePayrollResponseItem = {
   horasExtras: number | null;
   otrosGastos: number | null;
   variable: number | null;
+  descuento: number | null;
   totalExtras: number | null;
   commentCost: string | null;
   commentPayroll: string | null;
@@ -110,6 +112,7 @@ type OfficePayrollPayload = {
   horasExtras?: unknown;
   otrosGastos?: unknown;
   variable?: unknown;
+  descuento?: unknown;
   totalExtras?: unknown;
   commentCost?: unknown;
   commentPayroll?: unknown;
@@ -262,6 +265,7 @@ function calculateExtrasTotal(record: {
   festivo?: DecimalLike;
   horas_extras?: DecimalLike;
   otros_gastos?: DecimalLike;
+  descuento?: DecimalLike;
 }): number | null {
   const persistedTotal = decimalToNumber(record.total_extras);
   if (persistedTotal !== null) return persistedTotal;
@@ -278,9 +282,11 @@ function calculateExtrasTotal(record: {
     .map((value) => decimalToNumber(value))
     .filter((value): value is number => value !== null);
 
-  if (values.length === 0) return null;
+  const descuento = decimalToNumber(record.descuento);
+  if (values.length === 0 && descuento === null) return null;
 
-  return Number(values.reduce((total, value) => total + value, 0));
+  const sum = values.length > 0 ? Number(values.reduce((total, value) => total + value, 0)) : 0;
+  return sum - (descuento ?? 0);
 }
 
 function calculateBrutoExtras(record: {
@@ -290,6 +296,7 @@ function calculateBrutoExtras(record: {
   festivo?: DecimalLike;
   horas_extras?: DecimalLike;
   variable?: DecimalLike;
+  descuento?: DecimalLike;
 }): number | null {
   const values = [
     record.otros_gastos,
@@ -302,9 +309,11 @@ function calculateBrutoExtras(record: {
     .map((value) => decimalToNumber(value))
     .filter((value): value is number => value !== null);
 
-  if (values.length === 0) return null;
+  const descuento = decimalToNumber(record.descuento);
+  if (values.length === 0 && descuento === null) return null;
 
-  return Number(values.reduce((total, value) => total + value, 0));
+  const sum = values.length > 0 ? Number(values.reduce((total, value) => total + value, 0)) : 0;
+  return sum - (descuento ?? 0);
 }
 
 function serializeRecord(
@@ -357,6 +366,7 @@ function serializeRecord(
     horasExtras: decimalToNumber(record.horas_extras),
     otrosGastos: decimalToNumber(record.otros_gastos),
     variable: decimalToNumber(record.variable),
+    descuento: decimalToNumber(record.descuento),
     totalExtras,
     commentCost: sanitizeText((record as { comment_cost?: unknown }).comment_cost),
     commentPayroll: sanitizeText(record.comment_payroll),
@@ -609,6 +619,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
   const hasHorasExtras = hasField('horasExtras');
   const hasOtrosGastos = hasField('otrosGastos');
   const hasVariable = hasField('variable');
+  const hasDescuento = hasField('descuento');
   const hasTotalExtras = hasField('totalExtras');
   const hasCommentCost = hasField('commentCost');
   const hasCommentPayroll = hasField('commentPayroll');
@@ -636,6 +647,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
   const horasExtras = hasHorasExtras ? parseDecimal(payload.horasExtras) : undefined;
   const otrosGastos = hasOtrosGastos ? parseDecimal(payload.otrosGastos) : undefined;
   const variable = hasVariable ? parseDecimal(payload.variable) : undefined;
+  const descuento = hasDescuento ? parseDecimal(payload.descuento) : undefined;
   const totalExtrasInput = hasTotalExtras ? parseDecimal(payload.totalExtras) : undefined;
   const commentCost = hasCommentCost ? sanitizeText(payload.commentCost) : undefined;
   const commentPayroll = hasCommentPayroll ? sanitizeText(payload.commentPayroll) : undefined;
@@ -709,7 +721,8 @@ async function handlePut(prisma = getPrisma(), request: any) {
     hasNocturnidad ||
     hasFestivo ||
     hasHorasExtras ||
-    hasOtrosGastos;
+    hasOtrosGastos ||
+    hasDescuento;
 
   const hasAnyBrutoExtraField =
     hasPernocta || hasNocturnidad || hasFestivo || hasHorasExtras || hasOtrosGastos || hasVariable;
@@ -722,6 +735,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
   const currentHorasExtras = decimalToNumber(existingRecord?.horas_extras);
   const currentOtrosGastos = decimalToNumber(existingRecord?.otros_gastos);
   const currentVariable = decimalToNumber(existingRecord?.variable);
+  const currentDescuento = decimalToNumber(existingRecord?.descuento);
 
   const resolvedDietas = hasDietas ? dietas ?? null : currentDietas;
   const resolvedKilometrajes = hasKilometrajes ? kilometrajes ?? null : currentKilometrajes;
@@ -731,7 +745,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
   const resolvedHorasExtras = hasHorasExtras ? horasExtras ?? null : currentHorasExtras;
   const resolvedOtrosGastos = hasOtrosGastos ? otrosGastos ?? null : currentOtrosGastos;
   const resolvedVariable = hasVariable ? variable ?? null : currentVariable;
-
+  const resolvedDescuento = hasDescuento ? descuento ?? null : currentDescuento;
 
   const currentSalarioBruto = decimalToNumber(existingRecord?.salario_bruto);
   const resolvedSalarioBruto = hasSalarioBruto ? salarioBruto ?? null : currentSalarioBruto;
@@ -742,6 +756,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
     horas_extras: resolvedHorasExtras,
     otros_gastos: resolvedOtrosGastos,
     variable: resolvedVariable,
+    descuento: resolvedDescuento,
   });
   const resolvedSalarioBrutoTotal =
     resolvedSalarioBruto === null && resolvedSalarioBrutoExtras === null
@@ -757,6 +772,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
         festivo: resolvedFestivo,
         horas_extras: resolvedHorasExtras,
         otros_gastos: resolvedOtrosGastos,
+        descuento: resolvedDescuento,
       })
     : hasTotalExtras
       ? totalExtrasInput ?? null
@@ -777,6 +793,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
   if (hasOtrosGastos)
     updateData.otros_gastos = otrosGastos === null ? null : toDecimalOrNull(otrosGastos);
   if (hasVariable) updateData.variable = variable === null ? null : toDecimalOrNull(variable);
+  if (hasDescuento) updateData.descuento = descuento === null ? new Prisma.Decimal(0) : toDecimalOrNull(descuento) ?? new Prisma.Decimal(0);
   if (hasAnyExtrasField || hasTotalExtras) {
     updateData.total_extras =
       resolvedTotalExtras === null ? null : toDecimalOrNull(resolvedTotalExtras);
@@ -824,6 +841,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
     festivo: hasFestivo ? festivo ?? null : null,
     horas_extras: hasHorasExtras ? horasExtras ?? null : null,
     otros_gastos: hasOtrosGastos ? otrosGastos ?? null : null,
+    descuento: hasDescuento ? descuento ?? null : null,
   });
 
   const record = await prisma.office_payrolls.upsert({
@@ -859,6 +877,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
           : toDecimalOrNull(otrosGastos)
         : null,
       variable: hasVariable ? (variable === null ? null : toDecimalOrNull(variable)) : null,
+      descuento: hasDescuento ? (descuento === null ? new Prisma.Decimal(0) : toDecimalOrNull(descuento) ?? new Prisma.Decimal(0)) : new Prisma.Decimal(0),
       total_extras: createTotalExtras === null ? null : toDecimalOrNull(createTotalExtras),
       ...(hasCommentCost ? ({ comment_cost: commentCost ?? null } as Record<string, string | null>) : {}),
       ...(hasCommentPayroll
