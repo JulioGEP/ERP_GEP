@@ -906,7 +906,7 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
                   key={definition.key}
                   className="text-end bg-light"
                   style={{
-                    width: definition.key === 'nocturnidad' ? '94px' : '78px',
+                    width: definition.key === 'nocturnidad' || definition.key === 'kilometraje' ? '94px' : '78px',
                     position: 'sticky',
                     top: 0,
                     zIndex: 3,
