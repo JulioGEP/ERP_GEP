@@ -34,6 +34,7 @@ const COST_FIELD_DEFINITIONS: ReadonlyArray<{
   { key: 'festivo', label: 'Festivo' },
   { key: 'horasExtras', label: 'Horas extras' },
   { key: 'gastosExtras', label: 'Otros gastos' },
+  { key: 'descuento', label: 'Descuento' },
 ];
 
 const NON_HIGHLIGHT_COST_KEYS = new Set<TrainerExtraCostFieldKey>([
@@ -689,9 +690,18 @@ export default function CostesExtraPage({ onOpenBudgetSession }: CostesExtraPage
       }
 
       const draft = drafts[item.key] ?? createDraftFromItem(item);
+      const descuentoValue = parseInputToNumber(draft.fields['descuento']) ?? 0;
+      const hasFormacion = (item.costs.precioCosteFormacion ?? 0) > 0;
+      const hasPreventivo = (item.costs.precioCostePreventivo ?? 0) > 0;
+
       for (const definition of COST_FIELD_DEFINITIONS) {
         const parsed = parseInputToNumber(draft.fields[definition.key]);
-        const value = parsed ?? 0;
+        let value = parsed ?? 0;
+        if (definition.key === 'precioCosteFormacion' && hasFormacion) {
+          value -= descuentoValue;
+        } else if (definition.key === 'precioCostePreventivo' && hasPreventivo) {
+          value -= descuentoValue;
+        }
         totals[definition.key] += value;
         counts[definition.key] += 1;
       }
