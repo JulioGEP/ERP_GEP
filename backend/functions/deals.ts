@@ -265,10 +265,10 @@ function buildStudentIdentifierKey(
   return `${trimmedSessionId}::${identifier.type}::${identifier.value}`;
 }
 
-  async function syncFormacionAbiertaSessionsAndStudents(
-    prisma: PrismaClient,
-    dealId: string,
-  ): Promise<FormacionAbiertaSyncResult> {
+export async function syncFormacionAbiertaSessionsAndStudents(
+  prisma: PrismaClient,
+  dealId: string,
+): Promise<FormacionAbiertaSyncResult> {
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const generationResult = await generateSessionsForDeal(tx, dealId);
 

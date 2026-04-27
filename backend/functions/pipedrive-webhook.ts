@@ -3,7 +3,7 @@ import type { Handler, HandlerResponse } from '@netlify/functions';
 import { extractProductCatalogAttributes, getPerson, getProduct } from './_shared/pipedrive';
 import { COMMON_HEADERS } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
-import { deleteDealFromDatabase, importDealFromPipedrive } from './deals';
+import { deleteDealFromDatabase, importDealFromPipedrive, syncFormacionAbiertaSessionsAndStudents } from './deals';
 import { buildMailchimpPersonInput } from './_shared/pipedrive-mailchimp';
 import { syncBudgetToHolded } from './budgets-send-to-holded';
 
@@ -378,28 +378,12 @@ async function refreshDealAfterWebhook(
 
   if (!stored) return false;
 
+  // Re-importamos una vez para capturar datos que Pipedrive actualiza de forma asíncrona
+  // tras marcar el deal como ganado (p.ej. productos, org, persona). Los alumnos de
+  // Formación Abierta se sincronizan en el handler del webhook de nota, que llega
+  // después cuando la automatización de Pipedrive crea la nota con el listado.
   await new Promise((resolve) => setTimeout(resolve, 1500));
   await importDealFromPipedrive(dealId);
-
-  const pipeline = stored.pipeline_label ?? stored.pipeline_id ?? null;
-  const isFormacionAbierta = isFormacionAbiertaPipeline(pipeline);
-
-  // Reintentamos una vez más para capturar notas/alumnos que llegan con retraso desde Pipedrive.
-  await new Promise((resolve) => setTimeout(resolve, 3500));
-  await importDealFromPipedrive(dealId);
-
-  // En Formación Abierta algunas automatizaciones de Pipedrive tardan más
-  // en crear la nota con el listado de alumnos. Si aún no hay alumnos,
-  // hacemos un último reintento.
-  if (isFormacionAbierta) {
-    const studentsCount = await prisma.alumnos.count({
-      where: { deal_id: dealId },
-    });
-    if (studentsCount === 0) {
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-      await importDealFromPipedrive(dealId);
-    }
-  }
 
   return true;
 }
@@ -558,7 +542,72 @@ export const handler: Handler = async (event) => {
 
       const storedPipeline = storedDeal?.pipeline_label ?? storedDeal?.pipeline_id ?? null;
       if (storedDeal && isFormacionAbiertaPipeline(storedPipeline)) {
-        await refreshDealAfterWebhook(prisma, relatedDealId);
+        // Guardamos la nota directamente desde el payload del webhook (sin llamada a la API de
+        // Pipedrive) para que esté disponible en BD antes de sincronizar alumnos.
+        const noteData = body?.['data'] as Record<string, unknown> | undefined;
+        const noteId = normalizeDealId(noteData?.['id']);
+        const noteContent = String(noteData?.['content'] ?? noteData?.['note'] ?? '');
+        const noteAuthorRaw = noteData?.['user'];
+        const noteAuthor =
+          noteAuthorRaw && typeof noteAuthorRaw === 'object'
+            ? normalizeText((noteAuthorRaw as any).name)
+            : normalizeText(noteData?.['author_name']);
+        if (noteId) {
+          const now = new Date();
+          const createdAt = noteData?.['add_time']
+            ? new Date(String(noteData['add_time']))
+            : now;
+          const updatedAt = noteData?.['update_time']
+            ? new Date(String(noteData['update_time']))
+            : now;
+          await prisma.deal_notes.upsert({
+            where: { id: noteId },
+            create: {
+              id: noteId,
+              deal_id: relatedDealId,
+              content: noteContent,
+              author: noteAuthor,
+              created_at: createdAt,
+              updated_at: updatedAt,
+            },
+            update: {
+              content: noteContent,
+              author: noteAuthor,
+              updated_at: updatedAt,
+            },
+          });
+        }
+
+        // Sincronizamos sesiones y alumnos directamente, sin reintentos con sleep que
+        // superan el timeout de Netlify. La nota ya está en BD en este punto.
+        try {
+          const syncResult = await syncFormacionAbiertaSessionsAndStudents(
+            prisma,
+            relatedDealId,
+          );
+          console.log(
+            JSON.stringify({
+              event: 'formacion-abierta-note-webhook-sync',
+              deal_id: relatedDealId,
+              note_id: noteId,
+              sessions_created: syncResult.sessionsCreated,
+              students_created: syncResult.studentsCreated,
+              students_skipped_duplicate: syncResult.studentsSkippedDuplicate,
+              students_skipped_missing_identifier: syncResult.studentsSkippedMissingIdentifier,
+              students_skipped_no_session: syncResult.studentsSkippedNoSession,
+            }),
+          );
+        } catch (syncError) {
+          console.error('[pipedrive-webhook] Error sincronizando alumnos desde nota', {
+            dealId: relatedDealId,
+            noteId,
+            error:
+              syncError instanceof Error
+                ? { message: syncError.message, stack: syncError.stack }
+                : syncError,
+          });
+        }
+
         await autoSyncBudgetToHolded(prisma, relatedDealId);
         processedDealId = relatedDealId;
         processedAction = 'updated';
