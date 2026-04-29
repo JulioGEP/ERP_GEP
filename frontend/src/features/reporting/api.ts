@@ -1523,6 +1523,59 @@ export type ActuacionesPreventivosFilters = {
   endDate?: string;
 };
 
+export type ActuacionesPreventivosUpdatePayload = {
+  id: string;
+  dealId: string;
+  fechaEjercicio: string;
+  cliente?: string | null;
+  personaContacto?: string | null;
+  direccionPreventivo?: string | null;
+  bombero?: string | null;
+  turno?: string | null;
+  partesTrabajo?: number | null;
+  asistenciasSanitarias?: number | null;
+  derivaronMutua?: number | null;
+  derivacionAmbulancia?: number | null;
+  observaciones?: string | null;
+  responsable?: string | null;
+};
+
+export async function updateActuacionesPreventivosInforme(
+  payload: ActuacionesPreventivosUpdatePayload
+): Promise<ActuacionesPreventivosInforme> {
+  const response = await putJson<{ informe?: unknown }>('/actuaciones-preventivos', payload);
+  const raw = response?.informe;
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('Respuesta inválida del servidor.');
+  }
+  const r = raw as Record<string, unknown>;
+  const id = sanitizeText(r.id);
+  const dealId = sanitizeText(r.deal_id);
+  const fechaEjercicio = sanitizeDate(r.fecha_ejercicio);
+  if (!id || !dealId || !fechaEjercicio) {
+    throw new Error('Respuesta inválida del servidor.');
+  }
+  return {
+    id,
+    dealId,
+    cliente: sanitizeText(r.cliente),
+    personaContacto: sanitizeText(r.persona_contacto),
+    direccionPreventivo: sanitizeText(r.direccion_preventivo),
+    bombero: sanitizeText(r.bombero),
+    fechaEjercicio,
+    turno: sanitizeText(r.turno),
+    partesTrabajo: sanitizeInteger(r.partes_trabajo) ?? 0,
+    asistenciasSanitarias: sanitizeInteger(r.asistencias_sanitarias) ?? 0,
+    derivaronMutua: sanitizeInteger(r.derivaron_mutua) ?? 0,
+    derivacionAmbulancia: sanitizeInteger(r.derivacion_ambulancia) ?? 0,
+    observaciones: sanitizeText(r.observaciones),
+    responsable: sanitizeText(r.responsable),
+    createdByUserId: sanitizeText(r.created_by_user_id),
+    createdAt: sanitizeDate(r.created_at),
+    updatedAt: sanitizeDate(r.updated_at),
+  };
+}
+
 export async function fetchActuacionesPreventivosInformes(
   filters: ActuacionesPreventivosFilters = {}
 ): Promise<ActuacionesPreventivosInforme[]> {
