@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { Alert, Badge, Button, Card, Col, Form, Row, Spinner, Table } from 'react-bootstrap';
+import { useMemo, useRef, useState } from 'react';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Alert, Badge, Button, Card, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
 import type { Content, TableCell } from 'pdfmake/interfaces';
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
@@ -8,6 +8,7 @@ import preventivoHeaderImg from '../../features/informes/assets/pdf/header.png';
 import { isApiError } from '../../api/client';
 import {
   fetchActuacionesPreventivosInformes,
+  updateActuacionesPreventivosInforme,
   type ActuacionesPreventivosInforme,
 } from '../../features/reporting/api';
 import { emitToast } from '../../utils/toast';
@@ -262,6 +263,41 @@ function buildKpiRows(informes: ActuacionesPreventivosInforme[], granularity: Gr
     });
 }
 
+type EditFormState = {
+  dealId: string;
+  fechaEjercicio: string;
+  cliente: string;
+  personaContacto: string;
+  direccionPreventivo: string;
+  bombero: string;
+  turno: string;
+  partesTrabajo: string;
+  asistenciasSanitarias: string;
+  derivaronMutua: string;
+  derivacionAmbulancia: string;
+  observaciones: string;
+  responsable: string;
+};
+
+function informeToFormState(informe: ActuacionesPreventivosInforme): EditFormState {
+  const fecha = parseDateSafe(informe.fechaEjercicio);
+  return {
+    dealId: informe.dealId,
+    fechaEjercicio: fecha ? formatDateInput(fecha) : '',
+    cliente: informe.cliente ?? '',
+    personaContacto: informe.personaContacto ?? '',
+    direccionPreventivo: informe.direccionPreventivo ?? '',
+    bombero: informe.bombero ?? '',
+    turno: informe.turno ?? 'Mañana',
+    partesTrabajo: String(informe.partesTrabajo),
+    asistenciasSanitarias: String(informe.asistenciasSanitarias),
+    derivaronMutua: String(informe.derivaronMutua),
+    derivacionAmbulancia: String(informe.derivacionAmbulancia),
+    observaciones: informe.observaciones ?? '',
+    responsable: informe.responsable ?? '',
+  };
+}
+
 export default function ActuacionesPreventivosDashboardPage() {
   const today = useMemo(() => new Date(), []);
   const [granularity, setGranularity] = useState<Granularity>('mes');
@@ -271,6 +307,10 @@ export default function ActuacionesPreventivosDashboardPage() {
   const [selectedWeekKey, setSelectedWeekKey] = useState<string>(ACCUMULATED_WEEK_KEY);
   const [heatMapMonth, setHeatMapMonth] = useState<number>(0);
   const [heatMapShift, setHeatMapShift] = useState<ShiftFilter>('todos');
+  const [editingInforme, setEditingInforme] = useState<ActuacionesPreventivosInforme | null>(null);
+  const [editForm, setEditForm] = useState<EditFormState | null>(null);
+  const editFormRef = useRef<HTMLFormElement>(null);
+  const queryClient = useQueryClient();
 
   const informesQuery = useQuery({
     queryKey: ['reporting', 'actuaciones-preventivos', startDate, endDate],
@@ -282,6 +322,57 @@ export default function ActuacionesPreventivosDashboardPage() {
     placeholderData: keepPreviousData,
     staleTime: 60_000,
   });
+
+  const updateMutation = useMutation({
+    mutationFn: updateActuacionesPreventivosInforme,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['reporting', 'actuaciones-preventivos'] });
+      setEditingInforme(null);
+      setEditForm(null);
+      emitToast({ variant: 'success', message: 'Informe actualizado correctamente.' });
+    },
+    onError: (error) => {
+      emitToast({
+        variant: 'danger',
+        message: isApiError(error) ? error.message : 'No se pudo actualizar el informe.',
+      });
+    },
+  });
+
+  const handleOpenEdit = (informe: ActuacionesPreventivosInforme) => {
+    setEditingInforme(informe);
+    setEditForm(informeToFormState(informe));
+  };
+
+  const handleCloseEdit = () => {
+    setEditingInforme(null);
+    setEditForm(null);
+  };
+
+  const handleEditFieldChange = (field: keyof EditFormState, value: string) => {
+    setEditForm((prev) => (prev ? { ...prev, [field]: value } : prev));
+  };
+
+  const handleEditSubmit = (event: { preventDefault: () => void }) => {
+    event.preventDefault();
+    if (!editingInforme || !editForm) return;
+    updateMutation.mutate({
+      id: editingInforme.id,
+      dealId: editForm.dealId,
+      fechaEjercicio: editForm.fechaEjercicio,
+      cliente: editForm.cliente || null,
+      personaContacto: editForm.personaContacto || null,
+      direccionPreventivo: editForm.direccionPreventivo || null,
+      bombero: editForm.bombero || null,
+      turno: editForm.turno || null,
+      partesTrabajo: editForm.partesTrabajo !== '' ? Number(editForm.partesTrabajo) : null,
+      asistenciasSanitarias: editForm.asistenciasSanitarias !== '' ? Number(editForm.asistenciasSanitarias) : null,
+      derivaronMutua: editForm.derivaronMutua !== '' ? Number(editForm.derivaronMutua) : null,
+      derivacionAmbulancia: editForm.derivacionAmbulancia !== '' ? Number(editForm.derivacionAmbulancia) : null,
+      observaciones: editForm.observaciones || null,
+      responsable: editForm.responsable || null,
+    });
+  };
 
   const informes = informesQuery.data ?? [];
 
@@ -688,6 +779,7 @@ export default function ActuacionesPreventivosDashboardPage() {
   };
 
   return (
+    <>
     <section className="py-3 d-grid gap-3">
       <Card className="shadow-sm">
         <Card.Header as="h1" className="h4 mb-0">Dashboard - Actuaciones preventivos</Card.Header>
@@ -1047,6 +1139,7 @@ export default function ActuacionesPreventivosDashboardPage() {
               <Table striped bordered hover size="sm" className="align-middle mb-0">
                 <thead>
                   <tr>
+                    <th>Acciones</th>
                     <th>Fecha ejercicio</th>
                     <th>Deal ID</th>
                     <th>Cliente</th>
@@ -1065,6 +1158,15 @@ export default function ActuacionesPreventivosDashboardPage() {
                 <tbody>
                   {informes.map((informe) => (
                     <tr key={informe.id}>
+                      <td className="text-nowrap">
+                        <Button
+                          variant="outline-primary"
+                          size="sm"
+                          onClick={() => handleOpenEdit(informe)}
+                        >
+                          Editar
+                        </Button>
+                      </td>
                       <td>{formatDateDisplay(informe.fechaEjercicio)}</td>
                       <td className="text-nowrap">{informe.dealId}</td>
                       <td>{informe.cliente ?? '—'}</td>
@@ -1087,5 +1189,173 @@ export default function ActuacionesPreventivosDashboardPage() {
         </Card.Body>
       </Card>
     </section>
+
+    <Modal show={editingInforme !== null} onHide={handleCloseEdit} size="lg">
+      <Modal.Header closeButton>
+        <Modal.Title>Editar informe</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        {editForm && (
+          <Form ref={editFormRef} onSubmit={handleEditSubmit} id="edit-informe-form">
+            <Row className="g-3">
+              <Col xs={12} md={6}>
+                <Form.Group controlId="edit-dealId">
+                  <Form.Label>Deal ID / Presupuesto <span className="text-danger">*</span></Form.Label>
+                  <Form.Control
+                    required
+                    value={editForm.dealId}
+                    onChange={(e) => handleEditFieldChange('dealId', e.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col xs={12} md={6}>
+                <Form.Group controlId="edit-fechaEjercicio">
+                  <Form.Label>Fecha ejercicio <span className="text-danger">*</span></Form.Label>
+                  <Form.Control
+                    required
+                    type="date"
+                    value={editForm.fechaEjercicio}
+                    onChange={(e) => handleEditFieldChange('fechaEjercicio', e.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col xs={12} md={6}>
+                <Form.Group controlId="edit-cliente">
+                  <Form.Label>Cliente</Form.Label>
+                  <Form.Control
+                    value={editForm.cliente}
+                    onChange={(e) => handleEditFieldChange('cliente', e.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col xs={12} md={6}>
+                <Form.Group controlId="edit-personaContacto">
+                  <Form.Label>Persona de contacto</Form.Label>
+                  <Form.Control
+                    value={editForm.personaContacto}
+                    onChange={(e) => handleEditFieldChange('personaContacto', e.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col xs={12} md={6}>
+                <Form.Group controlId="edit-direccionPreventivo">
+                  <Form.Label>Dirección preventivo</Form.Label>
+                  <Form.Control
+                    value={editForm.direccionPreventivo}
+                    onChange={(e) => handleEditFieldChange('direccionPreventivo', e.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col xs={12} md={6}>
+                <Form.Group controlId="edit-bombero">
+                  <Form.Label>Bombero</Form.Label>
+                  <Form.Control
+                    value={editForm.bombero}
+                    onChange={(e) => handleEditFieldChange('bombero', e.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col xs={12} md={6}>
+                <Form.Group controlId="edit-turno">
+                  <Form.Label>Turno</Form.Label>
+                  <Form.Select
+                    value={editForm.turno}
+                    onChange={(e) => handleEditFieldChange('turno', e.target.value)}
+                  >
+                    <option value="Mañana">Mañana</option>
+                    <option value="Noche">Noche</option>
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+              <Col xs={12} md={6}>
+                <Form.Group controlId="edit-responsable">
+                  <Form.Label>Responsable</Form.Label>
+                  <Form.Control
+                    value={editForm.responsable}
+                    onChange={(e) => handleEditFieldChange('responsable', e.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col xs={6} md={3}>
+                <Form.Group controlId="edit-partesTrabajo">
+                  <Form.Label>Partes trabajo</Form.Label>
+                  <Form.Control
+                    type="number"
+                    min={0}
+                    value={editForm.partesTrabajo}
+                    onChange={(e) => handleEditFieldChange('partesTrabajo', e.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col xs={6} md={3}>
+                <Form.Group controlId="edit-asistenciasSanitarias">
+                  <Form.Label>Asistencias sanitarias</Form.Label>
+                  <Form.Control
+                    type="number"
+                    min={0}
+                    value={editForm.asistenciasSanitarias}
+                    onChange={(e) => handleEditFieldChange('asistenciasSanitarias', e.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col xs={6} md={3}>
+                <Form.Group controlId="edit-derivaronMutua">
+                  <Form.Label>Derivaron a Mútua</Form.Label>
+                  <Form.Control
+                    type="number"
+                    min={0}
+                    value={editForm.derivaronMutua}
+                    onChange={(e) => handleEditFieldChange('derivaronMutua', e.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col xs={6} md={3}>
+                <Form.Group controlId="edit-derivacionAmbulancia">
+                  <Form.Label>Derivación ambulancia</Form.Label>
+                  <Form.Control
+                    type="number"
+                    min={0}
+                    value={editForm.derivacionAmbulancia}
+                    onChange={(e) => handleEditFieldChange('derivacionAmbulancia', e.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col xs={12}>
+                <Form.Group controlId="edit-observaciones">
+                  <Form.Label>Observaciones</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={3}
+                    value={editForm.observaciones}
+                    onChange={(e) => handleEditFieldChange('observaciones', e.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+            </Row>
+          </Form>
+        )}
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={handleCloseEdit} disabled={updateMutation.isPending}>
+          Cancelar
+        </Button>
+        <Button
+          variant="primary"
+          type="submit"
+          form="edit-informe-form"
+          disabled={updateMutation.isPending}
+        >
+          {updateMutation.isPending ? (
+            <>
+              <Spinner animation="border" size="sm" className="me-2" />
+              Guardando...
+            </>
+          ) : (
+            'Guardar cambios'
+          )}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+    </>
   );
 }

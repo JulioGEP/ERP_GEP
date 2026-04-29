@@ -79,6 +79,125 @@ export const handler = createHttpHandler<any>(async (request) => {
     return successResponse({ informes: records });
   }
 
+  if (request.method === 'PUT') {
+    const prisma = getPrisma();
+    const auth = await requireAuth(request, prisma);
+    if ('error' in auth) {
+      return auth.error;
+    }
+
+    const body = request.body && typeof request.body === 'object' ? request.body : {};
+
+    const id = trimToNull(body.id);
+    if (!id) {
+      return errorResponse('VALIDATION_ERROR', 'El campo id es obligatorio.', 400);
+    }
+
+    const dealId = trimToNull(body.dealId ?? body.presupuesto);
+    if (!dealId) {
+      return errorResponse('VALIDATION_ERROR', 'El campo presupuesto/dealId es obligatorio.', 400);
+    }
+
+    const fechaEjercicio = parseRequiredDate(body.fechaEjercicio);
+    if (!fechaEjercicio) {
+      return errorResponse('VALIDATION_ERROR', 'El campo fechaEjercicio es obligatorio.', 400);
+    }
+
+    const partesTrabajo = parseOptionalInteger(body.partesTrabajo);
+    if (body.partesTrabajo !== null && body.partesTrabajo !== undefined && body.partesTrabajo !== '' && partesTrabajo === null) {
+      return errorResponse('VALIDATION_ERROR', 'El campo partesTrabajo debe ser numérico y mayor o igual que 0.', 400);
+    }
+
+    const asistenciasSanitarias = parseOptionalInteger(body.asistenciasSanitarias);
+    if (
+      body.asistenciasSanitarias !== null &&
+      body.asistenciasSanitarias !== undefined &&
+      body.asistenciasSanitarias !== '' &&
+      asistenciasSanitarias === null
+    ) {
+      return errorResponse('VALIDATION_ERROR', 'El campo asistenciasSanitarias debe ser numérico y mayor o igual que 0.', 400);
+    }
+
+    const derivaronMutua = parseOptionalInteger(body.derivaronMutua);
+    if (
+      body.derivaronMutua !== null &&
+      body.derivaronMutua !== undefined &&
+      body.derivaronMutua !== '' &&
+      derivaronMutua === null
+    ) {
+      return errorResponse('VALIDATION_ERROR', 'El campo derivaronMutua debe ser numérico y mayor o igual que 0.', 400);
+    }
+
+    const derivacionAmbulancia = parseOptionalInteger(body.derivacionAmbulancia);
+    if (
+      body.derivacionAmbulancia !== null &&
+      body.derivacionAmbulancia !== undefined &&
+      body.derivacionAmbulancia !== '' &&
+      derivacionAmbulancia === null
+    ) {
+      return errorResponse('VALIDATION_ERROR', 'El campo derivacionAmbulancia debe ser numérico y mayor o igual que 0.', 400);
+    }
+
+    const hasAsistenciasSanitarias = (asistenciasSanitarias ?? 0) > 0;
+    const derivaronMutuaFinal = hasAsistenciasSanitarias ? derivaronMutua : null;
+    const derivacionAmbulanciaFinal = hasAsistenciasSanitarias ? derivacionAmbulancia : null;
+
+    const turno = trimToNull(body.turno) ?? 'Mañana';
+    if (!ALLOWED_TURNO_VALUES.includes(turno as (typeof ALLOWED_TURNO_VALUES)[number])) {
+      return errorResponse('VALIDATION_ERROR', 'El campo turno debe ser Mañana o Noche.', 400);
+    }
+
+    const existing: any[] = await prisma.$queryRawUnsafe(
+      `SELECT id FROM actuaciones_preventivos_informes WHERE id = $1`,
+      id,
+    );
+    if (!existing.length) {
+      return errorResponse('NOT_FOUND', 'No se encontró el informe indicado.', 404);
+    }
+
+    const updated: any = await prisma.$queryRawUnsafe(
+      `
+        UPDATE actuaciones_preventivos_informes SET
+          deal_id = $2,
+          cliente = $3,
+          persona_contacto = $4,
+          direccion_preventivo = $5,
+          bombero = $6,
+          fecha_ejercicio = $7,
+          turno = $8,
+          partes_trabajo = $9,
+          asistencias_sanitarias = $10,
+          derivaron_mutua = $11,
+          derivacion_ambulancia = $12,
+          observaciones = $13,
+          responsable = $14,
+          updated_at = NOW()
+        WHERE id = $1
+        RETURNING
+          id, deal_id, cliente, persona_contacto, direccion_preventivo, bombero,
+          fecha_ejercicio, turno, partes_trabajo, asistencias_sanitarias,
+          derivaron_mutua, derivacion_ambulancia, observaciones, responsable,
+          created_by_user_id, created_at, updated_at
+      `,
+      id,
+      dealId,
+      trimToNull(body.cliente),
+      trimToNull(body.personaContacto),
+      trimToNull(body.direccionPreventivo),
+      trimToNull(body.bombero),
+      fechaEjercicio,
+      turno,
+      partesTrabajo,
+      asistenciasSanitarias,
+      derivaronMutuaFinal,
+      derivacionAmbulanciaFinal,
+      trimToNull(body.observaciones),
+      trimToNull(body.responsable),
+    );
+
+    return successResponse({ informe: Array.isArray(updated) ? updated[0] : updated });
+  }
+
   if (request.method !== 'POST') {
     return METHOD_NOT_ALLOWED;
   }
