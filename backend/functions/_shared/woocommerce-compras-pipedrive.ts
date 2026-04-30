@@ -716,14 +716,13 @@ async function resolveDealSingleOptionValues(
   order: NormalizedWooOrder,
   resolvedProduct: ProductResolution,
 ): Promise<DealSingleOptionValues> {
-  const trainingPrimaryLabel = readString(order.productName);
-  const trainingLookupCandidates = trainingPrimaryLabel
-    ? [trainingPrimaryLabel]
-    : buildTrainingLookupCandidates([order.productName, resolvedProduct.productName]);
-  const trainingFallbackCandidates = trainingPrimaryLabel
-    ? buildTrainingLookupCandidates([resolvedProduct.productName, order.productName]).filter((candidate) => candidate !== trainingPrimaryLabel)
-    : [];
-  const trainingLookupLabel = trainingPrimaryLabel ?? trainingLookupCandidates[0] ?? null;
+  // Always generate all candidate variations (with/without "Curso " prefix, with/without type suffix)
+  // using both the WooCommerce product name and the resolved DB product name as sources
+  const trainingLookupCandidates = buildTrainingLookupCandidates([
+    order.productName,
+    resolvedProduct.productName,
+  ]);
+  const trainingLookupLabel = readString(order.productName) ?? trainingLookupCandidates[0] ?? null;
   const siteLookupLabel = order.formattedLocation ?? order.rawLocation;
   const normalizedFundae = normalizeBooleanText(order.fundae);
   const fundaeLookupLabel = normalizedFundae === 'yes' ? 'Sí' : normalizedFundae === 'no' ? 'No' : order.fundae;
@@ -734,7 +733,6 @@ async function resolveDealSingleOptionValues(
       fieldKey: DEAL_TRAINING_FIELD_KEY,
       fieldName: 'Formación',
       candidateLabels: trainingLookupCandidates,
-      fallbackLabels: trainingFallbackCandidates,
     }),
     resolveSingleOptionId(prisma, {
       fieldKey: DEAL_SITE_FIELD_KEY,
@@ -864,7 +862,10 @@ function buildDealCreatePayload(
     visible_to: DEFAULT_VISIBLE_TO,
     [DEAL_SERVICE_FIELD_KEY]: DEAL_INITIAL_SERVICE_VALUE,
     [DEAL_TRAINING_DATE_FIELD_KEY]: order.formattedDate,
-    [DEAL_TRAINING_FIELD_KEY]: singleOptionValues.trainingOptionId,
+    // Only send the training field if a match was found — sending null clears the value in Pipedrive
+    ...(singleOptionValues.trainingOptionId !== null && {
+      [DEAL_TRAINING_FIELD_KEY]: singleOptionValues.trainingOptionId,
+    }),
     [DEAL_WC_ORDER_FIELD_KEY]: order.orderId,
     [DEAL_TRAFFIC_SOURCE_FIELD_KEY]: order.trafficSource,
     [DEAL_SOURCE_FIELD_KEY]: DEAL_INITIAL_SOURCE_VALUE,
@@ -885,8 +886,14 @@ function buildDealUpdatePayload(
     visible_to: DEFAULT_VISIBLE_TO,
     currency: order.subtotal > 0 ? 'EUR' : undefined,
     [DEAL_SERVICE_FIELD_KEY]: lifecycle.serviceValue,
-    [DEAL_TRAINING_FIELD_KEY]: singleOptionValues.trainingOptionId,
-    [DEAL_SITE_FIELD_KEY]: singleOptionValues.siteOptionId,
+    // Only send the training field if a match was found — sending null clears the value in Pipedrive
+    ...(singleOptionValues.trainingOptionId !== null && {
+      [DEAL_TRAINING_FIELD_KEY]: singleOptionValues.trainingOptionId,
+    }),
+    // Only send the site field if a match was found
+    ...(singleOptionValues.siteOptionId !== null && {
+      [DEAL_SITE_FIELD_KEY]: singleOptionValues.siteOptionId,
+    }),
     [DEAL_STUDENTS_FIELD_KEY]: String(order.quantity),
     [DEAL_FUNDAE_FIELD_KEY]: singleOptionValues.fundaeOptionId,
     [DEAL_WC_ORDER_FIELD_KEY]: `Order en Woocommerce: ${order.orderNumber}`,
