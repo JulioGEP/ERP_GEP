@@ -408,6 +408,7 @@ model deals {
   w_id_variation                  String?
   presu_holded                    String?
   modo_reserva                    String?
+  centro_coste                    String?
   caes_val                        Boolean                @default(false)
   fundae_val                      Boolean                @default(false)
   hotel_val                       Boolean                @default(false)
