@@ -31,6 +31,7 @@ const KEY_A_FECHA       = "98f072a788090ac2ae52017daaf9618c3a189033";
 const KEY_W_ID_VARIATION = "478b2a7f79323212032ab2344aff193c4bf77523";
 const KEY_PRESU_HOLDED  = "4118257ffc3bad107769f69d05e5bd1d7415cadd";
 const KEY_MODO_RESERVA  = "c6eabce7c04f864646aa72c944f875fd71cdf178";
+const KEY_CENTRO_COSTE  = "21e21e35f209ba485a2e8a209e35eda396875d11";
 
 // HORAS en la **línea del deal** (si existe ese custom en tu instancia)
 const KEY_PRODUCT_HOURS_IN_LINE = "38f11c8876ecde803a027fbf3c9041fda2ae7eb7";
@@ -220,6 +221,7 @@ export async function resolveDealCustomLabels(deal: any) {
   const fObservaciones = findFieldDef(dealFields, KEY_OBSERVACIONES);
   const fDireccionEnvio = findFieldDef(dealFields, KEY_DIRECCION_ENVIO);
   const fFormaPagoMaterial = findFieldDef(dealFields, KEY_FORMA_PAGO_MATERIAL);
+  const fCentroCoste = findFieldDef(dealFields, KEY_CENTRO_COSTE);
 
   // Dirección (no es options): prioriza *_formatted_address
   const trainingAddress = resolveAddressFromDeal(deal, KEY_TRAINING_ADDRESS_BASE);
@@ -284,6 +286,10 @@ export async function resolveDealCustomLabels(deal: any) {
     ? optionLabelOf(fFormaPagoMaterial, deal?.[fFormaPagoMaterial.key]) ?? null
     : toNullableString(deal?.[KEY_FORMA_PAGO_MATERIAL]);
 
+  const centroCoste = fCentroCoste
+    ? optionLabelOf(fCentroCoste, deal?.[fCentroCoste.key]) ?? null
+    : toNullableString(deal?.[KEY_CENTRO_COSTE]);
+
   return {
     trainingAddress,
     sedeLabel,
@@ -304,6 +310,7 @@ export async function resolveDealCustomLabels(deal: any) {
     fechaEstimadaEntregaMaterial,
     direccionEnvio,
     formaPagoMaterial,
+    centroCoste,
   };
 }
 
@@ -350,6 +357,7 @@ export async function mapAndUpsertDealTree({
     fechaEstimadaEntregaMaterial,
     direccionEnvio,
     formaPagoMaterial,
+    centroCoste,
   } =
     await resolveDealCustomLabels(deal);
 
@@ -424,6 +432,7 @@ export async function mapAndUpsertDealTree({
       fecha_estimada_entrega_material: fechaEstimadaEntregaMaterial ?? null,
       direccion_envio: direccionEnvio ?? null,
       forma_pago_material: formaPagoMaterial ?? null,
+      centro_coste: centroCoste ?? null,
       comercial: ownerName ?? null,
       a_fecha: aFecha ?? null,
       w_id_variation: wIdVariation ?? null,
@@ -453,6 +462,7 @@ export async function mapAndUpsertDealTree({
       ),
       direccion_envio: keep(current?.direccion_envio, direccionEnvio),
       forma_pago_material: keep(current?.forma_pago_material, formaPagoMaterial),
+      centro_coste: centroCoste ?? null,
       comercial: ownerName ?? null,
       a_fecha: aFecha ?? null,
       w_id_variation: wIdVariation ?? null,

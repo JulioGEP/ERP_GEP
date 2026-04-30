@@ -80,6 +80,7 @@ model deals {
   w_id_variation   String?                @db.VarChar(255)
   presu_holded     String?                @db.Text
   modo_reserva     String?                @db.VarChar(255)
+  centro_coste     String?                @db.Text
   comments         comments[]
   deal_files       deal_files[]
   deal_notes       deal_notes[]
