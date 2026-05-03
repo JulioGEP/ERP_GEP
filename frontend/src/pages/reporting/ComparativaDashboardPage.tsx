@@ -11,6 +11,7 @@ import {
   type ComparativaTrend,
   type ComparativaSessionGroup,
   type ComparativaCostCenterBreakdown,
+  type ComparativaCostCenterYearlyBreakdown,
 } from '../../features/reporting/api';
 
 const METRIC_CONFIG: { key: string; label: string }[] = [
@@ -943,6 +944,115 @@ export default function ComparativaDashboardPage() {
     );
   };
 
+  const renderCostCenterYearlyTable = (
+    title: string,
+    description: string,
+    getValue: (entry: ComparativaCostCenterYearlyBreakdown['entries'][number]) => number,
+  ) => {
+    const data: ComparativaCostCenterYearlyBreakdown = dashboardQuery.data?.costCenterYearlyBreakdown ?? {
+      years: [],
+      costCenters: [],
+      entries: [],
+    };
+    const { years, costCenters, entries } = data;
+
+    if (years.length === 0 || costCenters.length === 0) {
+      return (
+        <Card className="h-100 shadow-sm">
+          <Card.Body className="d-flex flex-column gap-3">
+            <div>
+              <Card.Title as="h6" className="mb-1">{title}</Card.Title>
+              <div className="text-muted small">{description}</div>
+            </div>
+            <div className="text-muted small py-3">Sin datos disponibles</div>
+          </Card.Body>
+        </Card>
+      );
+    }
+
+    const entryMap = new Map<string, number>();
+    for (const entry of entries) {
+      entryMap.set(`${entry.year}:${entry.costCenter}`, getValue(entry));
+    }
+
+    const getVal = (year: number, cc: string) => entryMap.get(`${year}:${cc}`) ?? 0;
+
+    const rowTotals = years.map((year) =>
+      costCenters.reduce((sum, cc) => sum + getVal(year, cc), 0),
+    );
+
+    const colTotals = costCenters.map((cc) =>
+      years.reduce((sum, year) => sum + getVal(year, cc), 0),
+    );
+
+    const grandTotal = rowTotals.reduce((sum, v) => sum + v, 0);
+
+    const lastYear = years[years.length - 1];
+    const prevYear = years.length >= 2 ? years[years.length - 2] : null;
+
+    const formatPct = (current: number, previous: number) => {
+      if (previous === 0) return current === 0 ? '—' : '+∞%';
+      const pct = ((current - previous) / previous) * 100;
+      return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+    };
+
+    return (
+      <Card className="h-100 shadow-sm">
+        <Card.Body className="d-flex flex-column gap-3">
+          <div>
+            <Card.Title as="h6" className="mb-1">{title}</Card.Title>
+            <div className="text-muted small">{description}</div>
+          </div>
+
+          <div className="table-responsive">
+            <table className="table align-middle mb-0" style={{ fontSize: '0.8rem' }}>
+              <thead>
+                <tr>
+                  <th className="text-muted small" style={{ minWidth: 60 }}></th>
+                  <th className="text-muted small text-end fw-semibold">Total</th>
+                  {costCenters.map((cc) => (
+                    <th key={cc} className="text-muted small text-end" style={{ minWidth: 90 }}>{cc}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {years.map((year, yi) => (
+                  <tr key={year}>
+                    <td className="fw-semibold" style={{ color: '#3b6abf' }}>{year}</td>
+                    <td className="text-end fw-semibold">{numberFormatter.format(rowTotals[yi])}</td>
+                    {costCenters.map((cc) => (
+                      <td key={cc} className="text-end">{numberFormatter.format(getVal(year, cc))}</td>
+                    ))}
+                  </tr>
+                ))}
+                {prevYear !== null && (
+                  <tr className="table-light">
+                    <td className="small text-muted">{prevYear}→{lastYear}</td>
+                    <td className="text-end small">
+                      {formatPct(rowTotals[years.length - 1], rowTotals[years.length - 2])}
+                    </td>
+                    {costCenters.map((cc) => (
+                      <td key={cc} className="text-end small text-muted">
+                        {formatPct(getVal(lastYear, cc), getVal(prevYear, cc))}
+                      </td>
+                    ))}
+                  </tr>
+                )}
+                <tr className="fw-semibold table-secondary">
+                  <td className="small">Total</td>
+                  <td className="text-end">{numberFormatter.format(grandTotal)}</td>
+                  {costCenters.map((cc, ci) => (
+                    <td key={cc} className="text-end">{numberFormatter.format(colTotals[ci])}</td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </Card.Body>
+      </Card>
+    );
+  };
+
   const renderMobileUnitsUsage = () => {
     const items = dashboardQuery.data?.mobileUnitsUsage ?? [];
 
@@ -1069,6 +1179,26 @@ export default function ComparativaDashboardPage() {
         <Row className="g-3">
           <Col xs={12}>
             {renderCostCenterBreakdown()}
+          </Col>
+        </Row>
+
+        <Row className="g-3">
+          <Col xs={12}>
+            {renderCostCenterYearlyTable(
+              'Formaciones por año y centro de coste',
+              'Comparativa anual de formaciones agrupadas por centro de coste',
+              (e) => e.formaciones,
+            )}
+          </Col>
+        </Row>
+
+        <Row className="g-3">
+          <Col xs={12}>
+            {renderCostCenterYearlyTable(
+              'Preventivos por año y centro de coste',
+              'Comparativa anual de preventivos agrupados por centro de coste',
+              (e) => e.preventivos,
+            )}
           </Col>
         </Row>
 
