@@ -1210,18 +1210,48 @@ export const handler = createHttpHandler(async (request) => {
     ...mobileUnitSessionGroups,
   ];
 
-  const [dealSites, variantSites, pipelineOptions, comercialOptions, costCenterOptions]: [
+  const YEARLY_START = new Date(Date.UTC(2022, 0, 1));
+
+  const [dealSites, variantSites, pipelineOptions, comercialOptions, costCenterOptions, allYearlySessionsRaw, allYearlyVariantDeals]: [
     { sede_label: string | null }[],
     { sede: string | null }[],
     { pipeline_id: string | null }[],
     { comercial: string | null }[],
     { centro_coste: string | null }[],
+    Array<{ fecha_inicio_utc: Date | null; deals: { pipeline_id: string | null; centro_coste: string | null } | null }>,
+    Array<{ a_fecha: Date | null; centro_coste: string | null }>,
   ] = await Promise.all([
     prisma.deals.findMany({ distinct: ['sede_label'], select: { sede_label: true } }),
     prisma.variants.findMany({ distinct: ['sede'], select: { sede: true } }),
     prisma.deals.findMany({ distinct: ['pipeline_id'], select: { pipeline_id: true } }),
     prisma.deals.findMany({ distinct: ['comercial'], select: { comercial: true } }),
     prisma.deals.findMany({ distinct: ['centro_coste'], select: { centro_coste: true } }),
+    prisma.sesiones.findMany({
+      where: {
+        fecha_inicio_utc: { gte: YEARLY_START },
+        deals: {
+          ...(siteFilters ? { sede_label: { in: siteFilters } } : {}),
+          ...(trainingTypes ? { pipeline_id: { in: trainingTypes } } : {}),
+          ...(comerciales ? { comercial: { in: comerciales } } : {}),
+          ...(costCenters ? { centro_coste: { in: costCenters } } : {}),
+        },
+      },
+      select: {
+        fecha_inicio_utc: true,
+        deals: { select: { pipeline_id: true, centro_coste: true } },
+      },
+    }),
+    prisma.deals.findMany({
+      where: {
+        w_id_variation: { not: null },
+        a_fecha: { gte: YEARLY_START },
+        ...(siteFilters ? { sede_label: { in: siteFilters } } : {}),
+        ...(trainingTypes ? { pipeline_id: { in: trainingTypes } } : {}),
+        ...(comerciales ? { comercial: { in: comerciales } } : {}),
+        ...(costCenters ? { centro_coste: { in: costCenters } } : {}),
+      },
+      select: { a_fecha: true, centro_coste: true },
+    }),
   ]);
 
   const siteOptionSet = new Set<string>();
@@ -1249,6 +1279,52 @@ export const handler = createHttpHandler(async (request) => {
       .filter((value): value is string => Boolean(value))
       .sort((a, b) => a.localeCompare(b)),
   } as const;
+
+  type YearlyCostCenterEntry = { year: number; costCenter: string; formaciones: number; preventivos: number };
+  const yearlyMap = new Map<string, YearlyCostCenterEntry>();
+
+  const getYearlyEntry = (year: number, cc: string): YearlyCostCenterEntry => {
+    const key = `${year}:${cc}`;
+    if (!yearlyMap.has(key)) {
+      yearlyMap.set(key, { year, costCenter: cc, formaciones: 0, preventivos: 0 });
+    }
+    return yearlyMap.get(key)!;
+  };
+
+  for (const session of allYearlySessionsRaw) {
+    if (!session.fecha_inicio_utc) continue;
+    const pipeline = normalizePipelineLabel(session.deals?.pipeline_id ?? null);
+    if (!pipeline || isPciPipeline(pipeline)) continue;
+    const year = new Date(session.fecha_inicio_utc).getUTCFullYear();
+    const cc = session.deals?.centro_coste?.trim() || 'Sin centro de coste';
+    const entry = getYearlyEntry(year, cc);
+    if (pipeline === 'gep services' || pipeline === 'preventivos') {
+      entry.preventivos++;
+    } else {
+      entry.formaciones++;
+    }
+  }
+
+  for (const deal of allYearlyVariantDeals) {
+    if (!deal.a_fecha) continue;
+    const year = new Date(deal.a_fecha).getUTCFullYear();
+    const cc = deal.centro_coste?.trim() || 'Sin centro de coste';
+    getYearlyEntry(year, cc).formaciones++;
+  }
+
+  const yearlyEntries = Array.from(yearlyMap.values())
+    .sort((a, b) => a.year - b.year || a.costCenter.localeCompare(b.costCenter));
+
+  const yearlyYears = Array.from(new Set(yearlyEntries.map((e) => e.year))).sort((a, b) => a - b);
+  const yearlyCostCenters = Array.from(new Set(yearlyEntries.map((e) => e.costCenter))).sort((a, b) =>
+    a.localeCompare(b),
+  );
+
+  const costCenterYearlyBreakdown = {
+    years: yearlyYears,
+    costCenters: yearlyCostCenters,
+    entries: yearlyEntries,
+  };
 
   return successResponse({
     highlights,
@@ -1288,6 +1364,7 @@ export const handler = createHttpHandler(async (request) => {
     listingSessions,
     mobileUnitsUsage,
     costCenterBreakdown,
+    costCenterYearlyBreakdown,
     filterOptions,
   });
 });

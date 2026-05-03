@@ -1223,6 +1223,19 @@ export type ComparativaCostCenterBreakdown = {
   formacionAbierta: number;
 };
 
+export type ComparativaCostCenterYearlyEntry = {
+  year: number;
+  costCenter: string;
+  formaciones: number;
+  preventivos: number;
+};
+
+export type ComparativaCostCenterYearlyBreakdown = {
+  years: number[];
+  costCenters: string[];
+  entries: ComparativaCostCenterYearlyEntry[];
+};
+
 export type ComparativaDashboardResponse = {
   highlights: ComparativaKpi[];
   trends: ComparativaTrend[];
@@ -1236,6 +1249,7 @@ export type ComparativaDashboardResponse = {
   listingSessions: ComparativaSessionGroup[];
   mobileUnitsUsage: ComparativaMobileUnitUsage[];
   costCenterBreakdown: ComparativaCostCenterBreakdown[];
+  costCenterYearlyBreakdown: ComparativaCostCenterYearlyBreakdown;
   filterOptions: {
     sites: string[];
     trainingTypes: string[];
