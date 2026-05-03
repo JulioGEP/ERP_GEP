@@ -1223,17 +1223,18 @@ export type ComparativaCostCenterBreakdown = {
   formacionAbierta: number;
 };
 
-export type ComparativaCostCenterYearlyEntry = {
-  year: number;
+export type ComparativaCostCenterPeriodEntry = {
   costCenter: string;
   formaciones: number;
   preventivos: number;
 };
 
 export type ComparativaCostCenterYearlyBreakdown = {
-  years: number[];
+  currentLabel: string;
+  previousLabel: string;
   costCenters: string[];
-  entries: ComparativaCostCenterYearlyEntry[];
+  currentEntries: ComparativaCostCenterPeriodEntry[];
+  previousEntries: ComparativaCostCenterPeriodEntry[];
 };
 
 export type ComparativaDashboardResponse = {
