@@ -12,6 +12,7 @@ import {
   type ComparativaSessionGroup,
   type ComparativaCostCenterBreakdown,
   type ComparativaCostCenterYearlyBreakdown,
+  type ComparativaCostCenterPeriodEntry,
 } from '../../features/reporting/api';
 
 const METRIC_CONFIG: { key: string; label: string }[] = [
@@ -947,16 +948,18 @@ export default function ComparativaDashboardPage() {
   const renderCostCenterYearlyTable = (
     title: string,
     description: string,
-    getValue: (entry: ComparativaCostCenterYearlyBreakdown['entries'][number]) => number,
+    getValue: (entry: ComparativaCostCenterPeriodEntry) => number,
   ) => {
     const data: ComparativaCostCenterYearlyBreakdown = dashboardQuery.data?.costCenterYearlyBreakdown ?? {
-      years: [],
+      currentLabel: '',
+      previousLabel: '',
       costCenters: [],
-      entries: [],
+      currentEntries: [],
+      previousEntries: [],
     };
-    const { years, costCenters, entries } = data;
+    const { currentLabel, previousLabel, costCenters, currentEntries, previousEntries } = data;
 
-    if (years.length === 0 || costCenters.length === 0) {
+    if (costCenters.length === 0) {
       return (
         <Card className="h-100 shadow-sm">
           <Card.Body className="d-flex flex-column gap-3">
@@ -964,31 +967,20 @@ export default function ComparativaDashboardPage() {
               <Card.Title as="h6" className="mb-1">{title}</Card.Title>
               <div className="text-muted small">{description}</div>
             </div>
-            <div className="text-muted small py-3">Sin datos disponibles</div>
+            <div className="text-muted small py-3">Sin datos para el periodo seleccionado</div>
           </Card.Body>
         </Card>
       );
     }
 
-    const entryMap = new Map<string, number>();
-    for (const entry of entries) {
-      entryMap.set(`${entry.year}:${entry.costCenter}`, getValue(entry));
-    }
+    const currentValues = currentEntries.map(getValue);
+    const previousValues = previousEntries.map(getValue);
 
-    const getVal = (year: number, cc: string) => entryMap.get(`${year}:${cc}`) ?? 0;
+    const currentTotal = currentValues.reduce((s, v) => s + v, 0);
+    const previousTotal = previousValues.reduce((s, v) => s + v, 0);
 
-    const rowTotals = years.map((year) =>
-      costCenters.reduce((sum, cc) => sum + getVal(year, cc), 0),
-    );
-
-    const colTotals = costCenters.map((cc) =>
-      years.reduce((sum, year) => sum + getVal(year, cc), 0),
-    );
-
-    const grandTotal = rowTotals.reduce((sum, v) => sum + v, 0);
-
-    const lastYear = years[years.length - 1];
-    const prevYear = years.length >= 2 ? years[years.length - 2] : null;
+    const colTotals = costCenters.map((_, i) => currentValues[i] + previousValues[i]);
+    const grandTotal = currentTotal + previousTotal;
 
     const formatPct = (current: number, previous: number) => {
       if (previous === 0) return current === 0 ? '—' : '+∞%';
@@ -1016,33 +1008,34 @@ export default function ComparativaDashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {years.map((year, yi) => (
-                  <tr key={year}>
-                    <td className="fw-semibold" style={{ color: '#3b6abf' }}>{year}</td>
-                    <td className="text-end fw-semibold">{numberFormatter.format(rowTotals[yi])}</td>
-                    {costCenters.map((cc) => (
-                      <td key={cc} className="text-end">{numberFormatter.format(getVal(year, cc))}</td>
-                    ))}
-                  </tr>
-                ))}
-                {prevYear !== null && (
-                  <tr className="table-light">
-                    <td className="small text-muted">{prevYear}→{lastYear}</td>
-                    <td className="text-end small">
-                      {formatPct(rowTotals[years.length - 1], rowTotals[years.length - 2])}
+                <tr>
+                  <td className="fw-semibold" style={{ color: '#3b6abf' }}>{currentLabel}</td>
+                  <td className="text-end fw-semibold">{numberFormatter.format(currentTotal)}</td>
+                  {currentValues.map((v, i) => (
+                    <td key={costCenters[i]} className="text-end">{numberFormatter.format(v)}</td>
+                  ))}
+                </tr>
+                <tr>
+                  <td className="fw-semibold" style={{ color: '#3b6abf' }}>{previousLabel}</td>
+                  <td className="text-end fw-semibold">{numberFormatter.format(previousTotal)}</td>
+                  {previousValues.map((v, i) => (
+                    <td key={costCenters[i]} className="text-end">{numberFormatter.format(v)}</td>
+                  ))}
+                </tr>
+                <tr className="table-light">
+                  <td className="small text-muted">{previousLabel}→{currentLabel}</td>
+                  <td className="text-end small">{formatPct(currentTotal, previousTotal)}</td>
+                  {costCenters.map((cc, i) => (
+                    <td key={cc} className="text-end small text-muted">
+                      {formatPct(currentValues[i], previousValues[i])}
                     </td>
-                    {costCenters.map((cc) => (
-                      <td key={cc} className="text-end small text-muted">
-                        {formatPct(getVal(lastYear, cc), getVal(prevYear, cc))}
-                      </td>
-                    ))}
-                  </tr>
-                )}
+                  ))}
+                </tr>
                 <tr className="fw-semibold table-secondary">
                   <td className="small">Total</td>
                   <td className="text-end">{numberFormatter.format(grandTotal)}</td>
-                  {costCenters.map((cc, ci) => (
-                    <td key={cc} className="text-end">{numberFormatter.format(colTotals[ci])}</td>
+                  {colTotals.map((v, i) => (
+                    <td key={costCenters[i]} className="text-end">{numberFormatter.format(v)}</td>
                   ))}
                 </tr>
               </tbody>
