@@ -1105,6 +1105,7 @@ export type ComparativaFilters = {
   siteIds?: string[];
   trainingTypes?: string[];
   comerciales?: string[];
+  costCenterIds?: string[];
   serviceType?: string;
 };
 
@@ -1215,6 +1216,13 @@ export type ComparativaMobileUnitUsage = {
   currentValue: number;
 };
 
+export type ComparativaCostCenterBreakdown = {
+  costCenter: string;
+  gepServices: number;
+  formacionEmpresa: number;
+  formacionAbierta: number;
+};
+
 export type ComparativaDashboardResponse = {
   highlights: ComparativaKpi[];
   trends: ComparativaTrend[];
@@ -1227,10 +1235,12 @@ export type ComparativaDashboardResponse = {
   metricSessions: ComparativaMetricSessionGroup[];
   listingSessions: ComparativaSessionGroup[];
   mobileUnitsUsage: ComparativaMobileUnitUsage[];
+  costCenterBreakdown: ComparativaCostCenterBreakdown[];
   filterOptions: {
     sites: string[];
     trainingTypes: string[];
     comerciales: string[];
+    costCenters: string[];
   };
 };
 
@@ -1248,6 +1258,7 @@ export async function fetchComparativaDashboard(
   filters.siteIds?.forEach((siteId) => params.append('siteId', siteId));
   filters.trainingTypes?.forEach((trainingType) => params.append('trainingType', trainingType));
   filters.comerciales?.forEach((comercial) => params.append('comercial', comercial));
+  filters.costCenterIds?.forEach((cc) => params.append('costCenter', cc));
   if (filters.serviceType) params.set('serviceType', filters.serviceType);
 
   const query = params.toString();
