@@ -1,5 +1,5 @@
 // Función de backfill ONE-SHOT para rellenar centro_coste en deals existentes.
-// Uso: POST /api/backfill-centro-coste con header x-webhook-token: <PIPEDRIVE_WEBHOOK_TOKEN>
+// Uso: POST /api/backfill-centro-coste con header x-webhook-token: <webhook_key>
 // ELIMINAR este archivo una vez ejecutado correctamente.
 
 import type { BackgroundHandler } from "@netlify/functions";
@@ -7,7 +7,7 @@ import { getDeal, getDealFields, findFieldDef, optionLabelOf } from "./_shared/p
 import { getPrisma } from "./_shared/prisma";
 
 const KEY_CENTRO_COSTE = "21e21e35f209ba485a2e8a209e35eda396875d11";
-const EXPECTED_TOKEN = process.env.PIPEDRIVE_WEBHOOK_TOKEN;
+const EXPECTED_TOKEN = process.env.webhook_key;
 
 // 5 deals en paralelo, pausa de 625ms entre lotes → ~8 llamadas/s, bien bajo el límite de Pipedrive
 const CONCURRENCY = 5;
