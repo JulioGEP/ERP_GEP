@@ -43,6 +43,17 @@ const METRIC_COLORS: Record<PayrollReportMetricKey, string> = {
   costeTotal: '#17becf',
 };
 
+const METRIC_SHORT_LABELS: Record<PayrollReportMetricKey, string> = {
+  salarioBruto: 'S. Bruto',
+  extrasBruto: 'Extras',
+  aportacionTrabajadorSs: 'Trab. SS',
+  retencionIrpf: 'IRPF',
+  dietasKilometraje: 'Dietas/km',
+  salarioNeto: 'S. Neto',
+  aportacionEmpresarialSs: 'Emp. SS',
+  costeTotal: 'Coste total',
+};
+
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('es-ES', {
     style: 'currency',
@@ -197,6 +208,7 @@ export default function ReporteNominasPage() {
     'salarioNeto',
     'costeTotal',
   ]);
+  const [tooltipIndex, setTooltipIndex] = useState<number | null>(null);
 
   const query = useQuery({
     queryKey: ['reporting', 'reporte-nominas', period],
@@ -262,6 +274,24 @@ export default function ReporteNominasPage() {
     const max = Math.max(...chartValues, 0);
     return max > 0 ? max : 1;
   }, [chartValues]);
+
+  const handleChartMouseMove = (event: React.MouseEvent<SVGSVGElement>) => {
+    const svgEl = event.currentTarget;
+    const rect = svgEl.getBoundingClientRect();
+    const mouseX = (event.clientX - rect.left) * (1000 / rect.width);
+    const leftPad = 90;
+    const chartWidth = 1000 - leftPad - 20;
+    const relX = mouseX - leftPad;
+    if (relX < -10 || relX > chartWidth + 10) {
+      setTooltipIndex(null);
+      return;
+    }
+    const count = trendMonths.length;
+    if (count === 0) return;
+    if (count === 1) { setTooltipIndex(0); return; }
+    const idx = Math.round((relX / chartWidth) * (count - 1));
+    setTooltipIndex(Math.max(0, Math.min(count - 1, idx)));
+  };
 
   const periodText = useMemo(() => {
     if (!query.data?.period) return period;
@@ -500,7 +530,15 @@ export default function ReporteNominasPage() {
               {selectedMetrics.length === 0 ? (
                 <Alert variant="info" className="mb-0">Selecciona al menos un campo para dibujar la gráfica.</Alert>
               ) : (
-                <svg viewBox="0 0 1000 360" role="img" aria-label="Evolución temporal de costes" className="w-100">
+                <svg
+                  viewBox="0 0 1000 360"
+                  role="img"
+                  aria-label="Evolución temporal de costes"
+                  className="w-100"
+                  style={{ cursor: 'crosshair' }}
+                  onMouseMove={handleChartMouseMove}
+                  onMouseLeave={() => setTooltipIndex(null)}
+                >
                   {(() => {
                     const padding = { top: 20, right: 20, bottom: 70, left: 90 };
                     const width = 1000 - padding.left - padding.right;
@@ -562,6 +600,78 @@ export default function ReporteNominasPage() {
                             {item.label}
                           </text>
                         ))}
+
+                        {tooltipIndex !== null && trendSeriesData.current[tooltipIndex] ? (() => {
+                          const x = xScale(tooltipIndex);
+                          const item = trendSeriesData.current[tooltipIndex];
+                          const tooltipWidth = 220;
+                          const tooltipPad = 10;
+                          const rowH = 16;
+                          const tooltipHeight = tooltipPad * 2 + rowH + selectedMetrics.length * rowH;
+                          const tipX = x + 12 + tooltipWidth > 1000 - padding.right ? x - tooltipWidth - 12 : x + 12;
+                          const tipY = padding.top + 4;
+
+                          return (
+                            <g style={{ pointerEvents: 'none' }}>
+                              <line
+                                x1={x} x2={x}
+                                y1={padding.top} y2={padding.top + height}
+                                stroke="#adb5bd"
+                                strokeWidth={1}
+                                strokeDasharray="3 3"
+                              />
+                              {selectedMetrics.map((mk) => {
+                                const val = item.metrics?.[mk] ?? 0;
+                                return (
+                                  <circle
+                                    key={`dot-${mk}`}
+                                    cx={x}
+                                    cy={yScale(val)}
+                                    r={4}
+                                    fill={METRIC_COLORS[mk]}
+                                    stroke="white"
+                                    strokeWidth={1.5}
+                                  />
+                                );
+                              })}
+                              <rect
+                                x={tipX}
+                                y={tipY}
+                                width={tooltipWidth}
+                                height={tooltipHeight}
+                                rx={4}
+                                fill="white"
+                                stroke="#dee2e6"
+                                strokeWidth={1}
+                                filter="drop-shadow(0 2px 4px rgba(0,0,0,0.12))"
+                              />
+                              <text
+                                x={tipX + tooltipPad}
+                                y={tipY + tooltipPad + 10}
+                                fontSize="11"
+                                fontWeight="bold"
+                                fill="#212529"
+                              >
+                                {item.label}
+                              </text>
+                              {selectedMetrics.map((mk, i) => {
+                                const val = item.metrics?.[mk] ?? 0;
+                                const rowY = tipY + tooltipPad + rowH + (i + 1) * rowH;
+                                return (
+                                  <g key={`tip-${mk}`}>
+                                    <circle cx={tipX + tooltipPad + 4} cy={rowY - 4} r={4} fill={METRIC_COLORS[mk]} />
+                                    <text x={tipX + tooltipPad + 13} y={rowY} fontSize="10" fill="#495057">
+                                      {METRIC_SHORT_LABELS[mk]}
+                                    </text>
+                                    <text x={tipX + tooltipWidth - tooltipPad} y={rowY} fontSize="10" fill="#212529" textAnchor="end">
+                                      {formatCurrency(val)}
+                                    </text>
+                                  </g>
+                                );
+                              })}
+                            </g>
+                          );
+                        })() : null}
                       </>
                     );
                   })()}
