@@ -68,12 +68,6 @@
   to = "/.netlify/functions/deals/import"
   status = 200
 
-# Backfill one-shot (ELIMINAR tras ejecutar)
-[[redirects]]
-  from = "/api/backfill-centro-coste"
-  to = "/.netlify/functions/backfill-centro-coste-background"
-  status = 200
-
 # Auth (endpoints explícitos)
 [[redirects]]
   from = "/auth/login"
