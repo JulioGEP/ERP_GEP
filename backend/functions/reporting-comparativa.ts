@@ -194,6 +194,7 @@ type SessionRow = {
     caes_val: boolean | null;
     hotel_val: boolean | null;
     comercial: string | null;
+    centro_coste: string | null;
     organizations: {
       name: string;
     } | null;
@@ -434,6 +435,13 @@ export const handler = createHttpHandler(async (request) => {
         request.event.multiValueQueryStringParameters?.comerciales ??
         request.event.multiValueQueryStringParameters?.costCenterId,
     );
+  const costCenters =
+    parseStringArrayParam(request.query.costCenter ?? request.query.costCenters ?? request.query.centro_coste) ??
+    parseStringArrayParam(
+      request.event.multiValueQueryStringParameters?.costCenter ??
+        request.event.multiValueQueryStringParameters?.costCenters ??
+        request.event.multiValueQueryStringParameters?.centro_coste,
+    );
 
   const [
     currentSessionsRaw,
@@ -450,6 +458,7 @@ export const handler = createHttpHandler(async (request) => {
           ...(siteFilters ? { sede_label: { in: siteFilters } } : {}),
           ...(trainingTypes ? { pipeline_id: { in: trainingTypes } } : {}),
           ...(comerciales ? { comercial: { in: comerciales } } : {}),
+          ...(costCenters ? { centro_coste: { in: costCenters } } : {}),
         },
       },
       select: {
@@ -464,6 +473,7 @@ export const handler = createHttpHandler(async (request) => {
             caes_val: true,
             hotel_val: true,
             comercial: true,
+            centro_coste: true,
             organizations: {
               select: {
                 name: true,
@@ -498,6 +508,7 @@ export const handler = createHttpHandler(async (request) => {
           ...(siteFilters ? { sede_label: { in: siteFilters } } : {}),
           ...(trainingTypes ? { pipeline_id: { in: trainingTypes } } : {}),
           ...(comerciales ? { comercial: { in: comerciales } } : {}),
+          ...(costCenters ? { centro_coste: { in: costCenters } } : {}),
         },
       },
       select: {
@@ -512,6 +523,7 @@ export const handler = createHttpHandler(async (request) => {
             caes_val: true,
             hotel_val: true,
             comercial: true,
+            centro_coste: true,
             organizations: {
               select: {
                 name: true,
@@ -590,9 +602,11 @@ export const handler = createHttpHandler(async (request) => {
         ...(siteFilters ? { sede_label: { in: siteFilters } } : {}),
         ...(trainingTypes ? { pipeline_id: { in: trainingTypes } } : {}),
         ...(comerciales ? { comercial: { in: comerciales } } : {}),
+        ...(costCenters ? { centro_coste: { in: costCenters } } : {}),
       },
       select: {
         w_id_variation: true,
+        centro_coste: true,
         organizations: {
           select: {
             name: true,
@@ -607,9 +621,11 @@ export const handler = createHttpHandler(async (request) => {
         ...(siteFilters ? { sede_label: { in: siteFilters } } : {}),
         ...(trainingTypes ? { pipeline_id: { in: trainingTypes } } : {}),
         ...(comerciales ? { comercial: { in: comerciales } } : {}),
+        ...(costCenters ? { centro_coste: { in: costCenters } } : {}),
       },
       select: {
         w_id_variation: true,
+        centro_coste: true,
         organizations: {
           select: {
             name: true,
@@ -636,13 +652,20 @@ export const handler = createHttpHandler(async (request) => {
   );
 
   const currentVariantOrgById = new Map<string, string>();
+  const currentVariantCostCenterById = new Map<string, string>();
   for (const deal of currentVariantDeals as Array<{
     w_id_variation: unknown;
+    centro_coste?: string | null;
     organizations?: { name: string } | null;
   }>) {
     const normalizedId = normalizeVariantWooId(deal.w_id_variation);
-    if (!normalizedId || currentVariantOrgById.has(normalizedId)) continue;
-    currentVariantOrgById.set(normalizedId, normalizeLabel(deal.organizations?.name, 'Sin organización'));
+    if (!normalizedId) continue;
+    if (!currentVariantOrgById.has(normalizedId)) {
+      currentVariantOrgById.set(normalizedId, normalizeLabel(deal.organizations?.name, 'Sin organización'));
+    }
+    if (!currentVariantCostCenterById.has(normalizedId) && deal.centro_coste?.trim()) {
+      currentVariantCostCenterById.set(normalizedId, deal.centro_coste.trim());
+    }
   }
 
   const filteredCurrentVariants = currentVariants.filter((variant) => {
@@ -1131,6 +1154,39 @@ export const handler = createHttpHandler(async (request) => {
     ...mergeCounts(gepServicesTypeCurrentCounts, gepServicesTypePreviousCounts, 'gepServicesType'),
   ];
 
+  type CostCenterBreakdownEntry = { costCenter: string; gepServices: number; formacionEmpresa: number; formacionAbierta: number };
+  const costCenterMap = new Map<string, CostCenterBreakdownEntry>();
+
+  const getCostCenterEntry = (cc: string): CostCenterBreakdownEntry => {
+    if (!costCenterMap.has(cc)) {
+      costCenterMap.set(cc, { costCenter: cc, gepServices: 0, formacionEmpresa: 0, formacionAbierta: 0 });
+    }
+    return costCenterMap.get(cc)!;
+  };
+
+  for (const session of currentSessions) {
+    const classif = classifySession(session);
+    if (!classif) continue;
+    const cc = session.deals?.centro_coste?.trim() || 'Sin centro de coste';
+    const entry = getCostCenterEntry(cc);
+    if (classif === 'gepServices') entry.gepServices++;
+    else if (classif === 'formacionEmpresa') entry.formacionEmpresa++;
+    else if (classif === 'formacionAbierta') entry.formacionAbierta++;
+  }
+
+  for (const variant of filteredCurrentVariants) {
+    const normalizedId = normalizeVariantWooId(variant.id_woo);
+    const cc = (normalizedId ? currentVariantCostCenterById.get(normalizedId) : null) ?? 'Sin centro de coste';
+    getCostCenterEntry(cc).formacionAbierta++;
+  }
+
+  const costCenterBreakdown = Array.from(costCenterMap.values())
+    .sort((a, b) => {
+      const totalA = a.gepServices + a.formacionEmpresa + a.formacionAbierta;
+      const totalB = b.gepServices + b.formacionEmpresa + b.formacionAbierta;
+      return totalB - totalA || a.costCenter.localeCompare(b.costCenter);
+    });
+
   const mobileUnitsUsage = Array.from(mobileUnitSessionsMap.values())
     .map((item) => ({
       key: item.key,
@@ -1154,16 +1210,18 @@ export const handler = createHttpHandler(async (request) => {
     ...mobileUnitSessionGroups,
   ];
 
-  const [dealSites, variantSites, pipelineOptions, comercialOptions]: [
+  const [dealSites, variantSites, pipelineOptions, comercialOptions, costCenterOptions]: [
     { sede_label: string | null }[],
     { sede: string | null }[],
     { pipeline_id: string | null }[],
     { comercial: string | null }[],
+    { centro_coste: string | null }[],
   ] = await Promise.all([
     prisma.deals.findMany({ distinct: ['sede_label'], select: { sede_label: true } }),
     prisma.variants.findMany({ distinct: ['sede'], select: { sede: true } }),
     prisma.deals.findMany({ distinct: ['pipeline_id'], select: { pipeline_id: true } }),
     prisma.deals.findMany({ distinct: ['comercial'], select: { comercial: true } }),
+    prisma.deals.findMany({ distinct: ['centro_coste'], select: { centro_coste: true } }),
   ]);
 
   const siteOptionSet = new Set<string>();
@@ -1184,6 +1242,10 @@ export const handler = createHttpHandler(async (request) => {
       .sort((a, b) => a.localeCompare(b)),
     comerciales: comercialOptions
       .map((item) => item.comercial?.trim())
+      .filter((value): value is string => Boolean(value))
+      .sort((a, b) => a.localeCompare(b)),
+    costCenters: costCenterOptions
+      .map((item) => item.centro_coste?.trim())
       .filter((value): value is string => Boolean(value))
       .sort((a, b) => a.localeCompare(b)),
   } as const;
@@ -1225,6 +1287,7 @@ export const handler = createHttpHandler(async (request) => {
     metricSessions,
     listingSessions,
     mobileUnitsUsage,
+    costCenterBreakdown,
     filterOptions,
   });
 });

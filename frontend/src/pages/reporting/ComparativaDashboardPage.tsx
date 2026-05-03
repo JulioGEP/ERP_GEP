@@ -10,6 +10,7 @@ import {
   type ComparativaBinaryMix,
   type ComparativaTrend,
   type ComparativaSessionGroup,
+  type ComparativaCostCenterBreakdown,
 } from '../../features/reporting/api';
 
 const METRIC_CONFIG: { key: string; label: string }[] = [
@@ -301,8 +302,12 @@ export default function ComparativaDashboardPage() {
       badges.push({ label: 'Tipo de formación', value: filters.trainingTypes.join(', ') });
     }
 
+    if (filters.costCenterIds?.length) {
+      badges.push({ label: 'Centro de coste', value: filters.costCenterIds.join(', ') });
+    }
+
     return badges;
-  }, [filters.comerciales, filters.siteIds, filters.trainingTypes]);
+  }, [filters.comerciales, filters.siteIds, filters.trainingTypes, filters.costCenterIds]);
 
   const dashboardQuery = useQuery({
     queryKey: [
@@ -316,6 +321,7 @@ export default function ComparativaDashboardPage() {
       appliedFilters.siteIds?.join(',') ?? '',
       appliedFilters.trainingTypes?.join(',') ?? '',
       appliedFilters.comerciales?.join(',') ?? '',
+      appliedFilters.costCenterIds?.join(',') ?? '',
     ],
     queryFn: () => fetchComparativaDashboard(appliedFilters),
     placeholderData: keepPreviousData,
@@ -376,6 +382,7 @@ export default function ComparativaDashboardPage() {
   const siteOptions = dashboardQuery.data?.filterOptions.sites ?? [];
   const trainingTypeOptions = dashboardQuery.data?.filterOptions.trainingTypes ?? [];
   const comercialOptions = dashboardQuery.data?.filterOptions.comerciales ?? [];
+  const costCenterOptions = dashboardQuery.data?.filterOptions.costCenters ?? [];
 
   const handleDateChange = (
     period: 'currentPeriod' | 'previousPeriod',
@@ -447,7 +454,7 @@ export default function ComparativaDashboardPage() {
   };
 
   const handleMultiSelectorChange = (
-    key: keyof Pick<ComparativaFilters, 'siteIds' | 'trainingTypes' | 'comerciales'>,
+    key: keyof Pick<ComparativaFilters, 'siteIds' | 'trainingTypes' | 'comerciales' | 'costCenterIds'>,
     values: string[],
   ) => {
     setFilters((prev) => ({
@@ -874,6 +881,68 @@ export default function ComparativaDashboardPage() {
     );
   };
 
+  const renderCostCenterBreakdown = () => {
+    const items: ComparativaCostCenterBreakdown[] = dashboardQuery.data?.costCenterBreakdown ?? [];
+
+    return (
+      <Card className="h-100 shadow-sm">
+        <Card.Body className="d-flex flex-column gap-3">
+          <div>
+            <Card.Title as="h6" className="mb-1">Sesiones por Centro de Coste</Card.Title>
+            <div className="text-muted small">Cantidad de sesiones agrupadas por centro de coste</div>
+          </div>
+
+          <div className="table-responsive">
+            <table className="table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th className="text-muted small">Centro de coste</th>
+                  <th className="text-muted small text-end">Preventivos</th>
+                  <th className="text-muted small text-end">Formaciones</th>
+                  <th className="text-muted small text-end">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="text-muted small py-3">
+                      Sin datos para el periodo seleccionado
+                    </td>
+                  </tr>
+                )}
+                {items.map((item) => {
+                  const formaciones = item.formacionEmpresa + item.formacionAbierta;
+                  const total = item.gepServices + formaciones;
+                  return (
+                    <tr key={item.costCenter}>
+                      <td className="small fw-semibold">{item.costCenter}</td>
+                      <td className="text-end">{numberFormatter.format(item.gepServices)}</td>
+                      <td className="text-end">{numberFormatter.format(formaciones)}</td>
+                      <td className="text-end fw-semibold">{numberFormatter.format(total)}</td>
+                    </tr>
+                  );
+                })}
+                {items.length > 0 && (() => {
+                  const totalGep = items.reduce((acc, i) => acc + i.gepServices, 0);
+                  const totalFormaciones = items.reduce((acc, i) => acc + i.formacionEmpresa + i.formacionAbierta, 0);
+                  const grandTotal = totalGep + totalFormaciones;
+                  return (
+                    <tr className="table-light fw-semibold">
+                      <td className="small">Total</td>
+                      <td className="text-end">{numberFormatter.format(totalGep)}</td>
+                      <td className="text-end">{numberFormatter.format(totalFormaciones)}</td>
+                      <td className="text-end">{numberFormatter.format(grandTotal)}</td>
+                    </tr>
+                  );
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </Card.Body>
+      </Card>
+    );
+  };
+
   const renderMobileUnitsUsage = () => {
     const items = dashboardQuery.data?.mobileUnitsUsage ?? [];
 
@@ -995,6 +1064,12 @@ export default function ComparativaDashboardPage() {
               {renderBreakdownCard(item)}
             </Col>
           ))}
+        </Row>
+
+        <Row className="g-3">
+          <Col xs={12}>
+            {renderCostCenterBreakdown()}
+          </Col>
         </Row>
 
         <Row className="g-3">
@@ -1192,6 +1267,15 @@ export default function ComparativaDashboardPage() {
                 options={trainingTypeOptions}
                 selected={filters.trainingTypes ?? []}
                 onChange={(values) => handleMultiSelectorChange('trainingTypes', values)}
+              />
+            </Col>
+
+            <Col xs={12} md={6} lg={2}>
+              <FilterMultiSelect
+                label="Centro de coste"
+                options={costCenterOptions}
+                selected={filters.costCenterIds ?? []}
+                onChange={(values) => handleMultiSelectorChange('costCenterIds', values)}
               />
             </Col>
 
