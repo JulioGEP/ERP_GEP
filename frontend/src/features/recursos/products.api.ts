@@ -250,10 +250,11 @@ export async function syncProductsToHolded({
   }
 
   const results: HoldedSyncResult[] = [];
-  const totalBatches = Math.ceil(ids.length / 100);
+  const BATCH_SIZE = 50;
+  const totalBatches = Math.ceil(ids.length / BATCH_SIZE);
 
-  for (let start = 0, batchIndex = 0; start < ids.length; start += 100, batchIndex += 1) {
-    const batch = ids.slice(start, start + 100);
+  for (let start = 0, batchIndex = 0; start < ids.length; start += BATCH_SIZE, batchIndex += 1) {
+    const batch = ids.slice(start, start + BATCH_SIZE);
     const json = await requestJson<HoldedSyncResponse>(
       '/products-holded',
       {
