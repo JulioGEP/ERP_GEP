@@ -111,6 +111,51 @@ async function updateHoldedProduct(
   }
 }
 
+const HOLDED_CONCURRENCY = 5;
+
+async function syncProduct(
+  product: ProductForSync,
+  apiKey: string,
+  prisma: ReturnType<typeof getPrisma>,
+): Promise<HoldedSyncResult> {
+  const price = parseNumeric(product.price ?? product.variant_price);
+
+  if (!product.name || !product.id_pipe) {
+    return { productId: product.id, status: 'skipped', holdedId: null, message: 'Producto sin nombre o id_pipe' };
+  }
+
+  if (price === null) {
+    return { productId: product.id, status: 'skipped', holdedId: null, message: 'Producto sin precio válido' };
+  }
+
+  try {
+    const holdedId = typeof product.id_holded === 'string' ? product.id_holded.trim() : null;
+    const basePayload = {
+      kind: 'simple',
+      name: product.name,
+      tax: DEFAULT_TAX,
+      sku: buildSku(product.id_pipe),
+    };
+
+    if (holdedId) {
+      const payload = { ...basePayload, subtotal: price };
+      await updateHoldedProduct(apiKey, holdedId, payload);
+      return { productId: product.id, status: 'success', holdedId, operation: 'updated' };
+    } else {
+      const payload = { ...basePayload, price };
+      const createdHoldedId = await createHoldedProduct(apiKey, payload);
+      await prisma.products.update({
+        where: { id: product.id },
+        data: { id_holded: createdHoldedId },
+      });
+      return { productId: product.id, status: 'success', holdedId: createdHoldedId, operation: 'created' };
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Error desconocido';
+    return { productId: product.id, status: 'error', message };
+  }
+}
+
 export const handler = createHttpHandler<any>(async (request) => {
   if (request.method !== 'POST') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no soportado', 405);
@@ -152,60 +197,12 @@ export const handler = createHttpHandler<any>(async (request) => {
     message: 'Producto no encontrado',
   }));
 
-  for (const product of products as ProductForSync[]) {
-    const price = parseNumeric(product.price ?? product.variant_price);
-    if (!product.name || !product.id_pipe) {
-      results.push({
-        productId: product.id,
-        status: 'skipped',
-        holdedId: null,
-        message: 'Producto sin nombre o id_pipe',
-      });
-      continue;
-    }
-
-    if (price === null) {
-      results.push({
-        productId: product.id,
-        status: 'skipped',
-        holdedId: null,
-        message: 'Producto sin precio válido',
-      });
-      continue;
-    }
-
-    try {
-      const holdedId = typeof product.id_holded === 'string' ? product.id_holded.trim() : null;
-      const basePayload = {
-        kind: 'simple',
-        name: product.name,
-        tax: DEFAULT_TAX,
-        sku: buildSku(product.id_pipe),
-      };
-
-      if (holdedId) {
-        const payload = { ...basePayload, subtotal: price };
-        await updateHoldedProduct(apiKey, holdedId, payload);
-        results.push({ productId: product.id, status: 'success', holdedId, operation: 'updated' });
-      } else {
-        const payload = { ...basePayload, price };
-        const createdHoldedId = await createHoldedProduct(apiKey, payload);
-        await prisma.products.update({
-          where: { id: product.id },
-          data: { id_holded: createdHoldedId },
-        });
-
-        results.push({
-          productId: product.id,
-          status: 'success',
-          holdedId: createdHoldedId,
-          operation: 'created',
-        });
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error desconocido';
-      results.push({ productId: product.id, status: 'error', message });
-    }
+  // Procesar en paralelo con límite de concurrencia para evitar timeout
+  const productList = products as ProductForSync[];
+  for (let i = 0; i < productList.length; i += HOLDED_CONCURRENCY) {
+    const chunk = productList.slice(i, i + HOLDED_CONCURRENCY);
+    const chunkResults = await Promise.all(chunk.map((p) => syncProduct(p, apiKey, prisma)));
+    results.push(...chunkResults);
   }
 
   return successResponse({ results });
