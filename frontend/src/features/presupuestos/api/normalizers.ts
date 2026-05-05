@@ -152,7 +152,7 @@ export function normalizeProducts(
         hours: typeof item.hours === 'number' ? item.hours : toNumber(item.hours) ?? null,
         comments: toStringValue(item.product_comments ?? item.comments),
         typeLabel: toStringValue(item.typeLabel),
-        categoryLabel: toStringValue(item.categoryLabel),
+        categoryLabel: toStringValue(item.categoryLabel ?? item.category),
         template: toStringValue(item.template) ?? null,
       };
 
@@ -407,9 +407,20 @@ export function normalizeDealSummary(row: Json): DealSummary {
     MATERIAL_PIPELINE_KEYS.has(normalizeMaterialKey(pipelineLabel)) ||
     MATERIAL_PIPELINE_KEYS.has(normalizeMaterialKey(row?.pipeline_id));
 
+  const isPciPipeline =
+    normalizeMaterialKey(pipelineLabel) === 'pci' ||
+    normalizeMaterialKey(row?.pipeline_id) === 'pci';
+
+  const hasPciProductosCategory =
+    isPciPipeline &&
+    (products.products ?? []).some(
+      (p) => normalizeMaterialKey(p.categoryLabel) === 'productos',
+    );
+
   const estadoMaterialRaw = row?.estado_material ?? (row as any)?.deals?.estado_material;
   const estadoMaterial =
-    normalizeMaterialStatus(estadoMaterialRaw) || (isMaterialPipeline ? 'Pedidos confirmados' : null);
+    normalizeMaterialStatus(estadoMaterialRaw) ||
+    (isMaterialPipeline || hasPciProductosCategory ? 'Pedidos confirmados' : null);
 
   const rawSessions = Array.isArray(row?.sessions)
     ? row.sessions
@@ -482,9 +493,20 @@ export function normalizeDealDetail(raw: Json): DealDetail {
     MATERIAL_PIPELINE_KEYS.has(normalizeMaterialKey(pipelineLabel)) ||
     MATERIAL_PIPELINE_KEYS.has(normalizeMaterialKey(pipelineId));
 
+  const isPciPipelineDetail =
+    normalizeMaterialKey(pipelineLabel) === 'pci' ||
+    normalizeMaterialKey(pipelineId) === 'pci';
+
+  const hasPciProductosCategoryDetail =
+    isPciPipelineDetail &&
+    (products.products ?? []).some(
+      (p) => normalizeMaterialKey(p.categoryLabel) === 'productos',
+    );
+
   const estadoMaterialRaw = raw?.estado_material ?? (raw as any)?.deals?.estado_material;
   const estadoMaterial =
-    normalizeMaterialStatus(estadoMaterialRaw) || (isMaterialPipeline ? 'Pedidos confirmados' : null);
+    normalizeMaterialStatus(estadoMaterialRaw) ||
+    (isMaterialPipeline || hasPciProductosCategoryDetail ? 'Pedidos confirmados' : null);
 
   const notesSource = Array.isArray(raw?.notes)
     ? (raw.notes as unknown[])
