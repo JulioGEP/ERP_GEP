@@ -9,7 +9,7 @@ import type { MaterialOrder } from '../../types/materialOrder';
 import { patchDealEditable } from '../../features/presupuestos/api/deals.api';
 import { DEALS_ALL_QUERY_KEY } from '../../features/presupuestos/queryKeys';
 import { sendMaterialStockNotification } from '../../features/materials/orders.api';
-import { isMaterialPipeline } from './MaterialsBudgetsPage';
+import { isMaterialRelevantBudget } from './MaterialsBudgetsPage';
 
 export type MaterialsBoardPageProps = {
   budgets: DealSummary[];
@@ -304,7 +304,7 @@ export function MaterialsBoardPage({
   );
 
   const materialsBudgets = useMemo(
-    () => budgets.filter((budget) => isMaterialPipeline(budget)),
+    () => budgets.filter((budget) => isMaterialRelevantBudget(budget)),
     [budgets],
   );
 

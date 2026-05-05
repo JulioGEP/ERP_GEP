@@ -12,7 +12,7 @@ import type { CreateMaterialOrderPayload } from '../../features/materials/orders
 import { createMaterialOrder } from '../../features/materials/orders.api';
 import { MATERIAL_ORDERS_QUERY_KEY } from '../../features/materials/queryKeys';
 import type { DealProduct, DealSummary } from '../../types/deal';
-import { isMaterialPipeline } from './MaterialsBudgetsPage';
+import { isMaterialRelevantBudget, isPciWithProductosProducts } from './MaterialsBudgetsPage';
 
 export type MaterialsPendingProductsPageProps = {
   budgets: DealSummary[];
@@ -242,6 +242,19 @@ function getEstimatedDeliveryTimestamp(dateIso: string | null | undefined): numb
   return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
 }
 
+function normalizeCategoryKey(value: string | null | undefined): string {
+  if (!value) return '';
+  return value
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function isProductosCategory(product: DealProduct | null | undefined): boolean {
+  return normalizeCategoryKey(product?.categoryLabel) === 'productos';
+}
+
 function isShippingExpense(product: DealProduct | null | undefined): boolean {
   const rawLabel = (product?.name ?? product?.code ?? '').trim();
   if (!rawLabel) return false;
@@ -312,7 +325,8 @@ function isClosedMaterialBudget(budget: DealSummary): boolean {
 function buildPendingProducts(budgets: DealSummary[], orders: MaterialOrder[]): PendingProductRow[] {
   const orderedProductKeys = buildOrderedProductKeys(orders);
   const orderedBudgetIds = buildOrderedBudgetIds(orders);
-  const filteredBudgets = budgets.filter((budget) => isMaterialPipeline(budget) && !isClosedMaterialBudget(budget));
+  const filteredBudgets = budgets.filter((budget) => isMaterialRelevantBudget(budget) && !isClosedMaterialBudget(budget));
+  const isPciDeal = (budget: DealSummary) => isPciWithProductosProducts(budget);
 
   return filteredBudgets.flatMap((budget, budgetIndex) => {
     const budgetId = getBudgetId(budget);
@@ -321,6 +335,7 @@ function buildPendingProducts(budgets: DealSummary[], orders: MaterialOrder[]): 
     const estimatedDelivery = formatEstimatedDelivery(getEstimatedDeliveryValue(budget));
     const products = (Array.isArray(budget.products) ? budget.products : []).filter((product) => {
       if (isShippingExpense(product)) return false;
+      if (isPciDeal(budget) && !isProductosCategory(product)) return false;
 
       const normalizedBudgetId = budgetId ? String(budgetId).trim() : '';
       const normalizedProductName = normalizeOrderedProductName(getProductName(product));

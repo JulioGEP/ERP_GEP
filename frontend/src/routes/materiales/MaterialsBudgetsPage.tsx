@@ -17,14 +17,30 @@ function normalizePipelineKey(value: unknown): string {
 
 export const MATERIAL_PIPELINE_KEYS = new Set(['materiales', 'material']);
 
+const PCI_PIPELINE_KEY = 'pci';
+const PRODUCTOS_CATEGORY_KEY = 'productos';
+
 export function isMaterialPipeline(budget: DealSummary): boolean {
   const labelKey = normalizePipelineKey(budget.pipeline_label);
   const idKey = normalizePipelineKey(budget.pipeline_id);
   return MATERIAL_PIPELINE_KEYS.has(labelKey) || MATERIAL_PIPELINE_KEYS.has(idKey);
 }
 
+export function isPciWithProductosProducts(budget: DealSummary): boolean {
+  const labelKey = normalizePipelineKey(budget.pipeline_label);
+  const idKey = normalizePipelineKey(budget.pipeline_id);
+  if (labelKey !== PCI_PIPELINE_KEY && idKey !== PCI_PIPELINE_KEY) return false;
+  return (Array.isArray(budget.products) ? budget.products : []).some(
+    (p) => normalizePipelineKey(p.categoryLabel) === PRODUCTOS_CATEGORY_KEY,
+  );
+}
+
+export function isMaterialRelevantBudget(budget: DealSummary): boolean {
+  return isMaterialPipeline(budget) || isPciWithProductosProducts(budget);
+}
+
 function filterMaterialsBudgets(budgets: DealSummary[]): DealSummary[] {
-  return budgets.filter((budget) => isMaterialPipeline(budget));
+  return budgets.filter((budget) => isMaterialRelevantBudget(budget));
 }
 
 export function MaterialsBudgetsPage({ budgets, tableLabels, serverQueryOptions, ...rest }: MaterialsBudgetsPageProps) {
