@@ -49,7 +49,7 @@ import type { MaterialsBoardPageProps } from '../pages/materiales/MaterialsBoard
 import type { MaterialsBudgetsPageProps } from '../pages/materiales/MaterialsBudgetsPage';
 import type { MaterialsPendingProductsPageProps } from '../pages/materiales/MaterialsPendingProductsPage';
 import type { MaterialsOrdersPageProps } from '../pages/materiales/MaterialsOrdersPage';
-import { isMaterialPipeline } from '../routes/materiales/MaterialsBudgetsPage';
+import { isMaterialRelevantBudget } from '../routes/materiales/MaterialsBudgetsPage';
 import { MATERIAL_ORDERS_QUERY_KEY } from '../features/materials/queryKeys';
 import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovilPage';
@@ -1404,7 +1404,7 @@ export default function AuthenticatedApp() {
   const nextMaterialOrderNumber = materialOrdersData?.nextOrderNumber ?? 1;
   const isRefreshingMaterialOrders = materialsOrdersQuery.isFetching && !materialsOrdersQuery.isLoading;
   const materialsBudgets = useMemo(
-    () => allBudgets.filter((budget) => isMaterialPipeline(budget)),
+    () => allBudgets.filter((budget) => isMaterialRelevantBudget(budget)),
     [allBudgets],
   );
 
@@ -1948,7 +1948,7 @@ export default function AuthenticatedApp() {
     serverQueryOptions: {
       fetcher: async (options) => {
         const results = await fetchDeals(options);
-        return results.filter((budget) => isMaterialPipeline(budget));
+        return results.filter((budget) => isMaterialRelevantBudget(budget));
       },
       queryKey: ['budget-table', 'materials'],
     },

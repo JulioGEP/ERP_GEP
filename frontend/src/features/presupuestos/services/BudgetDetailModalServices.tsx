@@ -46,6 +46,9 @@ import {
 } from '../hooks/useDealFollowUpToggle';
 import { DEALS_QUERY_KEY } from '../queryKeys';
 import { useCurrentUserIdentity } from '../useCurrentUserIdentity';
+import { fetchMaterialOrders } from '../../materials/orders.api';
+import { MATERIAL_ORDERS_QUERY_KEY } from '../../materials/queryKeys';
+import type { MaterialOrder } from '../../../types/materialOrder';
 
 function normalizeId(value: unknown): string {
   if (typeof value === 'string') {
@@ -94,6 +97,19 @@ function mergeDealDetailData(current: DealDetail | undefined, next: DealDetail):
 
 const EMPTY_DOCUMENTS: DealDocument[] = [];
 const FALLBACK_PIPELINE_LABEL = 'Preventivos';
+
+function formatOrderDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '—';
+  return parsed.toLocaleDateString('es-ES');
+}
+
+function getOrderStatus(order: MaterialOrder): { label: string; bg: string } {
+  if (order.pedidoRecibido) return { label: 'Recibido', bg: 'success' };
+  if (order.pedidoRealizado) return { label: 'Realizado', bg: 'primary' };
+  return { label: 'Pendiente', bg: 'secondary' };
+}
 
 function normalizeComparableValue(value: string | null | undefined): string {
   return (value ?? '').trim().toLowerCase();
@@ -215,6 +231,13 @@ export function BudgetDetailModalServices({
 
   const deal = detailQuery.data ?? null;
   const isLoading = detailQuery.isLoading;
+
+  const materialOrdersQuery = useQuery({
+    queryKey: MATERIAL_ORDERS_QUERY_KEY,
+    queryFn: fetchMaterialOrders,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
 
   const {
     toggleFollowUp,
@@ -678,6 +701,28 @@ export function BudgetDetailModalServices({
 
     return detailProducts.filter((product) => isLegacyExtraProduct(product));
   }, [detailProducts, pipelineLabel]);
+
+  const hasProductosProducts = useMemo(() => {
+    const isPciPipeline = normalizeComparableValue(pipelineLabel) === 'pci';
+    if (!isPciPipeline) return false;
+    return detailProducts.some(
+      (p) => normalizeComparableValue(p.categoryLabel) === 'productos',
+    );
+  }, [detailProducts, pipelineLabel]);
+
+  const associatedOrders = useMemo(() => {
+    if (!hasProductosProducts) return [];
+    const currentDealId = String(normalizedDealId).trim();
+    if (!currentDealId.length) return [];
+    const allOrders = materialOrdersQuery.data?.orders ?? [];
+    return allOrders
+      .filter((order) =>
+        (Array.isArray(order.sourceBudgetIds) ? order.sourceBudgetIds : []).some(
+          (budgetId) => String(budgetId ?? '').trim() === currentDealId,
+        ),
+      )
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [hasProductosProducts, normalizedDealId, materialOrdersQuery.data?.orders]);
 
   const modalTitle = organizationDisplay || 'Detalle presupuesto';
   const truncatedModalTitle = truncateText(modalTitle, 60);
@@ -1368,6 +1413,60 @@ export function BudgetDetailModalServices({
                   )}
                 </Accordion.Body>
               </Accordion.Item>
+
+              {hasProductosProducts ? (
+                <Accordion.Item eventKey="associated-orders">
+                  <Accordion.Header>
+                    <div className="d-flex justify-content-between align-items-center w-100">
+                      <span className="erp-accordion-title">
+                        Pedidos Asociados
+                        {!materialOrdersQuery.isLoading && !materialOrdersQuery.isError ? (
+                          <span className="erp-accordion-count">{associatedOrders.length}</span>
+                        ) : null}
+                      </span>
+                    </div>
+                  </Accordion.Header>
+                  <Accordion.Body>
+                    {materialOrdersQuery.isLoading ? (
+                      <div className="d-flex align-items-center gap-2 text-muted small">
+                        <Spinner animation="border" size="sm" role="status" /> Cargando pedidos…
+                      </div>
+                    ) : null}
+                    {materialOrdersQuery.isError ? (
+                      <Alert variant="warning" className="mb-0">
+                        No se pudieron cargar los pedidos asociados.
+                      </Alert>
+                    ) : null}
+                    {!materialOrdersQuery.isLoading && !materialOrdersQuery.isError ? (
+                      associatedOrders.length ? (
+                        <ListGroup>
+                          {associatedOrders.map((order) => {
+                            const orderLabel =
+                              typeof order.orderNumber === 'number'
+                                ? `Pedido #${order.orderNumber}`
+                                : `Pedido ${order.id}`;
+                            const orderStatus = getOrderStatus(order);
+                            return (
+                              <ListGroup.Item
+                                key={order.id}
+                                className="d-flex justify-content-between align-items-center gap-2"
+                              >
+                                <div className="d-flex flex-column align-items-start">
+                                  <span className="fw-semibold">{orderLabel}</span>
+                                  <Badge bg={orderStatus.bg}>{orderStatus.label}</Badge>
+                                </div>
+                                <span className="text-muted small">{formatOrderDate(order.createdAt)}</span>
+                              </ListGroup.Item>
+                            );
+                          })}
+                        </ListGroup>
+                      ) : (
+                        <p className="text-muted small mb-0">No hay pedidos de material asociados.</p>
+                      )
+                    ) : null}
+                  </Accordion.Body>
+                </Accordion.Item>
+              ) : null}
 
               <Accordion.Item eventKey="documents">
                 <Accordion.Header>

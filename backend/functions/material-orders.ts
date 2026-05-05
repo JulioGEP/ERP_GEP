@@ -206,6 +206,16 @@ function isShippingExpense(value: unknown): boolean {
   return normalizeProductKey(value).includes('gastos de envio');
 }
 
+function isNonProductosCategory(category: string | null | undefined): boolean {
+  if (!category) return false;
+  const normalized = String(category)
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase();
+  return normalized !== 'productos';
+}
+
 function normalizeQuantity(value: unknown): number {
   const quantity = Number(value ?? 0);
   if (!Number.isFinite(quantity) || quantity < 0) return 0;
@@ -248,7 +258,7 @@ async function syncMaterialDealStatusesFromOrders(
     }),
     prisma.deal_products.findMany({
       where: { deal_id: { in: budgetIds } },
-      select: { deal_id: true, name: true, code: true, quantity: true },
+      select: { deal_id: true, name: true, code: true, quantity: true, category: true },
     }),
     prisma.pedidos.findMany({
       where: {
@@ -272,6 +282,7 @@ async function syncMaterialDealStatusesFromOrders(
     const quantity = normalizeQuantity(product.quantity);
 
     if (!key || quantity <= 0 || isShippingExpense(key)) continue;
+    if (isNonProductosCategory(product.category)) continue;
 
     if (!requiredByBudget.has(budgetId)) {
       requiredByBudget.set(budgetId, new Map<string, number>());
